@@ -6,6 +6,7 @@ import spatialize.gs.esi.aggfunction as af
 from spatialize.gs.esi import esi_nongriddata
 from spatialize.data import load_drill_holes_andes_3D
 
+SHOW_PLOT = False
 
 # get the data
 samples, locations = load_drill_holes_andes_3D()
@@ -52,4 +53,5 @@ ax2.scatter3D(
         cmap='coolwarm'
 )
 
-plt.show()
+if SHOW_PLOT:
+        plt.show()

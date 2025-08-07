@@ -186,8 +186,8 @@ jobs:
     needs:
       - release
     environment:
-      name: testpypi
-      url: https://test.pypi.org/p/spatialize-test-reik0
+      name: pypi
+      url: https://pypi.org/p/spatialize
     permissions:
       id-token: write
     steps:
@@ -197,7 +197,5 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Publish package distributions to testpypi
+      - name: Publish package distributions to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/

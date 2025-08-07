@@ -1,0 +1,114 @@
+name: Test All
+
+run-name: Running test on all plataforms
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release
+  push:
+    tags:
+      - "test-all"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+ 
+    permissions:
+      contents: write
+ 
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+ 
+      - name: Setup Py
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+ 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install build
+
+      - name: Build
+        run: python -m build
+
+      - name: Get WHL
+        run: echo "WHEEL_FILE=$(ls dist/*.whl)" >> $GITHUB_ENV
+
+      - name: Install whl
+        run: pip install ${{ env.WHEEL_FILE }}
+ 
+      - name: Run example script
+        run: python examples/scripted_examples/esi_3d_nongriddata.py
+    
+  build-windows:
+    runs-on: self-hosted
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install build
+
+      - name: Build project (Windows)
+        run: python -m build
+
+      - name: Get whl
+        run: echo "WHEEL_FILE=$(Get-ChildItem dist\*.whl | Select-Object -ExpandProperty FullName)" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Install whl
+        run: pip install "$env:WHEEL_FILE"
+        shell: pwsh
+
+      - name: Run example script
+        run: python examples/scripted_examples/esi_3d_nongriddata.py
+
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install build
+
+      - name: Build project (macOS)
+        run: python -m build
+
+      - name: Get WHL
+        run: echo "WHEEL_FILE=$(ls dist/*.whl)" >> $GITHUB_ENV
+
+      - name: Install whl
+        run: pip install ${{ env.WHEEL_FILE }}
+
+      - name: Test
+        run: python examples/scripted_examples/esi_3d_nongriddata.py
+         

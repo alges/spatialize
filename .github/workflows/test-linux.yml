@@ -1,0 +1,42 @@
+name: Test
+
+run-name: Running test on Linux
+
+on:
+  push:
+    tags: 
+      - "test-linux"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+ 
+    permissions:
+      contents: write
+ 
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+ 
+      - name: Setup Py
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+ 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install build
+          
+      - name: Build
+        run: python -m build
+
+      - name: Get WHL
+        run: echo "WHEEL_FILE=$(ls dist/*.whl)" >> $GITHUB_ENV
+
+      - name: Install whl
+        run: pip install ${{ env.WHEEL_FILE }}
+ 
+      - name: Run example script
+        run: python examples/scripted_examples/esi_3d_nongriddata.py

@@ -19,6 +19,24 @@ namespace sptlz{
       std::cout << std::endl;
   }
 
+  std::vector<std::vector<float>> get_random_values(std::vector<std::vector<float>> *ranges, int n, int seed){
+    std::srand(seed);
+    std::vector<std::vector<float>> result;
+    std::vector<float> values;
+    int i,j;
+
+    for(i=0; i<n; i++){
+      values = {};
+      for(j=0; j<ranges->size(); j++){
+        float r = 1.0*std::rand()/RAND_MAX;
+        values.push_back(ranges->at(j).at(0)+r*(ranges->at(j).at(1)-ranges->at(j).at(0)));
+      }
+      result.push_back(values);
+    }
+
+    return(result);
+  }
+
   std::vector<std::vector<int>> get_full_neighboorhood(int d){
     if(d==0){
       std::vector<std::vector<int>> r;
@@ -222,6 +240,17 @@ namespace sptlz{
   }
 
   template <class T>
+  std::vector<std::vector<T>> slice_columns(std::vector<std::vector<T>> *arr, std::vector<int> *idxs){
+    std::vector<std::vector<T>> result;
+
+    for(auto rows: *arr){
+      result.push_back(slice(&rows, idxs));
+    }
+
+    return(result);
+  }
+
+  template <class T>
   std::vector<T> slice_from(std::vector<T> *arr, int idx){
     std::vector<T> result;
     for(int i=idx; i<arr->size(); i++){
@@ -339,6 +368,43 @@ namespace sptlz{
   }
 
   template <class T>
+  std::vector<std::vector<std::vector<T>>> ndarray_to_vector_3d(py::array_t<T> *arr) {
+      py::buffer_info info = arr->request();
+      std::vector<std::vector<std::vector<T>>> r;
+      std::vector<std::vector<T>> v;
+      std::vector<T> aux;
+
+      for (py::ssize_t i = 0; i < arr->shape()[0]; i++){
+        for (py::ssize_t j = 0; j < arr->shape()[1]; j++){
+          aux.clear();
+          for (py::ssize_t k = 0; k < arr->shape()[2]; k++){
+            aux.push_back(*(arr->data(i,j,k)));
+          }
+          v.push_back(aux);
+        }
+        r.push_back(v);
+      }
+      return(r);
+  }
+
+  template <class T>
+  py::array_t<T> vector_1d_to_ndarray(std::vector<T> *arr) {
+    py::ssize_t ndim = 1;
+    std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size()};
+    std::vector<py::ssize_t> strides = {sizeof(T)};
+
+    // return 1-D NumPy array
+    return py::array(py::buffer_info(
+      arr->data(),                          /* data as contiguous array  */
+      sizeof(T),                              /* size of one scalar        */
+      py::format_descriptor<T>::format(),     /* data type                 */
+      ndim,                                   /* number of dimensions      */
+      shape,                                  /* shape of the matrix       */
+      strides                                 /* strides for each axis     */
+    ));
+  }
+
+  template <class T>
   py::array_t<T> vector_2d_to_ndarray(std::vector<std::vector<T>> *arr, int n=0) {
     if (arr->size()==0){
       py::ssize_t ndim = 2;
@@ -374,20 +440,39 @@ namespace sptlz{
   }
 
   template <class T>
-  py::array_t<T> vector_1d_to_ndarray(std::vector<T> *arr) {
-    py::ssize_t ndim = 1;
-    std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size()};
-    std::vector<py::ssize_t> strides = {sizeof(T)};
+  py::array_t<T> vector_3d_to_ndarray(std::vector<std::vector<std::vector<T>>> *arr, int n=0, int m=0) {
+    if (arr->size()==0){
+      py::ssize_t ndim = 3;
+      std::vector<py::ssize_t> shape = {(py::ssize_t) 0, (py::ssize_t) n, (py::ssize_t) m};
+      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<T> arr1d;
 
-    // return 1-D NumPy array
-    return py::array(py::buffer_info(
-      arr->data(),                          /* data as contiguous array  */
-      sizeof(T),                              /* size of one scalar        */
-      py::format_descriptor<T>::format(),     /* data type                 */
-      ndim,                                   /* number of dimensions      */
-      shape,                                  /* shape of the matrix       */
-      strides                                 /* strides for each axis     */
-    ));
+      // return 2-D NumPy array
+      return py::array(py::buffer_info(
+        arr1d.data(),                          /* data as contiguous array  */
+        sizeof(T),                              /* size of one scalar        */
+        py::format_descriptor<T>::format(),     /* data type                 */
+        ndim,                                   /* number of dimensions      */
+        shape,                                  /* shape of the matrix       */
+        strides                                 /* strides for each axis     */
+      ));
+    }else{
+      py::ssize_t ndim = 3;
+      std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size(), (py::ssize_t)arr->at(0).size(), (py::ssize_t)arr->at(0).at(0).size()};
+      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<std::vector<T>> arr2d = as_1d_array(arr);
+      std::vector<T> arr1d = as_1d_array(&arr2d);
+
+      // return 2-D NumPy array
+      return py::array(py::buffer_info(
+        arr1d.data(),                          /* data as contiguous array  */
+        sizeof(T),                              /* size of one scalar        */
+        py::format_descriptor<T>::format(),     /* data type                 */
+        ndim,                                   /* number of dimensions      */
+        shape,                                  /* shape of the matrix       */
+        strides                                 /* strides for each axis     */
+      ));
+    }
   }
 }
 

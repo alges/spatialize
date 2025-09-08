@@ -8,3 +8,4 @@ matplotlib
 opencv-python
 setuptools
 numba
+pybind11

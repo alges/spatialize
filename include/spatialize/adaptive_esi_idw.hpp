@@ -6,6 +6,7 @@
 #include <random>
 #include "spatialize/abstract_esi.hpp"
 #include "spatialize/utils.hpp"
+#include "spatialize/grad_descent.hpp"
 
 namespace sptlz{
   class LOO2D{
@@ -88,6 +89,11 @@ namespace sptlz{
 
   class ADAPTIVE_ESI_IDW: public ESI {
     protected:
+      int d, k;
+      std::vector<std::vector<float>> param_ranges;
+      std::vector<float> steps;
+      std::vector<int> ns;
+
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
 
@@ -281,6 +287,25 @@ namespace sptlz{
       }
 
       std::vector<float> get_params(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+        if(coords->size()==0){
+          return(std::vector<float>());
+        }else if(coords->size()==1){
+          return(std::vector<float>({values->at(0)}));
+        }
+
+        LOOND *fn;
+        if(this->d==2){
+          fn = new LOO_2D(coords, values, 0.01);
+        }else{
+          fn = new LOO_3D(coords, values, 0.01);
+        }
+        GradDesc *opt = new GridNBRndDesc(fn, this->param_ranges, this->steps, this->ns, k, std::rand());
+        std::vector<float> m = get_minimum(opt, &(this->param_ranges), 100);
+        
+        return(m);
+      }
+
+      std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values){
         std::uniform_real_distribution<float> uni_float(0, 1);
         int best_of = 3;
         if(coords->size()==0){
@@ -362,6 +387,31 @@ namespace sptlz{
                        int seed=206936):
       ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         this->class_name = __func__;
+        if(_coords.at(0).size()==2){
+          this->d = 2;
+          this->param_ranges = {
+            {  0.5, 10.0},
+            {-90.0, 90.0},
+            {  0.1,  1.0}
+          };
+          this->steps = {0.5, 10.0, 0.1};
+          this->ns = {19, 18, 9};
+        }else if(_coords.at(0).size()==3){
+          this->d = 3;
+          this->param_ranges = {
+            {  0.5, 10.0},
+            {-90.0, 90.0},
+            {-90.0, 90.0},
+            {-90.0, 90.0},
+            {  0.1,  1.0},
+            {  0.1,  1.0}
+          };
+          this->steps = {0.5, 10.0, 10.0, 10.0, 0.1, 0.1};
+          this->ns = {19, 18, 18, 18, 9, 9};
+        }else{
+          throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");
+        }
+        this->k = (int)std::ceil(0.1*std::pow(3, this->ns.size()));
         post_process();
       }
 

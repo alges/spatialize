@@ -12,11 +12,13 @@ namespace py = pybind11;
 
 namespace sptlz{
   template <class T>
-  void pprint(std::vector<T> v){
+  void pprint(std::vector<T> v, int nl=1){
       for(T i: v){
         std::cout << " " << i;
       }
-      std::cout << std::endl;
+      for(int j=0; j<nl; j++){
+        std::cout << std::endl;
+      }
   }
 
   std::vector<std::vector<float>> get_random_values(std::vector<std::vector<float>> *ranges, int n, int seed){

@@ -310,7 +310,7 @@ namespace sptlz{
   			return(root->search_leaf(point));
   		}
 
-  		std::string to_json(){
+  		std::string to_json(){ 
   			return(root->to_json(""));
   		}
 	};

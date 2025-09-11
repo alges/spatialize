@@ -14,6 +14,7 @@ namespace sptlz{
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
         float w, w_sum, w_v_sum;
+        int exact_location;
 
         if(samples_id->size()==0){
           for(auto l: *locations_id){
@@ -27,14 +28,43 @@ namespace sptlz{
         for(size_t i=0; i<locations_id->size(); i++){
           w_sum = 0.0;
           w_v_sum = 0.0;
+          exact_location = 0;
+          std::vector<float> distances;
 
           for(size_t j=0; j<samples_id->size(); j++){
             // calculate weight
-            w = 1/(1+std::pow(distance(&(locations->at(locations_id->at(i))), &(coords->at(samples_id->at(j)))), exponent));
-            // keep sum of weighted values and sum of weights
-            w_sum += w;
-            w_v_sum += w*values->at(samples_id->at(j));
+            float dist = distance(&(locations->at(locations_id->at(i))), &(coords->at(samples_id->at(j))));
+            distances.push_back(dist);
+            if(dist==0){
+              exact_location = 1;
+            }
           }
+
+          if(exact_location==1){
+            for(size_t j=0; j<samples_id->size(); j++){
+              // calculate weight
+              float dist = distances.at(j);
+              if(dist==0)
+                w = 1;
+              else
+                w = 0;
+              // keep sum of weighted values and sum of weights
+              w_sum += w;
+              w_v_sum += w*values->at(samples_id->at(j));
+            }
+          }
+          else {
+            for(size_t j=0; j<samples_id->size(); j++){
+              // calculate weight
+              float dist = distances.at(j);
+              w = 1/std::pow(dist, exponent);
+              // keep sum of weighted values and sum of weights
+              w_sum += w;
+              w_v_sum += w*values->at(samples_id->at(j));
+            }
+          }
+
+
           // return weighted values sum normalized (divided by weights sum)
           result.push_back(w_v_sum/w_sum);
         }

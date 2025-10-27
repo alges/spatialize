@@ -176,8 +176,16 @@ class ESIResult(EstimationResult):
         :param fig_args: Additional figure arguments.
         :return: The figure.
         """
-        if self._xi.shape[1] > 2:
-            raise SpatializeError("quick_plot() for 3D data is not supported")
+        if self.griddata:
+            if self._xi.shape[0] > 2:
+                raise SpatializeError("quick_plot() for 3D data is not supported")
+            x_min, x_max = self._xi[0].min(), self._xi[0].max()
+            y_min, y_max = self._xi[1].min(), self._xi[1].max()
+        else:
+            if self._xi.shape[-1] > 2:
+                raise SpatializeError("quick_plot() for 3D data is not supported")
+            x_min, x_max = self._xi[:,0].min(), self._xi[:,0].max()
+            y_min, y_max = self._xi[:,1].min(), self._xi[:,1].max()
         
         plot_fig_args = fig_args.copy()
         plot_fig_args.setdefault('figsize', (10,8))
@@ -189,11 +197,11 @@ class ESIResult(EstimationResult):
             ax1, ax2 = gs.subplots()
 
             ax1.set_title('Estimation')
-            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap)
+            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap, extent=[x_min, x_max, y_min, y_max])
             ax1.set_aspect('equal')
 
             ax2.set_title('Precision')
-            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
+            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap, extent=[x_min, x_max, y_min, y_max])
             ax2.set_aspect('equal')
 
             if not in_notebook():
@@ -405,7 +413,7 @@ def esi_griddata(points, values, xi, **kwargs):
     """
     ng_xi, original_shape = flatten_grid_data(xi)
     estimation, esi_samples = _call_libspatialize(points, values, ng_xi, **kwargs)
-    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape)
+    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape, xi=xi)
 
 
 def esi_nongriddata(points, values, xi, **kwargs):

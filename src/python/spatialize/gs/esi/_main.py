@@ -9,7 +9,6 @@ from sklearn.model_selection import ParameterGrid
 from spatialize import SpatializeError, logging, GridSearchResult, EstimationResult
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
-import spatialize.gs.esi.scorefunction as sf
 from spatialize._util import signature_overload, in_notebook
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
@@ -25,8 +24,9 @@ class ESIGridSearchResult(GridSearchResult):
     :param agg_function_map: The aggregation function map.
     :param p_process: The partitioning process.
     """
-    def __init__(self, search_result_data, p_process):
+    def __init__(self, search_result_data, agg_function_map, p_process):
         super().__init__(search_result_data)
+        self.agg_func_map = agg_function_map
         self.p_process = p_process
 
     def best_result(self, **kwargs):
@@ -41,9 +41,8 @@ class ESIGridSearchResult(GridSearchResult):
         index = list(row.keys())[0]
         result = row[index]
         result.update({"result_data_index": index,
-                       "agg_function": af.mean,
+                       "agg_function": self.agg_func_map[result["agg_func_name"]],
                        "p_process": self.p_process})
-        
         return result
 
 
@@ -249,7 +248,7 @@ class ESIResult(EstimationResult):
                                  # -- valid only when ‘p_process’ is ‘voronoi’.
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
-                                 "score": sf.neg_log_likelihood,
+                                 "agg_function": {"mean": af.mean, "median": af.median},
                                  "seed": np.random.randint(1000, 10000),
                                  "folding_seed": np.random.randint(1000, 10000),
                                  "callback": default_singleton_callback,
@@ -312,7 +311,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
     results = {}
 
     def run_scenario(i):
-        param_set = param_grid[i].copy()        # dictionary with set 'i' of parameters to evaluate
+        param_set = param_grid[i].copy()
         param_set["local_interpolator"] = kwargs["local_interpolator"]
         param_set["seed"] = kwargs["seed"]
         param_set["callback"] = singleton_null_callback
@@ -326,10 +325,10 @@ def esi_hparams_search(points, values, xi, **kwargs):
             l_args.insert(-2, k)
             l_args.insert(-2, kwargs["folding_seed"])
 
-        _, cv = cross_validate(*l_args)     # returns esi samples for the input data
-        
-        # calculate score:
-        results[i] = kwargs["score"](cv)
+        model, cv = cross_validate(*l_args)
+
+        for agg_func_name, agg_func in kwargs["agg_function"].items():
+            results[(agg_func_name, i)] = np.nanmean(np.abs(values - agg_func(cv)))
 
         kwargs["callback"](logging.progress.inform())
 
@@ -343,16 +342,17 @@ def esi_hparams_search(points, values, xi, **kwargs):
     result_data = pd.DataFrame(columns=list(grid.keys()) + ["cv_error"])
     c = 0
     for k, v in results.items():
-        d = {"cv_error": v,
+        d = {"agg_func_name": k[0],
+             "cv_error": v,
              "local_interpolator": kwargs["local_interpolator"],
              }
-        d.update(param_grid[k])
+        d.update(param_grid[k[1]])
         if not result_data.empty:
             result_data = pd.concat([result_data, pd.DataFrame(d, index=[c])])
         else:
             result_data = pd.DataFrame(d, index=[c])
         c += 1
-    return ESIGridSearchResult(result_data, kwargs["p_process"])
+    return ESIGridSearchResult(result_data, kwargs["agg_function"], kwargs["p_process"])
 
 
 def esi_griddata(points, values, xi, **kwargs):

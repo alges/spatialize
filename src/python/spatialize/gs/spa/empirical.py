@@ -686,7 +686,15 @@ class EmpiricalModel(BaseEmpiricalModel):
         def __init__(self, x, y):
             # Ensure x is sorted for interpolation
             sort_indices = np.argsort(x)
-            self.__f = Akima1DInterpolator(x[sort_indices], y[sort_indices])
+            x_sorted = x[sort_indices]
+            y_sorted = y[sort_indices]
+            
+            # Ensure x is strictly increasing for interpolation
+            # Filter out non-increasing points if any
+            unique_x, unique_indices = np.unique(x_sorted, return_index=True)
+            unique_y = y_sorted[unique_indices]
+            
+            self.__f = Akima1DInterpolator(unique_x, unique_y)
 
         def __call__(self, x):
             return self.__f(x)
@@ -753,12 +761,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         # Create interpolators
         self.pdf = self.F(self.x_, self.pdf_)
         self.cdf = self.F(self.x_, self.cdf_)
-
-        # For inv_cdf, ensure cdf_ is strictly increasing for interpolation
-        # Filter out non-increasing points if any, though for a well-behaved CDF it should be fine
-        unique_cdf_indices = np.unique(self.cdf_, return_index=True)[1]
-        self.inv_cdf = self.F(self.cdf_[unique_cdf_indices], self.x_[unique_cdf_indices])
-
+        self.inv_cdf = self.F(self.cdf_, self.x_)
 
     def entropy(self, a=None, b=None, base=np.e, epsilon=1e-10):
         """

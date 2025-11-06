@@ -14,7 +14,7 @@
 
 namespace py = pybind11;
 
-py::array_t<float> get_partitions_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
+std::vector<std::vector<std::vector<float>>> get_partitions_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
     py::buffer_info smp_info = samples.request();
     
     if (smp_info.ndim != 2)
@@ -41,7 +41,8 @@ py::array_t<float> get_partitions_using_esi(py::array_t<float> samples, int fore
 
     delete esi;
 
-    return(sptlz::vector_3d_to_ndarray(&r));
+//    return(sptlz::vector_3d_to_ndarray(&r));
+    return(r);
 }
 
 py::array_t<float> get_leaf_for_samples_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
@@ -1267,8 +1268,8 @@ PYBIND11_MODULE(libspatialize, m) {
       "get leaves bbox for every partition"
     );
     m.def(
-      "get_leaves_by_samples_using_esi", 
-      &get_leaves_by_samples_using_esi, 
+      "get_leaf_for_samples_using_esi", 
+      &get_leaf_for_samples_using_esi, 
       "get several partitions using MondrianTree"
     );
     /* plain NN IDW*/

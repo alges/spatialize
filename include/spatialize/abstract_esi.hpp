@@ -404,20 +404,32 @@ namespace sptlz{
 				std::vector<std::vector<std::vector<float>>> partitions;
 				int n = mondrian_forest.size();
 
+				long count = 0;
+				std::cout << "UNO" << std::endl;
 				for(int i=0; i<n; i++){
+
 					std::vector<std::vector<float>> this_partition;
 					// get leaves for i-th tree
 					for(auto leaf: mondrian_forest.at(i)->leaves){
+						std::cout << "aaaa" << std::endl;
 						std::vector<float> this_leaf;
+						std::cout << "bbbb" << std::endl;
 						this_leaf.push_back(leaf->leaf_id);
+						std::cout << "cccc" << std::endl;
 						for(auto ax_lims: leaf->bbox){
+							std::cout << "dddd" << std::endl;
 							this_leaf.push_back(ax_lims[0]);
+							std::cout << "eeee" << std::endl;
 							this_leaf.push_back(ax_lims[1]);
 						}
+						count += this_leaf.size();
+						std::cout << "ffff" << std::endl;
 						this_partition.push_back(this_leaf);
 					}
+					std::cout << "gggg" << std::endl;
 					partitions.push_back(this_partition);
 				}
+				std::cout << "hhhh " << (8*count/1024.0) << std::endl;
 				return(partitions);
 			}
 

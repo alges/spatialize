@@ -45,7 +45,7 @@ std::vector<std::vector<std::vector<float>>> get_partitions_using_esi(py::array_
     return(r);
 }
 
-py::array_t<float> get_leaf_for_samples_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
+py::array_t<int> get_leaf_for_samples_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
     py::buffer_info smp_info = samples.request();
     
     if (smp_info.ndim != 2)

@@ -400,7 +400,28 @@ namespace sptlz{
 				return(&(this->values));
 			}
 
-			std::vector<std::vector<int>> get_partitions(){
+			std::vector<std::vector<std::vector<float>>> get_partitions(){
+				std::vector<std::vector<std::vector<float>>> partitions;
+				int n = mondrian_forest.size();
+
+				for(int i=0; i<n; i++){
+					std::vector<std::vector<float>> this_partition;
+					// get leaves for i-th tree
+					for(auto leaf: mondrian_forest.at(i)->leaves){
+						std::vector<float> this_leaf;
+						this_leaf.push_back(leaf->leaf_id);
+						for(auto ax_lims: leaf->bbox){
+							this_leaf.push_back(ax_lims[0]);
+							this_leaf.push_back(ax_lims[1]);
+						}
+						this_partition.push_back(this_leaf);
+					}
+					partitions.push_back(this_partition);
+				}
+				return(partitions);
+			}
+
+			std::vector<std::vector<int>> get_leaf_for_samples(){
 				int n = mondrian_forest.size();
 				std::vector<std::vector<int>> results(this->coords.size());
 
@@ -408,7 +429,7 @@ namespace sptlz{
 					// get tree
 					auto lfs = mondrian_forest.at(i)->leaf_for_sample;
 					for(size_t j=0; j<this->coords.size(); j++){
-						results.at(j).push_back(lfs.at(j));
+						results.at(i).push_back(lfs.at(j));
 					}
 				}
 				return(results);

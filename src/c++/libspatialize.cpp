@@ -41,6 +41,36 @@ py::array_t<float> get_partitions_using_esi(py::array_t<float> samples, int fore
 
     delete esi;
 
+    return(sptlz::vector_3d_to_ndarray(&r));
+}
+
+py::array_t<float> get_leaf_for_samples_using_esi(py::array_t<float> samples, int forest_size, float alpha, std::optional<py::function> visitor, int seed){
+    py::buffer_info smp_info = samples.request();
+    
+    if (smp_info.ndim != 2)
+        throw std::runtime_error("[1] samples must be a 2 dimensions array");
+
+    auto smp = sptlz::ndarray_to_vector_2d(&samples);
+
+    std::function<int(std::string)> _visitor = [](std::string s)->int{
+      return(0);
+    };
+    if (visitor.has_value()){
+      _visitor = [visitor](std::string s)->int{
+        visitor.value().call(s);
+        return(0);
+      };
+    }
+
+    auto bbox = sptlz::samples_coords_bbox(&smp);
+    float lambda = sptlz::bbox_sum_interval(bbox);
+    lambda = 1/(lambda-alpha*lambda);
+
+    sptlz::ESI* esi = new sptlz::ESI(smp, {}, lambda, forest_size, bbox, _visitor, seed);
+    auto r = esi->get_leaf_for_samples();
+
+    delete esi;
+
     return(sptlz::vector_2d_to_ndarray(&r));
 }
 
@@ -1234,6 +1264,11 @@ PYBIND11_MODULE(libspatialize, m) {
     m.def(
       "get_partitions_using_esi", 
       &get_partitions_using_esi, 
+      "get leaves bbox for every partition"
+    );
+    m.def(
+      "get_leaves_by_samples_using_esi", 
+      &get_leaves_by_samples_using_esi, 
       "get several partitions using MondrianTree"
     );
     /* plain NN IDW*/

@@ -8,4 +8,4 @@ matplotlib
 opencv-python
 setuptools
 numba
-pybind11
+pybind11[global]

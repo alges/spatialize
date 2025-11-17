@@ -136,6 +136,20 @@ search_result.plot_cv_error()
 ## Citing Spatialize
 Please refer to the following articles when publishing work relating to this library or the ESI model:
 
+	@article{
+		title = {Spatial distributional estimation via ensemble spatial analysis},
+		journal = {AIMS Mathematics},
+		volume = {10},
+		number = {11},
+		pages = {26351-26388},
+		year = {2025},
+		issn = {2473-6988},
+		doi = {10.3934/math.20251159},
+		url = {https://www.aimspress.com/article/doi/10.3934/math.20251159},
+		author = {Alvaro F. Ega{\~n}a and Gonzalo D{\'i}az and Felipe Navarro and Mohammad Maleki and Juan F. S{\'a}nchez-P{\'e}rez},
+		keywords = {geostatistics, computational geostatistics, generative geostatistics, non-linear geostatistics, distributional geostatistics, geostatistical simulation, empirical copula, data-driven methods},
+		}
+
 	@article{spatialize2025,
 		author  = {Navarro, Felipe and Ega{\~n}a, {\'A}lvaro F. and Ehrenfeld, Alejandro and Garrido, Felipe and Valenzuela, Mar{\'i}a Jes{\'u}s and S{\'a}nchez-P{\'e}rez, Juan F. },
 		title   = {Spatialize v1.0: A Python/C++ Library for Ensemble Spatial Interpolation},

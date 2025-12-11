@@ -9,22 +9,38 @@ from matplotlib.colors import LinearSegmentedColormap as Colormap
 from spatialize import SpatializeError
 from spatialize.logging import log_message
 
+"""
+Color palettes for data visualization.
+
+Some of the following palettes are derived from:
+- Scientific colour maps: Crameri, F. (2018). Scientific colour maps. Zenodo. https://doi.org/10.5281/zenodo.1243862
+  Source: https://www.fabiocrameri.ch/colourmaps/
+
+- Seaborn palettes: Copyright (c) 2012-2023, Michael Waskom
+  License: BSD-3-Clause
+  Source: https://github.com/mwaskom/seaborn
+"""
+
 PALETTES = {
+    # ALGES palettes
     'alges': ['#070f15', '#0f212d', '#19384d', '#275474', '#326c94', '#4b87af', '#78abce', '#a7c9e1', '#cfe2ef'],
     'alges_muted': ['#142b3b','#1e4058', '#285676', '#326c94', '#5a89a9', '#84a6be', '#c1d2de'],
-    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
-    'navia_r': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
     'precision': ['#51648a','#796982','#9d6c79','#c47673','#e98c76','#edb18e','#edd3b3'],
     'precision_dark': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#eb937f','#f2bcaf'],
     'precision_muted': ['#5b6f9a','#867590','#a77c87','#cb8785','#ed9e8c','#f0c0a4','#f2dfc7'],
+    # 'crest' palette from seaborn, reversed
     'crest_r': ['#193458', '#254b7f', '#1c6488','#287a8c', '#40908e', '#59a590', '#7dba91','#a4ceb2'],
-    'batlow': ['#fbcdfa','#fcb3b3','#f2a069','#c09036','#828434','#4c734d','#205f61','#104261','#011a5a'],
+    # Scientific colour maps
+    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
+    'batlow': ['#011a5a', '#104261', '#205f61', '#4c734d', '#828434', '#c09036', '#f2a069', '#fcb3b3', '#fbcdfa'],
+    'batlowK': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
     'glasgow': ['#371437','#4e1921','#6a2810','#74471c','#716328','#697c47','#61917c','#74a8af','#a8bed7','#dcd1e8'],
     'lipari': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#e9a278','#e8c79e','#fef5db'],
     'nuuk': ['#11598c','#2c6384','#4b7182','#70868c','#939b96','#acad95','#bbb98b','#c7c581','#e1e08c','#fbf7b3'],
     'bamako': ['#073a46','#12433f','#214f33','#385d2c','#547032','#738437','#978e33','#bfa830','#e2c66b','#fee4ab'],
     'tokio': ['#1f1032','#4b1f42','#6a404e','#715651','#746651','#767a54','#7d9857','#8ec26d','#c3e0a7','#eff5db'],
-    'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']}
+    'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']
+    }
 
 def get_available_palettes():
     """
@@ -39,7 +55,7 @@ def get_available_palettes():
     --------
     >>> palettes = get_available_palettes()
     >>> print(palettes)
-    ['alges', 'alges_muted', 'navia_r', 'precision', ...]
+    ['alges', 'alges_muted', 'precision', ...]
     """
     return list(PALETTES.keys())
 
@@ -278,8 +294,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small'
             },
             'color': '#59a590',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'whitegrid': {
             'rcparams': {
@@ -297,8 +313,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small'
             },
             'color': '#7dba91',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'dark': {
             'rcparams': {
@@ -318,8 +334,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small', 
             },
             'color': '#41bbc0',
-            'cmap':  Colormap.from_list('custom_precision', PALETTES['navia_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision_dark'])
+            'cmap': get_palette_colormap('batlowK'),
+            'precision_cmap': get_palette_colormap('precision_dark')
         },
         'white': {
             'rcparams': {
@@ -336,8 +352,8 @@ class PlotStyle:
                 'ytick.left': True,
             },
             'color': '#7dba91',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'alges': {
             'rcparams': {
@@ -359,8 +375,8 @@ class PlotStyle:
                 'ytick.left': True
             },
             'color': "#8fb4cd",
-            'cmap': Colormap.from_list('alges_cmap', PALETTES['alges']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('alges'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'alges_muted': {
             'rcparams': {
@@ -382,8 +398,8 @@ class PlotStyle:
                 'ytick.left': True
             },
             'color': "#84a6be",
-            'cmap': Colormap.from_list('alges_muted', PALETTES['alges_muted']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision_muted'])
+            'cmap': get_palette_colormap('alges_muted'),
+            'precision_cmap': get_palette_colormap('precision_muted')
         },
         'minimal': {
             'rcparams': {

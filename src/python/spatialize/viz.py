@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import random as rd
 from spatialize import in_notebook, logging
 
@@ -684,3 +685,115 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
         return seed
 
     return fig, seed
+
+
+def plot_nongriddata(data, xi_locations, ax=None, title="",
+                       figsize=None, dpi=120, origin='lower', **imshow_args):
+    """
+    Plots a colormap visualization for non-rectangular/irregular spatial data.
+
+    This function handles spatial data that doesn't form a complete rectangular grid,
+    such as irregularly shaped study areas (e.g., lakes, watersheds). It uses xarray
+    to organize scattered points into a plottable format, automatically handling gaps
+    in the spatial domain.
+
+    Parameters
+    ----------
+    data : array-like, shape (n_points,)
+        1D array of values to visualize at each spatial location.
+    xi_locations : array-like, shape (n_points, 2)
+        2D array of spatial coordinates (X, Y) for each data point.
+    ax : matplotlib.axes.Axes, optional
+        Axes object to plot into. If None, creates a new figure and axes.
+    title : str, optional
+        Title to display on the plot (only used when ax is None). Default is "".
+    figsize : tuple, optional
+        Width, height of the figure in inches (only used when ax is None).
+    dpi : int, optional
+        Resolution of the figure in dots-per-inch (only used when ax is None).
+        Default is 120.
+    origin : {'lower', 'upper'}, optional
+        Controls the orientation of the Y-axis:
+        - 'lower': Y increases upward (standard Cartesian, default)
+        - 'upper': Y increases downward (image/raster convention)
+    **imshow_args : dict
+        Additional keyword arguments passed to imshow(), such as 'cmap', 'vmin', 'vmax'.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        Returns the figure object if ax is None and not in notebook mode,
+        otherwise returns None.
+
+    Raises
+    ------
+    SpatializeError
+        If xi_locations is not 2-dimensional or doesn't have exactly 2 columns.
+    SpatializeError
+        If data and xi_locations have incompatible shapes.
+
+    Examples
+    --------
+    >>> # Plot irregular spatial data (standard Cartesian orientation)
+    >>> xi_locations = np.array([[0, 0], [1, 0], [0, 1], [2, 1]])  # Irregular points
+    >>> data = np.array([1.0, 2.0, 1.5, 3.0])
+    >>> plot_nongriddata(data, xi_locations, title="Lake Temperature")
+
+    >>> # Use image/raster convention (Y increases downward)
+    >>> plot_nongriddata(data, xi_locations, origin='upper', title="Raster Data")
+
+    >>> # Use custom colormap and value range
+    >>> fig, ax = plt.subplots()
+    >>> plot_nongriddata(data, xi_locations, ax=ax, cmap='viridis', vmin=0, vmax=5)
+    """
+    # Validate xi_locations dimensions
+    if xi_locations.ndim != 2:
+        raise SpatializeError(
+            f"xi_locations must be a 2D array, got {xi_locations.ndim}D array"
+        )
+
+    if xi_locations.shape[1] != 2:
+        raise SpatializeError(
+            f"xi_locations must have exactly 2 columns (X, Y), got {xi_locations.shape[1]}"
+        )
+
+    # Validate data compatibility
+    data = np.asarray(data).flatten()
+    if len(data) != len(xi_locations):
+        raise SpatializeError(
+            f"data length ({len(data)}) must match xi_locations length ({len(xi_locations)})"
+        )
+
+    # Create DataFrame with spatial coordinates and values
+    results = pd.DataFrame(xi_locations, columns=['X', 'Y'])
+    results['est'] = data
+
+    # Convert to xarray using X, Y as index dimensions
+    # This automatically handles irregular/sparse grids
+    results_array = results.set_index(['X', 'Y']).to_xarray()
+
+    # Create or use provided axes
+    fig_created = False
+    if ax is not None:
+        plotter = ax
+    else:
+        fig = plt.figure(figsize=figsize, dpi=dpi)
+        gs = fig.add_gridspec(1, 1)
+        plotter = gs.subplots()
+        plotter.set_title(title)
+        fig_created = True
+
+    # Plot the data
+    # xarray creates array with dimensions (X, Y), but imshow expects (Y, X)
+    # Transpose to swap dimensions; origin parameter controls Y-axis direction
+    img = plotter.imshow(results_array.est.T, origin=origin, **imshow_args)
+
+    # Add colorbar
+    divider = make_axes_locatable(plotter)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    cax.grid(False)
+    plt.colorbar(img, orientation='vertical', cax=cax)
+
+    # Return figure if we created it and not in notebook
+    if fig_created and not in_notebook():
+        return fig

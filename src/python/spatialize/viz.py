@@ -12,6 +12,7 @@ from spatialize.logging import log_message
 PALETTES = {
     'alges': ['#070f15', '#0f212d', '#19384d', '#275474', '#326c94', '#4b87af', '#78abce', '#a7c9e1', '#cfe2ef'],
     'alges_muted': ['#142b3b','#1e4058', '#285676', '#326c94', '#5a89a9', '#84a6be', '#c1d2de'],
+    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
     'navia_r': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
     'precision': ['#51648a','#796982','#9d6c79','#c47673','#e98c76','#edb18e','#edd3b3'],
     'precision_dark': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#eb937f','#f2bcaf'],
@@ -20,26 +21,205 @@ PALETTES = {
     'batlow': ['#fbcdfa','#fcb3b3','#f2a069','#c09036','#828434','#4c734d','#205f61','#104261','#011a5a'],
     'glasgow': ['#371437','#4e1921','#6a2810','#74471c','#716328','#697c47','#61917c','#74a8af','#a8bed7','#dcd1e8'],
     'lipari': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#e9a278','#e8c79e','#fef5db'],
-    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
     'nuuk': ['#11598c','#2c6384','#4b7182','#70868c','#939b96','#acad95','#bbb98b','#c7c581','#e1e08c','#fbf7b3'],
     'bamako': ['#073a46','#12433f','#214f33','#385d2c','#547032','#738437','#978e33','#bfa830','#e2c66b','#fee4ab'],
     'tokio': ['#1f1032','#4b1f42','#6a404e','#715651','#746651','#767a54','#7d9857','#8ec26d','#c3e0a7','#eff5db'],
     'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']}
 
+def get_available_palettes():
+    """
+    Get a list of all available palette names.
+
+    Returns
+    -------
+    list of str
+        Names of available color palettes
+
+    Examples
+    --------
+    >>> palettes = get_available_palettes()
+    >>> print(palettes)
+    ['alges', 'alges_muted', 'navia_r', 'precision', ...]
+    """
+    return list(PALETTES.keys())
+
+def get_palette(name):
+    """
+    Get a color palette by name.
+
+    Parameters
+    ----------
+    name : str
+        Name of the palette. Use get_available_palettes() to see options.
+
+    Returns
+    -------
+    list of str
+        List of hex color codes in the palette
+
+    Raises
+    ------
+    ValueError
+        If palette name is not found
+
+    Examples
+    --------
+    >>> colors = get_palette('alges')
+    >>> print(colors[0])
+    '#070f15'
+
+    >>> # Use palette colors directly
+    >>> colors = get_palette('glasgow')
+    >>> plt.scatter(x, y, c=colors[3])
+    """
+    if name not in PALETTES:
+        available = ', '.join(get_available_palettes())
+        raise ValueError(f"Palette '{name}' not found. Available palettes: {available}")
+    return PALETTES[name]
+
+def get_palette_colormap(name, reverse=False):
+    """
+    Create a matplotlib colormap from a named palette.
+
+    Parameters
+    ----------
+    name : str
+        Name of the palette. Use get_available_palettes() to see options.
+    reverse : bool, optional
+        If True, reverses the color order. Default is False.
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap
+        Matplotlib colormap object ready for use in plotting
+
+    Raises
+    ------
+    ValueError
+        If palette name is not found
+
+    Examples
+    --------
+    >>> cmap = get_palette_colormap('batlow')
+    >>> plt.imshow(data, cmap=cmap)
+
+    >>> # Reverse the colormap
+    >>> cmap_r = get_palette_colormap('navia', reverse=True)
+    >>> plt.contourf(X, Y, Z, cmap=cmap_r)
+
+    >>> # Use in PlotStyle
+    >>> style = PlotStyle(cmap=get_palette_colormap('lipari'))
+    >>> plt.scatter(x, y, c=values, cmap=style.cmap)
+    """
+    colors = get_palette(name)
+    if reverse:
+        colors = colors[::-1]
+    return Colormap.from_list(f'{name}{"_r" if reverse else ""}', colors)
+
+def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color Palettes"):
+    """
+    Display color palettes as horizontal gradient bars for visual comparison.
+
+    Parameters
+    ----------
+    names : list of str, optional
+        Specific palette names to display. If None, shows all available palettes.
+    figsize : tuple, optional
+        Figure size as (width, height) in inches. If None, auto-calculated based
+        on the number of palettes (width=8, height=0.4*n_palettes).
+    n_colors : int, optional
+        Number of color samples to display for each palette gradient. Default is 256.
+    title : str, optional
+        Title for the figure. Default is "Available Color Palettes".
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure object containing the palette visualizations
+
+    Examples
+    --------
+    >>> # Show all palettes
+    >>> show_palettes()
+
+    >>> # Show specific palettes
+    >>> show_palettes(names=['alges', 'precision', 'navia'])
+
+    >>> # Customize figure size
+    >>> show_palettes(figsize=(10, 8))
+
+    >>> # Show palettes without title
+    >>> show_palettes(title=None)
+    """
+    # Determine which palettes to show
+    if names is None:
+        names = get_available_palettes()
+    else:
+        # Validate provided names
+        invalid = [n for n in names if n not in PALETTES]
+        if invalid:
+            raise ValueError(f"Invalid palette names: {invalid}. Use get_available_palettes() to see options.")
+
+    n_palettes = len(names)
+
+    # Auto-calculate figure size if not provided
+    if figsize is None:
+        figsize = (8, 0.4 * n_palettes + 0.5)
+
+    # Create figure and axes
+    fig, axes = plt.subplots(n_palettes, 1, figsize=figsize)
+
+    # Handle single palette case (axes won't be an array)
+    if n_palettes == 1:
+        axes = [axes]
+
+    # Create gradient array for displaying colors
+    gradient = np.linspace(0, 1, n_colors).reshape(1, -1)
+
+    # Plot each palette
+    for ax, name in zip(axes, names):
+        # Get colormap and display as gradient
+        cmap = get_palette_colormap(name)
+        ax.imshow(gradient, aspect='auto', cmap=cmap)
+
+        # Remove ticks and spines
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Add palette name as y-label
+        ax.set_ylabel(name, rotation=0, ha='right', va='center', fontsize=10)
+
+    # Add title if provided
+    if title:
+        fig.suptitle(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+
+    if not in_notebook():
+        return fig
+
+
 class PlotStyle:
     """
     Manage matplotlib plot styles with predefined themes.
-    
+
     Parameters
     ----------
     theme : str, optional
-        Theme name. Available: 'darkgrid', 'whitegrid', 'dark', 'white', 
+        Theme name. Available: 'darkgrid', 'whitegrid', 'dark', 'white',
         'alges', 'minimal', 'publication'
     color : str, optional
         Primary color for plots
-    cmap : str or colormap, optional
-        Colormap for plots
-        
+    cmap : str, list, or colormap, optional
+        Colormap for plots. Can be:
+        - str: Name from PALETTES (e.g., 'alges', 'batlow') or matplotlib colormap (e.g., 'viridis')
+        - list: List of hex colors to create a custom colormap
+        - Colormap object: Matplotlib colormap instance
+    precision_cmap : str, list, or colormap, optional
+        Colormap for precision/uncertainty plots. Same format as cmap.
+
     Attributes
     ----------
     theme : str
@@ -48,7 +228,9 @@ class PlotStyle:
         Primary plot color
     cmap : str or colormap
         Plot colormap
-        
+    precision_cmap : str or colormap
+        Precision/uncertainty colormap
+
     Examples
     --------
     Basic usage with context manager::
@@ -56,6 +238,22 @@ class PlotStyle:
         with PlotStyle(theme='dark', color='#ff6b6b') as style:
             plt.plot(x, y, color=style.color)
             plt.imshow(data, cmap=style.cmap)
+
+    Using custom palettes from PALETTES::
+
+        style = PlotStyle(cmap='batlow')  # Uses palette from PALETTES
+        plt.imshow(data, cmap=style.cmap)
+
+    Using custom color list::
+
+        custom_colors = ['#ff0000', '#00ff00', '#0000ff']
+        style = PlotStyle(cmap=custom_colors)
+        plt.scatter(x, y, c=values, cmap=style.cmap)
+
+    Using matplotlib colormaps::
+
+        style = PlotStyle(cmap='viridis')  # Standard matplotlib colormap
+        plt.contourf(X, Y, Z, cmap=style.cmap)
 
     Simple usage without context manager::
 
@@ -222,7 +420,7 @@ class PlotStyle:
                  theme = None,
                  color = None,
                  cmap = None,
-                 precision_cmap = None,):
+                 precision_cmap = None):
         
         if theme and theme not in self.THEMES:
             raise ValueError(f"Theme '{theme}' not found. Available: {list(self.THEMES.keys())}")
@@ -247,15 +445,39 @@ class PlotStyle:
     
     def _set_cmap(self, cmap):
         if cmap:
-            return cmap
+            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            if isinstance(cmap, str):
+                if cmap in PALETTES:
+                    return get_palette_colormap(cmap)
+                else:
+                    # Return as-is, assuming it's a matplotlib colormap name
+                    return cmap
+            # Handle list input - create colormap from color list
+            elif isinstance(cmap, list):
+                return Colormap.from_list('custom_cmap', cmap)
+            # Otherwise return as-is (already a colormap object)
+            else:
+                return cmap
         elif self.theme:
             return self.THEMES[self.theme]['cmap']
         else:
             return self.DEFAULT_CMAP
-        
+
     def _set_precision_cmap(self, cmap):
         if cmap:
-            return cmap
+            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            if isinstance(cmap, str):
+                if cmap in PALETTES:
+                    return get_palette_colormap(cmap)
+                else:
+                    # Return as-is, assuming it's a matplotlib colormap name
+                    return cmap
+            # Handle list input - create colormap from color list
+            elif isinstance(cmap, list):
+                return Colormap.from_list('custom_precision_cmap', cmap)
+            # Otherwise return as-is (already a colormap object)
+            else:
+                return cmap
         elif self.theme:
             return self.THEMES[self.theme]['precision_cmap']
         else:

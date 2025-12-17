@@ -470,7 +470,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
                                  },
                     specific_args={
                         li.IDW: {"exponent": 2.0},
-                        li.KRIGING: {"model": 1, "nugget": 0.1, "range": 5000.0, "sill": 1.0},
+                        li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
                         li.ADAPTIVE_IDW: {}
                     })
 def _call_libspatialize(points, values, xi, **kwargs):

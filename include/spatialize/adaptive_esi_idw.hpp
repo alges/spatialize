@@ -9,6 +9,11 @@
 #include "spatialize/grad_descent.hpp"
 
 namespace sptlz{
+  // Constants for numerical stability and algorithm parameters
+  constexpr float EPSILON = 1e-10f;  // Small value to prevent division by zero
+  constexpr float DEFAULT_EXPONENT = 2.0f;
+  constexpr float DEFAULT_ANISOTROPY = 1.0f;
+
   class LOO2D{
     protected:
       std::vector<std::vector<float>> *coords;
@@ -24,22 +29,33 @@ namespace sptlz{
 
       float eval(std::vector<float> X){
         int n = values->size();
-        float r = 0.0, sum_w, est, wj;
+        float r = 0.0;
         std::vector<float> params = {X.at(1), X.at(2)};
+
+        // Transform coordinates once
         auto tr_coords = sptlz::transform(coords, &params, &centroid);
 
         for(int i=0; i<n; i++){
-          auto ds = sptlz::distances(&tr_coords, i);
-          sum_w = 0.0;
-          est = 0.0;
+          float sum_w = 0.0;
+          float est = 0.0;
+          float wj, dist;
           for(int j=0;j<n;j++){
             if(j!=i){
-              wj = 1.0/(1.0+std::pow(ds.at(j), X.at(0)));
+              // Use transformed coordinates for distance calculation
+              dist = sptlz::distance(&(tr_coords[i]), &(tr_coords[j]));
+              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
               sum_w += wj;
               est += wj*values->at(j);
             }
           }
-          r += std::pow(values->at(i)-est/sum_w, 2.0);
+          // Add numerical stability check
+          if(sum_w > EPSILON){
+            float error = values->at(i) - est/sum_w;
+            r += error * error;  // MSE for now
+          }else{
+            float error = values->at(i);
+            r += error * error;
+          }
         }
         return(r/n);
       }
@@ -56,28 +72,37 @@ namespace sptlz{
         values = _values;
         centroid = sptlz::get_centroid(_coords);
         coords = _coords;
-        auto aux = sptlz::as_1d_array(_coords);
-        coords1d = &aux;
       }
 
       float eval(std::vector<float> X){
         int n = values->size();
-        float r = 0.0, sum_w, est, wj;
+        float r = 0.0;
         std::vector<float> params = {X.at(1), X.at(2), X.at(3), X.at(4), X.at(5)};
+
+        // Transform coordinates once
         auto tr_coords = sptlz::transform(coords, &params, &centroid);
 
         for(int i=0; i<n; i++){
-          auto ds = sptlz::distances(&tr_coords, i);
-          sum_w = 0.0;
-          est = 0.0;
+          float sum_w = 0.0;
+          float est = 0.0;
+          float wj, dist;
           for(int j=0;j<n;j++){
             if(j!=i){
-              wj = 1.0/(1.0+std::pow(ds.at(j), X.at(0)));
+              // Calculate distance directly
+              dist = sptlz::distance(&(tr_coords[i]), &(tr_coords[j]));
+              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
               sum_w += wj;
               est += wj*values->at(j);
             }
           }
-          r += std::pow(values->at(i)-est/sum_w, 2.0);
+          // Add numerical stability check
+          if(sum_w > EPSILON){
+            float error = values->at(i) - est/sum_w;
+            r += error * error;  // MSE for now
+          }else{
+            float error = values->at(i);
+            r += error * error;
+          }
         }
         return(r/n);
       }
@@ -132,22 +157,26 @@ namespace sptlz{
         auto tr_coords = transform(&sl_coords, &rot_params, &centroid);
         auto tr_locations = transform(&sl_locations, &rot_params, &centroid);
 
-        float w, w_sum, w_v_sum;
+        result.resize(locations_id->size());
 
         // for every location
         for(int i=0; i<locations_id->size(); i++){
-          w_sum = 0.0;
-          w_v_sum = 0.0;
+          float w_sum = 0.0;
+          float w_v_sum = 0.0;
 
           for(int j=0; j<samples_id->size(); j++){
             // calculate weight
-            w = 1/(1+std::pow(distance(&(tr_locations.at(i)), &(tr_coords.at(j))), exponent));
+            float w = 1.0f/(EPSILON + std::pow(distance(&(tr_locations.at(i)), &(tr_coords.at(j))), exponent));
             // keep sum of weighted values and sum of weights
             w_sum += w;
             w_v_sum += w*sl_values.at(j);
           }
           // return weighted values sum normalized (divided by weights sum)
-          result.push_back(w_v_sum/w_sum);
+          if(w_sum > EPSILON){
+            result[i] = w_v_sum/w_sum;
+          }else{
+            result[i] = NAN;
+          }
         }
 
         return(result);
@@ -178,24 +207,28 @@ namespace sptlz{
 
         auto tr_coords = transform(&sl_coords, &rot_params, &centroid);
 
-        float w, w_sum, w_v_sum;
+        result.resize(samples_id->size());
 
         // for every location
         for(int i=0; i<samples_id->size(); i++){
-          w_sum = 0.0;
-          w_v_sum = 0.0;
+          float w_sum = 0.0;
+          float w_v_sum = 0.0;
 
           for(int j=0; j<samples_id->size(); j++){
             if(i!=j){
               // calculate weight
-              w = 1/(1+std::pow(distance(&(tr_coords.at(i)), &(tr_coords.at(j))), exponent));
+              float w = 1.0f/(EPSILON + std::pow(distance(&(tr_coords.at(i)), &(tr_coords.at(j))), exponent));
               // keep sum of weighted values and sum of weights
               w_sum += w;
               w_v_sum += w*sl_values.at(j);
             }
           }
           // return weighted values sum normalized (divided by weights sum)
-          result.push_back(w_v_sum/w_sum);
+          if(w_sum > EPSILON){
+            result[i] = w_v_sum/w_sum;
+          }else{
+            result[i] = NAN;
+          }
         }
         return(result);
       }
@@ -205,7 +238,6 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_folds = slice(folds, samples_id);
-        float w, w_sum, w_v_sum;
 
         if((samples_id->size()==0) || (samples_id->size()==1)){
           for([[maybe_unused]] auto l: *samples_id){
@@ -235,14 +267,18 @@ namespace sptlz{
               }
             }else{
               for(int j: test_train.first){
-                w_sum = 0.0;
-                w_v_sum = 0.0;
+                float w_sum = 0.0;
+                float w_v_sum = 0.0;
                 for(int l: test_train.second){
-                  w = 1/(1+std::pow(distance(&(tr_coords.at(j)), &(tr_coords.at(l))), exponent));
+                  float w = 1.0f/(EPSILON + std::pow(distance(&(tr_coords.at(j)), &(tr_coords.at(l))), exponent));
                   w_sum += w;
                   w_v_sum += w*values->at(samples_id->at(l));
                 }
-                result.at(j) = w_v_sum/w_sum;
+                if(w_sum > EPSILON){
+                  result.at(j) = w_v_sum/w_sum;
+                }else{
+                  result.at(j) = NAN;
+                }
               }
             }
           }

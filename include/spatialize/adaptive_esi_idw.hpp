@@ -430,11 +430,11 @@ namespace sptlz{
           delete func;
         }
 
-        if(min_coords.size()==0){ // don't know why sometimes it can't get a candidate
+        if(min_coords.size()==0){ // Fallback if optimization failed
           if (coords->at(0).size()==2){
-            min_coords = {2.0, 0.0, 1.0};
+            min_coords = {DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY};
           }else if(coords->at(0).size()==3){
-            min_coords = {2.0, 0.0, 0.0, 0.0, 1.0, 1.0};
+            min_coords = {DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY};
           }
         }
         auto centroid = sptlz::get_centroid(coords);

@@ -106,6 +106,10 @@ namespace sptlz{
         }
       }
       // difference
+      if(best_candidate.size()==0){
+        // no valid neighbors found
+        break;
+      }
       diff = minimum - best_candidate.at(n);
       if(diff>0){
         // if lower, refresh
@@ -114,6 +118,8 @@ namespace sptlz{
         for(int i=0; i<n; i++){
           cur.push_back(best_candidate.at(i));
         }
+        // reset best_candidate for next iteration
+        best_candidate = {};
         // if close enough, leave
         if(std::abs(diff)<tol){
           break;

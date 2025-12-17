@@ -147,6 +147,9 @@ namespace sptlz{
       return(result);
     }
 
+    // Pre-allocate memory to avoid repeated reallocations
+    result.reserve(arr->size() * idxs.size());
+
     for(auto &record : *arr){
       for(size_t i=0;i<idxs.size();i++){
         result.push_back(record[idxs[i]]);
@@ -165,6 +168,9 @@ namespace sptlz{
       return(result);
     }
 
+    // Pre-allocate index vector
+    idxs.reserve(arr->at(0).size());
+
     for(size_t i=0;i<arr->at(0).size();i++){
       idxs.push_back(i);
     }
@@ -182,6 +188,7 @@ namespace sptlz{
 
   std::vector<float> distances(std::vector<std::vector<float>> *coords, size_t j){
     std::vector<float> result;
+    result.reserve(coords->size());
 
     for(size_t i=0; i<coords->size(); i++){
       if(i!=j){
@@ -213,6 +220,7 @@ namespace sptlz{
 
   std::vector<std::vector<float>> transform(const float *coords, const float *params, const float *centroid, int n, int d){
     std::vector<std::vector<float>> tr_coords;
+    tr_coords.reserve(n);
 
     if (d==2){
       // Rotation matrix R_φ with anisotropy factor a_f applied to x-component
@@ -259,7 +267,8 @@ namespace sptlz{
 
   template <class T>
   std::vector<T> slice(std::vector<T> *arr, std::vector<int> *idxs){
-    std::vector<T> result; 
+    std::vector<T> result;
+    result.reserve(idxs->size());
     for(int i : *idxs){
       result.push_back(arr->at(i));
     }
@@ -269,6 +278,7 @@ namespace sptlz{
   template <class T>
   std::vector<std::vector<T>> slice_columns(std::vector<std::vector<T>> *arr, std::vector<int> *idxs){
     std::vector<std::vector<T>> result;
+    result.reserve(arr->size());
 
     for(auto rows: *arr){
       result.push_back(slice(&rows, idxs));
@@ -280,6 +290,9 @@ namespace sptlz{
   template <class T>
   std::vector<T> slice_from(std::vector<T> *arr, int idx){
     std::vector<T> result;
+    if(idx >= 0 && (size_t)idx < arr->size()){
+      result.reserve(arr->size() - idx);
+    }
     for(int i=idx; i<arr->size(); i++){
       result.push_back(arr->at(i));
     }
@@ -289,6 +302,7 @@ namespace sptlz{
   template <class T>
   std::vector<T> slice_to(std::vector<T> *arr, int idx){
     std::vector<T> result;
+    result.reserve(idx);
     for(int i=0; i<idx; i++){
       result.push_back(arr->at(i));
     }
@@ -298,6 +312,9 @@ namespace sptlz{
   template <class T>
   std::vector<T> slice_from_to(std::vector<T> *arr, int from, int to){
     std::vector<T> result;
+    if(to > from && from >= 0){
+      result.reserve(to - from);
+    }
     for(int i=from; i<to; i++){
       result.push_back(arr->at(i));
     }

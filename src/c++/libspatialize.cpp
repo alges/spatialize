@@ -645,9 +645,9 @@ std::tuple<py::object, py::array_t<float>> kfold_voronoi_idw(py::array_t<float> 
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 2)
@@ -676,9 +676,9 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::ar
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
+
     auto r = esi->estimate(&qry);
 
     delete esi;
@@ -687,7 +687,7 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::ar
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -718,9 +718,9 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<f
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
+
     auto r = esi->leave_one_out();
 
     delete esi;
@@ -729,7 +729,7 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<f
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -760,9 +760,9 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
+
     auto r = esi->k_fold(k, folding_seed);
 
     delete esi;
@@ -771,7 +771,7 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -802,9 +802,9 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::ar
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
+
     auto r = esi->estimate(&qry);
 
     delete esi;
@@ -813,7 +813,7 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::ar
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -844,9 +844,9 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<f
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
+
     auto r = esi->leave_one_out();
 
     delete esi;
@@ -855,7 +855,7 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<f
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -886,9 +886,9 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
-        
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed);
-    
+
+    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
+
     auto r = esi->k_fold(k, folding_seed);
 
     delete esi;

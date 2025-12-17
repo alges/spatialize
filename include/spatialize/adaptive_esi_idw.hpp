@@ -19,12 +19,14 @@ namespace sptlz{
       std::vector<std::vector<float>> *coords;
       std::vector<float> *values;
       std::vector<float> centroid;
+      bool use_mse;  // true for MSE, false for MAE
 
     public:
-      LOO2D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values){
+      LOO2D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, std::string metric = "mae"){
         values = _values;
         centroid = sptlz::get_centroid(_coords);
         coords = _coords;
+        use_mse = (metric == "mse");
       }
 
       float eval(std::vector<float> X){
@@ -48,13 +50,13 @@ namespace sptlz{
               est += wj*values->at(j);
             }
           }
-          // Add numerical stability check
+          // Use MAE (Mean Absolute Error) or MSE (Mean Squared Error)
           if(sum_w > EPSILON){
             float error = values->at(i) - est/sum_w;
-            r += error * error;  // MSE for now
+            r += use_mse ? (error * error) : std::abs(error);
           }else{
             float error = values->at(i);
-            r += error * error;
+            r += use_mse ? (error * error) : std::abs(error);
           }
         }
         return(r/n);
@@ -66,12 +68,14 @@ namespace sptlz{
       std::vector<std::vector<float>> *coords;
       std::vector<float> *values;
       std::vector<float> centroid;
+      bool use_mse;  // true for MSE, false for MAE
 
     public:
-      LOO3D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values){
+      LOO3D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, std::string metric = "mae"){
         values = _values;
         centroid = sptlz::get_centroid(_coords);
         coords = _coords;
+        use_mse = (metric == "mse");
       }
 
       float eval(std::vector<float> X){
@@ -95,13 +99,13 @@ namespace sptlz{
               est += wj*values->at(j);
             }
           }
-          // Add numerical stability check
+          // Use MAE (Mean Absolute Error) or MSE (Mean Squared Error)
           if(sum_w > EPSILON){
             float error = values->at(i) - est/sum_w;
-            r += error * error;  // MSE for now
+            r += use_mse ? (error * error) : std::abs(error);
           }else{
             float error = values->at(i);
-            r += error * error;
+            r += use_mse ? (error * error) : std::abs(error);
           }
         }
         return(r/n);
@@ -111,6 +115,7 @@ namespace sptlz{
   class ADAPTIVE_ESI_IDW: public ESI {
     protected:
       int d, k;
+      std::string metric;  // "mae" or "mse"
       std::vector<std::vector<float>> param_ranges;
       std::vector<float> steps;
       std::vector<int> ns;
@@ -238,6 +243,7 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_folds = slice(folds, samples_id);
+        float w, w_sum, w_v_sum;
 
         if((samples_id->size()==0) || (samples_id->size()==1)){
           for([[maybe_unused]] auto l: *samples_id){
@@ -384,7 +390,7 @@ namespace sptlz{
         if(coords->at(0).size()==2){
           std::vector<float> starting_point, candidate;
           float min_value=1e20, aux;
-          LOO2D *func = new LOO2D(coords, values);
+          LOO2D *func = new LOO2D(coords, values, this->metric);
           std::vector<std::vector<float>> ranges = {
             {0.1, 8.0, 0.2}, // exp
             {0.0, 180.0, 1.0}, // azim

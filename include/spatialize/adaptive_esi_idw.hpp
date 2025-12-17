@@ -392,14 +392,14 @@ namespace sptlz{
           float min_value=1e20, aux;
           LOO2D *func = new LOO2D(coords, values, this->metric);
           std::vector<std::vector<float>> ranges = {
-            {0.1, 8.0, 0.2}, // exp
-            {0.0, 180.0, 1.0}, // azim
-            {0.1, 1.001, 0.05} // ratio
+            {0.1, 8.0, 0.2},    // exponent p
+            {0.0, 180.0, 1.0},  // azimuth φ
+            {0.1, 5.0, 0.2}    // anisotropy factor a_f
           };
           for(int i=0; i<best_of; i++){
             starting_point = {};
             for(int j=0; j<ranges.size(); j++){
-              starting_point.push_back(ranges.at(j).at(0)+uni_float(my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
+              starting_point.push_back(ranges.at(j).at(0)+uni_float(this->my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
             candidate = sptlz::grid_search<LOO2D>(func, &ranges, starting_point);
             aux = func->eval(candidate);
@@ -412,19 +412,19 @@ namespace sptlz{
         }else if(coords->at(0).size()==3){
           std::vector<float> starting_point, candidate;
           float min_value=1e20, aux;
-          LOO3D *func = new LOO3D(coords, values);
+          LOO3D *func = new LOO3D(coords, values, this->metric);
           std::vector<std::vector<float>> ranges = {
-            {0.1, 8.0, 0.2}, // exp
-            {0.0, 180.0, 1.0}, // azim
-            {0.0, 180.0, 1.0}, // dip
-            {0.0, 180.0, 1.0}, // plunge
-            {0.1, 1.001, 0.05}, // ratio1
-            {0.1, 1.001, 0.05} // ratio2
+            {0.1, 8.0, 0.2},    // exponent p
+            {0.0, 180.0, 1.0},  // azimuth
+            {0.0, 180.0, 1.0},  // dip
+            {0.0, 180.0, 1.0},  // plunge
+            {0.1, 5.0, 0.2},   // anisotropy ratio 1
+            {0.1, 5.0, 0.2}    // anisotropy ratio 2
           };
           for(int i=0; i<best_of; i++){
             starting_point = {};
             for(int j=0; j<ranges.size(); j++){
-              starting_point.push_back(ranges.at(j).at(0)+uni_float(my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
+              starting_point.push_back(ranges.at(j).at(0)+uni_float(this->my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
             candidate = sptlz::grid_search<LOO3D>(func, &ranges, starting_point);
             aux = func->eval(candidate);
@@ -458,30 +458,32 @@ namespace sptlz{
                        int forest_size,
                        std::vector<std::vector<float>> bbox,
                        std::function<int(std::string)> visitor,
-                       int seed=206936):
+                       int seed=206936,
+                       std::string _metric="mae"):
       ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         this->class_name = __func__;
+        this->metric = _metric;
         if(_coords.at(0).size()==2){
           this->d = 2;
           this->param_ranges = {
-            {  0.5, 10.0},
-            {-90.0, 90.0},
-            {  0.1,  1.0}
+            {  0.5, 10.0},  // exponent p
+            {-90.0, 90.0},  // azimuth φ
+            {  0.1, 5.0}   // anisotropy factor a_f
           };
-          this->steps = {0.5, 10.0, 0.1};
-          this->ns = {19, 18, 9};
+          this->steps = {0.5, 10.0, 0.2};
+          this->ns = {19, 18, 25};
         }else if(_coords.at(0).size()==3){
           this->d = 3;
           this->param_ranges = {
-            {  0.5, 10.0},
-            {-90.0, 90.0},
-            {-90.0, 90.0},
-            {-90.0, 90.0},
-            {  0.1,  1.0},
-            {  0.1,  1.0}
+            {  0.5, 10.0},  // exponent p
+            {-90.0, 90.0},  // azimuth
+            {-90.0, 90.0},  // dip
+            {-90.0, 90.0},  // plunge
+            {  0.1, 5.0},  // anisotropy ratio 1
+            {  0.1, 5.0}   // anisotropy ratio 2
           };
-          this->steps = {0.5, 10.0, 10.0, 10.0, 0.1, 0.1};
-          this->ns = {19, 18, 18, 18, 9, 9};
+          this->steps = {0.5, 10.0, 10.0, 10.0, 0.2, 0.2};
+          this->ns = {19, 18, 18, 18, 25, 25};
         }else{
           throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");
         }

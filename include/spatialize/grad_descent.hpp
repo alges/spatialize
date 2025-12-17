@@ -13,6 +13,8 @@
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
+  // Optimization constants (shared with adaptive_esi_idw.hpp via utils)
+  constexpr float OPT_EPSILON = 1e-10f;  // Numerical stability for optimization
 
   std::vector<std::vector<int>> neighbors(std::vector<int> elements, int d){
     std::vector<std::vector<int>> nbs, nb;
@@ -160,18 +162,19 @@ namespace sptlz{
       float eval(std::vector<float> *X){
           int n = values->size();
 
-          float r = 0.0, sum_w, est, wj;
+          float r = 0.0;
           std::vector<float> params = {X->at(1), X->at(2)};
 
           auto tr_coords = transform(this->coords, &params, &(this->centroid));
 
           for(int i=0; i<n; i++){
             auto ds = distances(&tr_coords, i);
-            sum_w = 0.0;
-            est = 0.0;
+            float sum_w = 0.0;
+            float est = 0.0;
+            float wj;
             for(int j=0;j<n;j++){
               if(j!=i){
-                wj = 1.0/(1.0+std::pow(ds.at(j), X->at(0)));
+                wj = 1.0f/(OPT_EPSILON + std::pow(ds.at(j), X->at(0)));
                 sum_w += wj;
                 est += wj*values->at(j);
               }
@@ -190,18 +193,19 @@ namespace sptlz{
       float eval(std::vector<float> *X){
           int n = values->size();
 
-          float r = 0.0, sum_w, est, wj;
+          float r = 0.0;
           std::vector<float> params = {X->at(1), X->at(2), X->at(3), X->at(4), X->at(5)};
 
           auto tr_coords = transform(this->coords, &params, &(this->centroid));
 
           for(int i=0; i<n; i++){
             auto ds = distances(&tr_coords, i);
-            sum_w = 0.0;
-            est = 0.0;
+            float sum_w = 0.0;
+            float est = 0.0;
+            float wj;
             for(int j=0;j<n;j++){
               if(j!=i){
-                wj = 1.0/(1.0+std::pow(ds.at(j), X->at(0)));
+                wj = 1.0f/(OPT_EPSILON + std::pow(ds.at(j), X->at(0)));
                 sum_w += wj;
                 est += wj*values->at(j);
               }

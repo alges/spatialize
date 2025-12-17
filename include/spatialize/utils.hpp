@@ -5,12 +5,18 @@
 #include <string>
 #include <algorithm>
 #include <functional>
+#include <cmath>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
 namespace py = pybind11;
 
 namespace sptlz{
+  // Mathematical constants
+  constexpr float PI = 3.14159265358979323846f;
+
+  // Inline utility functions
+  inline float deg_to_rad(float degrees) { return degrees * PI / 180.0f; }
   template <class T>
   void pprint(std::vector<T> v, int nl=1){
       for(T i: v){
@@ -209,7 +215,14 @@ namespace sptlz{
     std::vector<std::vector<float>> tr_coords;
 
     if (d==2){
-      float r1 = params[1]*cos(params[0]*3.141592/180.0), r2 = params[1]*sin(params[0]*3.141592/180.0), r3 = -sin(params[0]*3.141592/180.0), r4 = cos(params[0]*3.141592/180.0);
+      // Rotation matrix R_φ with anisotropy factor a_f applied to x-component
+      // According to paper: R_φ = [cos(φ) -sin(φ); sin(φ) cos(φ)], then multiply by [a_f; 1]
+      // Result: [a_f*cos(φ) -a_f*sin(φ); sin(φ) cos(φ)]
+      const float phi = deg_to_rad(params[0]);
+      const float cos_phi = std::cos(phi);
+      const float sin_phi = std::sin(phi);
+      const float a_f = params[1];  // anisotropy factor
+      float r1 = a_f*cos_phi, r2 = -a_f*sin_phi, r3 = sin_phi, r4 = cos_phi;
       for(int i=0; i<n; i++){
         tr_coords.push_back({
           r1*(coords[2*i]-centroid[0])+r2*(coords[2*i+1]-centroid[1]),
@@ -217,7 +230,13 @@ namespace sptlz{
         });
       }
     }else if (d==3){
-      float ca = cos(params[0]*3.141592/180.0), sa = sin(params[0]*3.141592/180.0), cb = cos(params[1]*3.141592/180.0), sb = sin(params[1]*3.141592/180.0), cc = cos(params[2]*3.141592/180.0), sc = sin(params[2]*3.141592/180.0);
+      // 3D rotation: azimuth, dip, plunge (Euler angles in degrees)
+      const float azim = deg_to_rad(params[0]);
+      const float dip = deg_to_rad(params[1]);
+      const float plunge = deg_to_rad(params[2]);
+      float ca = std::cos(azim), sa = std::sin(azim);
+      float cb = std::cos(dip), sb = std::sin(dip);
+      float cc = std::cos(plunge), sc = std::sin(plunge);
       float r1 = ca*cb, r2 = ca*sb*sc-sa*cc, r3 = ca*sb*cc+sa*sc, r4 = sa*cb, r5 = sa*sb*sc+ca*cc, r6 = sa*sb*cc-ca*sc, r7 = -sb, r8 = cb*sc, r9 = cb*cc;
       r4 *= params[3]; r5 *= params[3]; r6 *= params[3];
       r7 *= params[4]; r8 *= params[4]; r9 *= params[4];

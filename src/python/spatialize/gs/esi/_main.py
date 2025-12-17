@@ -254,7 +254,7 @@ class ESIResult(EstimationResult):
                                  "griddata": False,
                                  "p_process": partitioning_process.MONDRIAN,  # partitioning process
                                  "data_cond": [True, False],  # whether to condition the partitioning process on samples
-                                 # -- valid only when ‘p_process’ is ‘voronoi’.
+                                 # -- valid only when 'p_process' is 'voronoi'.
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
                                  "score": sf.neg_log_likelihood,
@@ -268,7 +268,7 @@ class ESIResult(EstimationResult):
                                      "nugget": [0.0, 0.5, 1.0],
                                      "range": [10.0, 50.0, 100.0, 200.0],
                                      "sill": [0.9, 1.0, 1.1]},
-                        li.ADAPTIVE_IDW: {"metric": ["mae"]}
+                        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": [False]}
                     })
 def esi_hparams_search(points, values, xi, **kwargs):
     """
@@ -307,6 +307,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
     if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
         grid["metric"] = kwargs["metric"]
+        grid["parallelize"] = kwargs["parallelize"]
 
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
@@ -474,7 +475,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
                     specific_args={
                         li.IDW: {"exponent": 2.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
-                        li.ADAPTIVE_IDW: {"metric": "mae"}
+                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
                     })
 def _call_libspatialize(points, values, xi, **kwargs):
     """
@@ -554,5 +555,6 @@ def build_arg_list(points, values, xi, nonpos_args):
     if nonpos_args["local_interpolator"] == li.ADAPTIVE_IDW:
         l_args.insert(-2, nonpos_args["seed"])
         l_args.insert(-2, nonpos_args.get("metric", "mae"))
+        l_args.insert(-2, nonpos_args.get("parallelize", False))
 
     return l_args

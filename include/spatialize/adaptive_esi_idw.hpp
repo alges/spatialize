@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <cmath>
 #include <random>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "spatialize/abstract_esi.hpp"
 #include "spatialize/utils.hpp"
 #include "spatialize/grad_descent.hpp"
@@ -37,6 +40,9 @@ namespace sptlz{
         // Transform coordinates once
         auto tr_coords = sptlz::transform(coords, &params, &centroid);
 
+        #ifdef _OPENMP
+        #pragma omp parallel for reduction(+:r) schedule(static)
+        #endif
         for(int i=0; i<n; i++){
           float sum_w = 0.0;
           float est = 0.0;
@@ -86,6 +92,9 @@ namespace sptlz{
         // Transform coordinates once
         auto tr_coords = sptlz::transform(coords, &params, &centroid);
 
+        #ifdef _OPENMP
+        #pragma omp parallel for reduction(+:r) schedule(static)
+        #endif
         for(int i=0; i<n; i++){
           float sum_w = 0.0;
           float est = 0.0;
@@ -164,7 +173,10 @@ namespace sptlz{
 
         result.resize(locations_id->size());
 
-        // for every location
+        // Parallelize over locations (each location is independent)
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+        #endif
         for(int i=0; i<locations_id->size(); i++){
           float w_sum = 0.0;
           float w_v_sum = 0.0;
@@ -214,7 +226,10 @@ namespace sptlz{
 
         result.resize(samples_id->size());
 
-        // for every location
+        // Parallelize LOO evaluation (each sample is independent)
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+        #endif
         for(int i=0; i<samples_id->size(); i++){
           float w_sum = 0.0;
           float w_v_sum = 0.0;
@@ -272,7 +287,13 @@ namespace sptlz{
                 result.at(j) = NAN;
               }
             }else{
-              for(int j: test_train.first){
+              // Parallelize over test samples within each fold
+              std::vector<int> test_indices(test_train.first.begin(), test_train.first.end());
+              #ifdef _OPENMP
+              #pragma omp parallel for schedule(static)
+              #endif
+              for(size_t idx=0; idx<test_indices.size(); idx++){
+                int j = test_indices[idx];
                 float w_sum = 0.0;
                 float w_v_sum = 0.0;
                 for(int l: test_train.second){
@@ -293,8 +314,6 @@ namespace sptlz{
       }
 
       void post_process(){
-        std::vector<std::vector<float>> leaf_coords;
-        std::vector<float> leaf_values;
         sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
         sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 
@@ -302,22 +321,43 @@ namespace sptlz{
 
         progress->init(mondrian_forest.size(), 1);
 
+        bool interrupted = false;
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 1) shared(interrupted)
+        #endif
         for(int i=0; i<mondrian_forest.size(); i++){
+          #ifdef _OPENMP
+          if(interrupted) continue;  // Skip remaining work if interrupted
+          #endif
+
           auto mt = mondrian_forest.at(i);
           for(int j=0; j<mt->samples_by_leaf.size(); j++){
-            leaf_coords.clear();
-            leaf_values.clear();
+            std::vector<std::vector<float>> leaf_coords;
+            std::vector<float> leaf_values;
             for(int k=0; k<mt->samples_by_leaf.at(j).size(); k++){
               leaf_coords.push_back(coords.at(mt->samples_by_leaf.at(j).at(k)));
               leaf_values.push_back(values.at(mt->samples_by_leaf.at(j).at(k)));
             }
 
-            mt->leaf_params.at(j) = get_params(&leaf_coords, &leaf_values);
+            mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values);
           }
 
-          if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-             exit(0);
-		  progress->inform(i + 1);
+          #ifdef _OPENMP
+          #pragma omp critical
+          #endif
+          {
+            if (PyErr_CheckSignals() != 0) {  // to allow ctrl-c from user
+              interrupted = true;
+            }
+            progress->inform(i + 1);
+          }
+        }
+
+        if(interrupted){
+          delete logger;
+          delete progress;
+          throw std::runtime_error("Computation interrupted by user");
         }
 
         progress->stop();

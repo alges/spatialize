@@ -10,6 +10,9 @@
 #include <cmath>
 #include <ctime>
 #include <algorithm>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
@@ -167,6 +170,9 @@ namespace sptlz{
 
           auto tr_coords = transform(this->coords, &params, &(this->centroid));
 
+          #ifdef _OPENMP
+          #pragma omp parallel for reduction(+:r) schedule(static)
+          #endif
           for(int i=0; i<n; i++){
             auto ds = distances(&tr_coords, i);
             float sum_w = 0.0;
@@ -198,6 +204,9 @@ namespace sptlz{
 
           auto tr_coords = transform(this->coords, &params, &(this->centroid));
 
+          #ifdef _OPENMP
+          #pragma omp parallel for reduction(+:r) schedule(static)
+          #endif
           for(int i=0; i<n; i++){
             auto ds = distances(&tr_coords, i);
             float sum_w = 0.0;

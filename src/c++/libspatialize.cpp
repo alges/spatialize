@@ -645,7 +645,7 @@ std::tuple<py::object, py::array_t<float>> kfold_voronoi_idw(py::array_t<float> 
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
 
     if (smp_info.ndim != 2)
@@ -662,7 +662,7 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::ar
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
-    
+
     std::function<int(std::string)> _visitor = [](std::string s)->int{
       return(0);
     };
@@ -676,6 +676,14 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::ar
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
+
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);  // Disable parallelization
+    }
+    #endif
 
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
 
@@ -683,13 +691,20 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::ar
 
     delete esi;
 
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(original_threads);
+    }
+    #endif
+
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 2)
@@ -704,7 +719,7 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<f
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
-    
+
     std::function<int(std::string)> _visitor = [](std::string s)->int{
       return(0);
     };
@@ -718,6 +733,14 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<f
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
+
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
 
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
 
@@ -725,13 +748,20 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<f
 
     delete esi;
 
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(original_threads);
+    }
+    #endif
+
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 2)
@@ -746,7 +776,7 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
-    
+
     std::function<int(std::string)> _visitor = [](std::string s)->int{
       return(0);
     };
@@ -761,17 +791,32 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
 
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
+
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
 
     auto r = esi->k_fold(k, folding_seed);
 
     delete esi;
 
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(original_threads);
+    }
+    #endif
+
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -802,6 +847,14 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::ar
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
+
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
 
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
 
@@ -809,11 +862,18 @@ std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::ar
 
     delete esi;
 
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(original_threads);
+    }
+    #endif
+
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -844,6 +904,14 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<f
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
+
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
 
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
 
@@ -851,11 +919,18 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<f
 
     delete esi;
 
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
+
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     
     if (smp_info.ndim != 2)
@@ -887,11 +962,26 @@ std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
 
+    // Control OpenMP parallelization
+    #ifdef _OPENMP
+    int original_threads = omp_get_max_threads();
+    if (!parallelize) {
+        omp_set_num_threads(1);
+    }
+    #endif
+
     sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
 
     auto r = esi->k_fold(k, folding_seed);
 
     delete esi;
+
+    // Restore original thread count
+    #ifdef _OPENMP
+    if (!parallelize) {
+        omp_set_num_threads(original_threads);
+    }
+    #endif
 
     std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
     return(out);

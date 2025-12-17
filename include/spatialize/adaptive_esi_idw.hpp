@@ -12,7 +12,6 @@ namespace sptlz{
   class LOO2D{
     protected:
       std::vector<std::vector<float>> *coords;
-      std::vector<float> *coords1d;
       std::vector<float> *values;
       std::vector<float> centroid;
 
@@ -21,8 +20,6 @@ namespace sptlz{
         values = _values;
         centroid = sptlz::get_centroid(_coords);
         coords = _coords;
-        auto aux = sptlz::as_1d_array(_coords);
-        coords1d = &aux;
       }
 
       float eval(std::vector<float> X){
@@ -51,7 +48,6 @@ namespace sptlz{
   class LOO3D{
     protected:
       std::vector<std::vector<float>> *coords;
-      std::vector<float> *coords1d;
       std::vector<float> *values;
       std::vector<float> centroid;
 

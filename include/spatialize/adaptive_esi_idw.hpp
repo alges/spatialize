@@ -304,7 +304,9 @@ namespace sptlz{
         GradDesc *opt = new GridNBRndDesc(fn, this->param_ranges, this->steps, this->ns, k, std::rand());
         std::vector<float> m = get_minimum(opt, &(this->param_ranges), 100);
         
-        return(m);
+        delete opt;
+        delete fn;
+
       }
 
       std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values){
@@ -338,6 +340,7 @@ namespace sptlz{
               min_value = aux;
             }
           }
+          delete func;
         }else if(coords->at(0).size()==3){
           std::vector<float> starting_point, candidate;
           float min_value=1e20, aux;
@@ -362,6 +365,7 @@ namespace sptlz{
               min_value = aux;
             }
           }
+          delete func;
         }
 
         if(min_coords.size()==0){ // don't know why sometimes it can't get a candidate

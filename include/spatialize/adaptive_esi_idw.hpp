@@ -109,8 +109,10 @@ namespace sptlz{
         }
 
         if(samples_id->size()==1){
+          // Return the single sample's value for all locations
+          float single_value = values->at(samples_id->at(0));
           for([[maybe_unused]] auto l: *locations_id){
-            result.push_back(params->at(0));
+            result.push_back(single_value);
           }
           return(result);
         }

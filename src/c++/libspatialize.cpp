@@ -413,7 +413,7 @@ std::tuple<py::object, py::array_t<float>> kfold_esi_kriging_2d(py::array_t<floa
 
 std::tuple<py::object, py::array_t<float>> estimation_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 3)
@@ -422,8 +422,8 @@ std::tuple<py::object, py::array_t<float>> estimation_esi_kriging_3d(py::array_t
         throw std::runtime_error("[3] values must be a 1 dimension array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
+    if (qry_info.shape[1] != 3)
+        throw std::runtime_error("[5] queries must have 3 coordinates");
 
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
@@ -455,7 +455,7 @@ std::tuple<py::object, py::array_t<float>> estimation_esi_kriging_3d(py::array_t
 
 std::tuple<py::object, py::array_t<float>> loo_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 3)
@@ -464,8 +464,8 @@ std::tuple<py::object, py::array_t<float>> loo_esi_kriging_3d(py::array_t<float>
         throw std::runtime_error("[3] values must be a 1 dimension array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
+    if (qry_info.shape[1] != 3)
+        throw std::runtime_error("[5] queries must have 3 coordinates");
 
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
@@ -497,7 +497,7 @@ std::tuple<py::object, py::array_t<float>> loo_esi_kriging_3d(py::array_t<float>
 
 std::tuple<py::object, py::array_t<float>> kfold_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-    
+
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (smp_info.shape[1] != 3)
@@ -506,8 +506,8 @@ std::tuple<py::object, py::array_t<float>> kfold_esi_kriging_3d(py::array_t<floa
         throw std::runtime_error("[3] values must be a 1 dimension array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
+    if (qry_info.shape[1] != 3)
+        throw std::runtime_error("[5] queries must have 3 coordinates");
 
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);

@@ -324,7 +324,15 @@ namespace sptlz{
         if(coords->size()==0){
           return(std::vector<float>());
         }else if(coords->size()==1){
-          return(std::vector<float>({values->at(0)}));
+          // Return default parameters with centroid
+          auto centroid = sptlz::get_centroid(coords);
+          if(coords->at(0).size()==2){
+            // 2D: centroid_x, centroid_y, exponent, azimuth, anisotropy_ratio
+            return(std::vector<float>({centroid[0], centroid[1], DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY}));
+          }else{
+            // 3D: centroid_x, centroid_y, centroid_z, exponent, azim, dip, plunge, ratio1, ratio2
+            return(std::vector<float>({centroid[0], centroid[1], centroid[2], DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY}));
+          }
         }
 
         LOOND *fn;
@@ -333,12 +341,28 @@ namespace sptlz{
         }else{
           fn = new LOO_3D(coords, values, 0.01);
         }
-        GradDesc *opt = new GridNBRndDesc(fn, this->param_ranges, this->steps, this->ns, k, std::rand());
+        GradDesc *opt = new GridNBRndDesc(fn, this->param_ranges, this->steps, this->ns, this->k, std::rand());
         std::vector<float> m = get_minimum(opt, &(this->param_ranges), 100);
-        
+
         delete opt;
         delete fn;
 
+        // Safety check: if optimization failed, return default parameters
+        if(m.size() == 0){
+          auto centroid = sptlz::get_centroid(coords);
+          if(coords->at(0).size()==2){
+            return(std::vector<float>({centroid[0], centroid[1], DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY}));
+          }else{
+            return(std::vector<float>({centroid[0], centroid[1], centroid[2], DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY}));
+          }
+        }
+
+        // Add centroid to the beginning of optimized parameters
+        auto centroid = sptlz::get_centroid(coords);
+        for(auto v: m){
+          centroid.push_back(v);
+        }
+        return(centroid);
       }
 
       std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values){
@@ -347,7 +371,13 @@ namespace sptlz{
         if(coords->size()==0){
           return(std::vector<float>());
         }else if(coords->size()==1){
-          return(std::vector<float>({values->at(0)}));
+          // Return default parameters with centroid
+          auto centroid = sptlz::get_centroid(coords);
+          if(coords->at(0).size()==2){
+            return(std::vector<float>({centroid[0], centroid[1], DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY}));
+          }else{
+            return(std::vector<float>({centroid[0], centroid[1], centroid[2], DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY}));
+          }
         }
 
         std::vector<float> min_coords;

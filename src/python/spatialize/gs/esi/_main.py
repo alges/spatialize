@@ -268,7 +268,7 @@ class ESIResult(EstimationResult):
                                      "nugget": [0.0, 0.5, 1.0],
                                      "range": [10.0, 50.0, 100.0, 200.0],
                                      "sill": [0.9, 1.0, 1.1]},
-                        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": [False]}
+                        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False}
                     })
 def esi_hparams_search(points, values, xi, **kwargs):
     """
@@ -307,7 +307,6 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
     if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
         grid["metric"] = kwargs["metric"]
-        grid["parallelize"] = kwargs["parallelize"]
 
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
@@ -332,6 +331,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         if kwargs["p_process"] == partitioning_process.MONDRIAN:
             param_set["data_cond"] = True
+
+        if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
+            param_set["parallelize"] = kwargs["parallelize"]
 
         l_args = build_arg_list(points, values, p_xi, param_set)
         if method == "kfold":

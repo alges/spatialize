@@ -17,6 +17,28 @@ extra_link_args = []
 # compiling with CLang (OS X)
 if sys.platform == 'darwin':
     extra_compile_args += ['-Wno-error=c++11-narrowing']
+    # macOS with Clang: use libomp from Homebrew
+    import subprocess
+    try:
+        # Get Homebrew prefix for libomp
+        brew_prefix = subprocess.check_output(
+            ['brew', '--prefix', 'libomp'],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        extra_compile_args += ['-Xpreprocessor', '-fopenmp', f'-I{brew_prefix}/include']
+        extra_link_args += [f'-L{brew_prefix}/lib', '-lomp']
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Fallback: Homebrew not available or libomp not installed
+        # OpenMP pragmas will be ignored at compile time
+        print("Warning: OpenMP not found. Install with: brew install libomp")
+        pass
+elif sys.platform == 'linux':
+    # Linux: use standard OpenMP
+    extra_compile_args += ['-fopenmp']
+    extra_link_args += ['-fopenmp']
+elif sys.platform == 'win32':
+    # Windows with MSVC
+    extra_compile_args += ['/openmp']
 
 libspatialize_extensions = [
     Pybind11Extension(
@@ -32,7 +54,7 @@ libspatialize_extensions = [
 if __name__ == '__main__':
     setup(
         name='spatialize',
-        version='1.0.4',
+        version='1.1.0',
         author='ALGES Laboratory',
         author_email='dev@alges.cl',
         description='Python Library for Generative Geostatistics and Spatial Analysis',

@@ -5,18 +5,44 @@
 #include <string>
 #include <algorithm>
 #include <functional>
+#include <cmath>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
 namespace py = pybind11;
 
 namespace sptlz{
+  // Mathematical constants
+  constexpr float PI = 3.14159265358979323846f;
+
+  // Inline utility functions
+  inline float deg_to_rad(float degrees) { return degrees * PI / 180.0f; }
   template <class T>
-  void pprint(std::vector<T> v){
+  void pprint(std::vector<T> v, int nl=1){
       for(T i: v){
         std::cout << " " << i;
       }
-      std::cout << std::endl;
+      for(int j=0; j<nl; j++){
+        std::cout << std::endl;
+      }
+  }
+
+  std::vector<std::vector<float>> get_random_values(std::vector<std::vector<float>> *ranges, int n, int seed){
+    std::srand(seed);
+    std::vector<std::vector<float>> result;
+    std::vector<float> values;
+    int i,j;
+
+    for(i=0; i<n; i++){
+      values = {};
+      for(j=0; j<ranges->size(); j++){
+        float r = 1.0*std::rand()/RAND_MAX;
+        values.push_back(ranges->at(j).at(0)+r*(ranges->at(j).at(1)-ranges->at(j).at(0)));
+      }
+      result.push_back(values);
+    }
+
+    return(result);
   }
 
   std::vector<std::vector<int>> get_full_neighboorhood(int d){
@@ -86,6 +112,10 @@ namespace sptlz{
         }
       }
       // difference
+      if(best_candidate.size()==0){
+        // no valid neighbors found
+        break;
+      }
       diff = minimum - best_candidate.at(n);
       if(diff>0){
         // if lower, refresh
@@ -94,6 +124,8 @@ namespace sptlz{
         for(int i=0; i<n; i++){
           cur.push_back(best_candidate.at(i));
         }
+        // reset best_candidate for next iteration
+        best_candidate = {};
         // if close enough, leave
         if(std::abs(diff)<tol){
           break;
@@ -115,6 +147,9 @@ namespace sptlz{
       return(result);
     }
 
+    // Pre-allocate memory to avoid repeated reallocations
+    result.reserve(arr->size() * idxs.size());
+
     for(auto &record : *arr){
       for(size_t i=0;i<idxs.size();i++){
         result.push_back(record[idxs[i]]);
@@ -133,6 +168,9 @@ namespace sptlz{
       return(result);
     }
 
+    // Pre-allocate index vector
+    idxs.reserve(arr->at(0).size());
+
     for(size_t i=0;i<arr->at(0).size();i++){
       idxs.push_back(i);
     }
@@ -150,6 +188,7 @@ namespace sptlz{
 
   std::vector<float> distances(std::vector<std::vector<float>> *coords, size_t j){
     std::vector<float> result;
+    result.reserve(coords->size());
 
     for(size_t i=0; i<coords->size(); i++){
       if(i!=j){
@@ -181,9 +220,17 @@ namespace sptlz{
 
   std::vector<std::vector<float>> transform(const float *coords, const float *params, const float *centroid, int n, int d){
     std::vector<std::vector<float>> tr_coords;
+    tr_coords.reserve(n);
 
     if (d==2){
-      float r1 = params[1]*cos(params[0]*3.141592/180.0), r2 = params[1]*sin(params[0]*3.141592/180.0), r3 = -sin(params[0]*3.141592/180.0), r4 = cos(params[0]*3.141592/180.0);
+      // Rotation matrix R_φ with anisotropy factor a_f applied to x-component
+      // According to paper: R_φ = [cos(φ) -sin(φ); sin(φ) cos(φ)], then multiply by [a_f; 1]
+      // Result: [a_f*cos(φ) -a_f*sin(φ); sin(φ) cos(φ)]
+      const float phi = deg_to_rad(params[0]);
+      const float cos_phi = std::cos(phi);
+      const float sin_phi = std::sin(phi);
+      const float a_f = params[1];  // anisotropy factor
+      float r1 = a_f*cos_phi, r2 = -a_f*sin_phi, r3 = sin_phi, r4 = cos_phi;
       for(int i=0; i<n; i++){
         tr_coords.push_back({
           r1*(coords[2*i]-centroid[0])+r2*(coords[2*i+1]-centroid[1]),
@@ -191,7 +238,13 @@ namespace sptlz{
         });
       }
     }else if (d==3){
-      float ca = cos(params[0]*3.141592/180.0), sa = sin(params[0]*3.141592/180.0), cb = cos(params[1]*3.141592/180.0), sb = sin(params[1]*3.141592/180.0), cc = cos(params[2]*3.141592/180.0), sc = sin(params[2]*3.141592/180.0);
+      // 3D rotation: azimuth, dip, plunge (Euler angles in degrees)
+      const float azim = deg_to_rad(params[0]);
+      const float dip = deg_to_rad(params[1]);
+      const float plunge = deg_to_rad(params[2]);
+      float ca = std::cos(azim), sa = std::sin(azim);
+      float cb = std::cos(dip), sb = std::sin(dip);
+      float cc = std::cos(plunge), sc = std::sin(plunge);
       float r1 = ca*cb, r2 = ca*sb*sc-sa*cc, r3 = ca*sb*cc+sa*sc, r4 = sa*cb, r5 = sa*sb*sc+ca*cc, r6 = sa*sb*cc-ca*sc, r7 = -sb, r8 = cb*sc, r9 = cb*cc;
       r4 *= params[3]; r5 *= params[3]; r6 *= params[3];
       r7 *= params[4]; r8 *= params[4]; r9 *= params[4];
@@ -214,7 +267,8 @@ namespace sptlz{
 
   template <class T>
   std::vector<T> slice(std::vector<T> *arr, std::vector<int> *idxs){
-    std::vector<T> result; 
+    std::vector<T> result;
+    result.reserve(idxs->size());
     for(int i : *idxs){
       result.push_back(arr->at(i));
     }
@@ -222,8 +276,23 @@ namespace sptlz{
   }
 
   template <class T>
+  std::vector<std::vector<T>> slice_columns(std::vector<std::vector<T>> *arr, std::vector<int> *idxs){
+    std::vector<std::vector<T>> result;
+    result.reserve(arr->size());
+
+    for(auto rows: *arr){
+      result.push_back(slice(&rows, idxs));
+    }
+
+    return(result);
+  }
+
+  template <class T>
   std::vector<T> slice_from(std::vector<T> *arr, int idx){
     std::vector<T> result;
+    if(idx >= 0 && (size_t)idx < arr->size()){
+      result.reserve(arr->size() - idx);
+    }
     for(int i=idx; i<arr->size(); i++){
       result.push_back(arr->at(i));
     }
@@ -233,6 +302,7 @@ namespace sptlz{
   template <class T>
   std::vector<T> slice_to(std::vector<T> *arr, int idx){
     std::vector<T> result;
+    result.reserve(idx);
     for(int i=0; i<idx; i++){
       result.push_back(arr->at(i));
     }
@@ -242,6 +312,9 @@ namespace sptlz{
   template <class T>
   std::vector<T> slice_from_to(std::vector<T> *arr, int from, int to){
     std::vector<T> result;
+    if(to > from && from >= 0){
+      result.reserve(to - from);
+    }
     for(int i=from; i<to; i++){
       result.push_back(arr->at(i));
     }
@@ -339,6 +412,43 @@ namespace sptlz{
   }
 
   template <class T>
+  std::vector<std::vector<std::vector<T>>> ndarray_to_vector_3d(py::array_t<T> *arr) {
+      py::buffer_info info = arr->request();
+      std::vector<std::vector<std::vector<T>>> r;
+      std::vector<std::vector<T>> v;
+      std::vector<T> aux;
+
+      for (py::ssize_t i = 0; i < arr->shape()[0]; i++){
+        for (py::ssize_t j = 0; j < arr->shape()[1]; j++){
+          aux.clear();
+          for (py::ssize_t k = 0; k < arr->shape()[2]; k++){
+            aux.push_back(*(arr->data(i,j,k)));
+          }
+          v.push_back(aux);
+        }
+        r.push_back(v);
+      }
+      return(r);
+  }
+
+  template <class T>
+  py::array_t<T> vector_1d_to_ndarray(std::vector<T> *arr) {
+    py::ssize_t ndim = 1;
+    std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size()};
+    std::vector<py::ssize_t> strides = {sizeof(T)};
+
+    // return 1-D NumPy array
+    return py::array(py::buffer_info(
+      arr->data(),                          /* data as contiguous array  */
+      sizeof(T),                              /* size of one scalar        */
+      py::format_descriptor<T>::format(),     /* data type                 */
+      ndim,                                   /* number of dimensions      */
+      shape,                                  /* shape of the matrix       */
+      strides                                 /* strides for each axis     */
+    ));
+  }
+
+  template <class T>
   py::array_t<T> vector_2d_to_ndarray(std::vector<std::vector<T>> *arr, int n=0) {
     if (arr->size()==0){
       py::ssize_t ndim = 2;
@@ -374,20 +484,39 @@ namespace sptlz{
   }
 
   template <class T>
-  py::array_t<T> vector_1d_to_ndarray(std::vector<T> *arr) {
-    py::ssize_t ndim = 1;
-    std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size()};
-    std::vector<py::ssize_t> strides = {sizeof(T)};
+  py::array_t<T> vector_3d_to_ndarray(std::vector<std::vector<std::vector<T>>> *arr, int n=0, int m=0) {
+    if (arr->size()==0){
+      py::ssize_t ndim = 3;
+      std::vector<py::ssize_t> shape = {(py::ssize_t) 0, (py::ssize_t) n, (py::ssize_t) m};
+      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<T> arr1d;
 
-    // return 1-D NumPy array
-    return py::array(py::buffer_info(
-      arr->data(),                          /* data as contiguous array  */
-      sizeof(T),                              /* size of one scalar        */
-      py::format_descriptor<T>::format(),     /* data type                 */
-      ndim,                                   /* number of dimensions      */
-      shape,                                  /* shape of the matrix       */
-      strides                                 /* strides for each axis     */
-    ));
+      // return 2-D NumPy array
+      return py::array(py::buffer_info(
+        arr1d.data(),                          /* data as contiguous array  */
+        sizeof(T),                              /* size of one scalar        */
+        py::format_descriptor<T>::format(),     /* data type                 */
+        ndim,                                   /* number of dimensions      */
+        shape,                                  /* shape of the matrix       */
+        strides                                 /* strides for each axis     */
+      ));
+    }else{
+      py::ssize_t ndim = 3;
+      std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size(), (py::ssize_t)arr->at(0).size(), (py::ssize_t)arr->at(0).at(0).size()};
+      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<std::vector<T>> arr2d = as_1d_array(arr);
+      std::vector<T> arr1d = as_1d_array(&arr2d);
+
+      // return 2-D NumPy array
+      return py::array(py::buffer_info(
+        arr1d.data(),                          /* data as contiguous array  */
+        sizeof(T),                              /* size of one scalar        */
+        py::format_descriptor<T>::format(),     /* data type                 */
+        ndim,                                   /* number of dimensions      */
+        shape,                                  /* shape of the matrix       */
+        strides                                 /* strides for each axis     */
+      ));
+    }
   }
 }
 

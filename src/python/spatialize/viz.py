@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import random as rd
 from spatialize import in_notebook, logging
 
@@ -9,37 +10,233 @@ from matplotlib.colors import LinearSegmentedColormap as Colormap
 from spatialize import SpatializeError
 from spatialize.logging import log_message
 
+"""
+Color palettes for data visualization.
+
+Some of the following palettes are derived from:
+- Scientific colour maps: Crameri, F. (2018). Scientific colour maps. Zenodo. https://doi.org/10.5281/zenodo.1243862
+  Source: https://www.fabiocrameri.ch/colourmaps/
+
+- Seaborn palettes: Copyright (c) 2012-2023, Michael Waskom
+  License: BSD-3-Clause
+  Source: https://github.com/mwaskom/seaborn
+"""
+
 PALETTES = {
+    # ALGES palettes
     'alges': ['#070f15', '#0f212d', '#19384d', '#275474', '#326c94', '#4b87af', '#78abce', '#a7c9e1', '#cfe2ef'],
     'alges_muted': ['#142b3b','#1e4058', '#285676', '#326c94', '#5a89a9', '#84a6be', '#c1d2de'],
-    'navia_r': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
     'precision': ['#51648a','#796982','#9d6c79','#c47673','#e98c76','#edb18e','#edd3b3'],
     'precision_dark': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#eb937f','#f2bcaf'],
     'precision_muted': ['#5b6f9a','#867590','#a77c87','#cb8785','#ed9e8c','#f0c0a4','#f2dfc7'],
+    # 'crest' palette from seaborn, reversed
     'crest_r': ['#193458', '#254b7f', '#1c6488','#287a8c', '#40908e', '#59a590', '#7dba91','#a4ceb2'],
-    'batlow': ['#fbcdfa','#fcb3b3','#f2a069','#c09036','#828434','#4c734d','#205f61','#104261','#011a5a'],
+    # Scientific colour maps
+    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
+    'batlow': ['#011a5a', '#104261', '#205f61', '#4c734d', '#828434', '#c09036', '#f2a069', '#fcb3b3', '#fbcdfa'],
+    'batlowK': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
     'glasgow': ['#371437','#4e1921','#6a2810','#74471c','#716328','#697c47','#61917c','#74a8af','#a8bed7','#dcd1e8'],
     'lipari': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#e9a278','#e8c79e','#fef5db'],
-    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
     'nuuk': ['#11598c','#2c6384','#4b7182','#70868c','#939b96','#acad95','#bbb98b','#c7c581','#e1e08c','#fbf7b3'],
     'bamako': ['#073a46','#12433f','#214f33','#385d2c','#547032','#738437','#978e33','#bfa830','#e2c66b','#fee4ab'],
     'tokio': ['#1f1032','#4b1f42','#6a404e','#715651','#746651','#767a54','#7d9857','#8ec26d','#c3e0a7','#eff5db'],
-    'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']}
+    'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']
+    }
+
+def get_available_palettes():
+    """
+    Get a list of all available palette names.
+
+    Returns
+    -------
+    list of str
+        Names of available color palettes
+
+    Examples
+    --------
+    >>> palettes = get_available_palettes()
+    >>> print(palettes)
+    ['alges', 'alges_muted', 'precision', ...]
+    """
+    return list(PALETTES.keys())
+
+def get_palette(name):
+    """
+    Get a color palette by name.
+
+    Parameters
+    ----------
+    name : str
+        Name of the palette. Use get_available_palettes() to see options.
+
+    Returns
+    -------
+    list of str
+        List of hex color codes in the palette
+
+    Raises
+    ------
+    ValueError
+        If palette name is not found
+
+    Examples
+    --------
+    >>> colors = get_palette('alges')
+    >>> print(colors[0])
+    '#070f15'
+
+    >>> # Use palette colors directly
+    >>> colors = get_palette('glasgow')
+    >>> plt.scatter(x, y, c=colors[3])
+    """
+    if name not in PALETTES:
+        available = ', '.join(get_available_palettes())
+        raise ValueError(f"Palette '{name}' not found. Available palettes: {available}")
+    return PALETTES[name]
+
+def get_palette_colormap(name, reverse=False):
+    """
+    Create a matplotlib colormap from a named palette.
+
+    Parameters
+    ----------
+    name : str
+        Name of the palette. Use get_available_palettes() to see options.
+    reverse : bool, optional
+        If True, reverses the color order. Default is False.
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap
+        Matplotlib colormap object ready for use in plotting
+
+    Raises
+    ------
+    ValueError
+        If palette name is not found
+
+    Examples
+    --------
+    >>> cmap = get_palette_colormap('batlow')
+    >>> plt.imshow(data, cmap=cmap)
+
+    >>> # Reverse the colormap
+    >>> cmap_r = get_palette_colormap('navia', reverse=True)
+    >>> plt.contourf(X, Y, Z, cmap=cmap_r)
+
+    >>> # Use in PlotStyle
+    >>> style = PlotStyle(cmap=get_palette_colormap('lipari'))
+    >>> plt.scatter(x, y, c=values, cmap=style.cmap)
+    """
+    colors = get_palette(name)
+    if reverse:
+        colors = colors[::-1]
+    return Colormap.from_list(f'{name}{"_r" if reverse else ""}', colors)
+
+def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color Palettes"):
+    """
+    Display color palettes as horizontal gradient bars for visual comparison.
+
+    Parameters
+    ----------
+    names : list of str, optional
+        Specific palette names to display. If None, shows all available palettes.
+    figsize : tuple, optional
+        Figure size as (width, height) in inches. If None, auto-calculated based
+        on the number of palettes (width=8, height=0.4*n_palettes).
+    n_colors : int, optional
+        Number of color samples to display for each palette gradient. Default is 256.
+    title : str, optional
+        Title for the figure. Default is "Available Color Palettes".
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure object containing the palette visualizations
+
+    Examples
+    --------
+    >>> # Show all palettes
+    >>> show_palettes()
+
+    >>> # Show specific palettes
+    >>> show_palettes(names=['alges', 'precision', 'navia'])
+
+    >>> # Customize figure size
+    >>> show_palettes(figsize=(10, 8))
+
+    >>> # Show palettes without title
+    >>> show_palettes(title=None)
+    """
+    # Determine which palettes to show
+    if names is None:
+        names = get_available_palettes()
+    else:
+        # Validate provided names
+        invalid = [n for n in names if n not in PALETTES]
+        if invalid:
+            raise ValueError(f"Invalid palette names: {invalid}. Use get_available_palettes() to see options.")
+
+    n_palettes = len(names)
+
+    # Auto-calculate figure size if not provided
+    if figsize is None:
+        figsize = (8, 0.4 * n_palettes + 0.5)
+
+    # Create figure and axes
+    fig, axes = plt.subplots(n_palettes, 1, figsize=figsize)
+
+    # Handle single palette case (axes won't be an array)
+    if n_palettes == 1:
+        axes = [axes]
+
+    # Create gradient array for displaying colors
+    gradient = np.linspace(0, 1, n_colors).reshape(1, -1)
+
+    # Plot each palette
+    for ax, name in zip(axes, names):
+        # Get colormap and display as gradient
+        cmap = get_palette_colormap(name)
+        ax.imshow(gradient, aspect='auto', cmap=cmap)
+
+        # Remove ticks and spines
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Add palette name as y-label
+        ax.set_ylabel(name, rotation=0, ha='right', va='center', fontsize=10)
+
+    # Add title if provided
+    if title:
+        fig.suptitle(title, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+
+    if not in_notebook():
+        return fig
+
 
 class PlotStyle:
     """
     Manage matplotlib plot styles with predefined themes.
-    
+
     Parameters
     ----------
     theme : str, optional
-        Theme name. Available: 'darkgrid', 'whitegrid', 'dark', 'white', 
+        Theme name. Available: 'darkgrid', 'whitegrid', 'dark', 'white',
         'alges', 'minimal', 'publication'
     color : str, optional
         Primary color for plots
-    cmap : str or colormap, optional
-        Colormap for plots
-        
+    cmap : str, list, or colormap, optional
+        Colormap for plots. Can be:
+        - str: Name from PALETTES (e.g., 'alges', 'batlow') or matplotlib colormap (e.g., 'viridis')
+        - list: List of hex colors to create a custom colormap
+        - Colormap object: Matplotlib colormap instance
+    precision_cmap : str, list, or colormap, optional
+        Colormap for precision/uncertainty plots. Same format as cmap.
+
     Attributes
     ----------
     theme : str
@@ -48,7 +245,9 @@ class PlotStyle:
         Primary plot color
     cmap : str or colormap
         Plot colormap
-        
+    precision_cmap : str or colormap
+        Precision/uncertainty colormap
+
     Examples
     --------
     Basic usage with context manager::
@@ -56,6 +255,22 @@ class PlotStyle:
         with PlotStyle(theme='dark', color='#ff6b6b') as style:
             plt.plot(x, y, color=style.color)
             plt.imshow(data, cmap=style.cmap)
+
+    Using custom palettes from PALETTES::
+
+        style = PlotStyle(cmap='batlow')  # Uses palette from PALETTES
+        plt.imshow(data, cmap=style.cmap)
+
+    Using custom color list::
+
+        custom_colors = ['#ff0000', '#00ff00', '#0000ff']
+        style = PlotStyle(cmap=custom_colors)
+        plt.scatter(x, y, c=values, cmap=style.cmap)
+
+    Using matplotlib colormaps::
+
+        style = PlotStyle(cmap='viridis')  # Standard matplotlib colormap
+        plt.contourf(X, Y, Z, cmap=style.cmap)
 
     Simple usage without context manager::
 
@@ -80,8 +295,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small'
             },
             'color': '#59a590',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'whitegrid': {
             'rcparams': {
@@ -99,8 +314,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small'
             },
             'color': '#7dba91',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'dark': {
             'rcparams': {
@@ -120,8 +335,8 @@ class PlotStyle:
                 'ytick.labelsize': 'small', 
             },
             'color': '#41bbc0',
-            'cmap':  Colormap.from_list('custom_precision', PALETTES['navia_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision_dark'])
+            'cmap': get_palette_colormap('batlowK'),
+            'precision_cmap': get_palette_colormap('precision_dark')
         },
         'white': {
             'rcparams': {
@@ -138,8 +353,8 @@ class PlotStyle:
                 'ytick.left': True,
             },
             'color': '#7dba91',
-            'cmap': Colormap.from_list('crest', PALETTES['crest_r']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('crest_r'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'alges': {
             'rcparams': {
@@ -161,8 +376,8 @@ class PlotStyle:
                 'ytick.left': True
             },
             'color': "#8fb4cd",
-            'cmap': Colormap.from_list('alges_cmap', PALETTES['alges']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision'])
+            'cmap': get_palette_colormap('alges'),
+            'precision_cmap': get_palette_colormap('precision')
         },
         'alges_muted': {
             'rcparams': {
@@ -184,8 +399,8 @@ class PlotStyle:
                 'ytick.left': True
             },
             'color': "#84a6be",
-            'cmap': Colormap.from_list('alges_muted', PALETTES['alges_muted']),
-            'precision_cmap': Colormap.from_list('custom_precision', PALETTES['precision_muted'])
+            'cmap': get_palette_colormap('alges_muted'),
+            'precision_cmap': get_palette_colormap('precision_muted')
         },
         'minimal': {
             'rcparams': {
@@ -222,7 +437,7 @@ class PlotStyle:
                  theme = None,
                  color = None,
                  cmap = None,
-                 precision_cmap = None,):
+                 precision_cmap = None):
         
         if theme and theme not in self.THEMES:
             raise ValueError(f"Theme '{theme}' not found. Available: {list(self.THEMES.keys())}")
@@ -247,15 +462,39 @@ class PlotStyle:
     
     def _set_cmap(self, cmap):
         if cmap:
-            return cmap
+            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            if isinstance(cmap, str):
+                if cmap in PALETTES:
+                    return get_palette_colormap(cmap)
+                else:
+                    # Return as-is, assuming it's a matplotlib colormap name
+                    return cmap
+            # Handle list input - create colormap from color list
+            elif isinstance(cmap, list):
+                return Colormap.from_list('custom_cmap', cmap)
+            # Otherwise return as-is (already a colormap object)
+            else:
+                return cmap
         elif self.theme:
             return self.THEMES[self.theme]['cmap']
         else:
             return self.DEFAULT_CMAP
-        
+
     def _set_precision_cmap(self, cmap):
         if cmap:
-            return cmap
+            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            if isinstance(cmap, str):
+                if cmap in PALETTES:
+                    return get_palette_colormap(cmap)
+                else:
+                    # Return as-is, assuming it's a matplotlib colormap name
+                    return cmap
+            # Handle list input - create colormap from color list
+            elif isinstance(cmap, list):
+                return Colormap.from_list('custom_precision_cmap', cmap)
+            # Otherwise return as-is (already a colormap object)
+            else:
+                return cmap
         elif self.theme:
             return self.THEMES[self.theme]['precision_cmap']
         else:
@@ -446,3 +685,115 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
         return seed
 
     return fig, seed
+
+
+def plot_nongriddata(data, xi_locations, ax=None, title="",
+                       figsize=None, dpi=120, origin='lower', **imshow_args):
+    """
+    Plots a colormap visualization for non-rectangular/irregular spatial data.
+
+    This function handles spatial data that doesn't form a complete rectangular grid,
+    such as irregularly shaped study areas (e.g., lakes, watersheds). It uses xarray
+    to organize scattered points into a plottable format, automatically handling gaps
+    in the spatial domain.
+
+    Parameters
+    ----------
+    data : array-like, shape (n_points,)
+        1D array of values to visualize at each spatial location.
+    xi_locations : array-like, shape (n_points, 2)
+        2D array of spatial coordinates (X, Y) for each data point.
+    ax : matplotlib.axes.Axes, optional
+        Axes object to plot into. If None, creates a new figure and axes.
+    title : str, optional
+        Title to display on the plot (only used when ax is None). Default is "".
+    figsize : tuple, optional
+        Width, height of the figure in inches (only used when ax is None).
+    dpi : int, optional
+        Resolution of the figure in dots-per-inch (only used when ax is None).
+        Default is 120.
+    origin : {'lower', 'upper'}, optional
+        Controls the orientation of the Y-axis:
+        - 'lower': Y increases upward (standard Cartesian, default)
+        - 'upper': Y increases downward (image/raster convention)
+    **imshow_args : dict
+        Additional keyword arguments passed to imshow(), such as 'cmap', 'vmin', 'vmax'.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        Returns the figure object if ax is None and not in notebook mode,
+        otherwise returns None.
+
+    Raises
+    ------
+    SpatializeError
+        If xi_locations is not 2-dimensional or doesn't have exactly 2 columns.
+    SpatializeError
+        If data and xi_locations have incompatible shapes.
+
+    Examples
+    --------
+    >>> # Plot irregular spatial data (standard Cartesian orientation)
+    >>> xi_locations = np.array([[0, 0], [1, 0], [0, 1], [2, 1]])  # Irregular points
+    >>> data = np.array([1.0, 2.0, 1.5, 3.0])
+    >>> plot_nongriddata(data, xi_locations, title="Lake Temperature")
+
+    >>> # Use image/raster convention (Y increases downward)
+    >>> plot_nongriddata(data, xi_locations, origin='upper', title="Raster Data")
+
+    >>> # Use custom colormap and value range
+    >>> fig, ax = plt.subplots()
+    >>> plot_nongriddata(data, xi_locations, ax=ax, cmap='viridis', vmin=0, vmax=5)
+    """
+    # Validate xi_locations dimensions
+    if xi_locations.ndim != 2:
+        raise SpatializeError(
+            f"xi_locations must be a 2D array, got {xi_locations.ndim}D array"
+        )
+
+    if xi_locations.shape[1] != 2:
+        raise SpatializeError(
+            f"xi_locations must have exactly 2 columns (X, Y), got {xi_locations.shape[1]}"
+        )
+
+    # Validate data compatibility
+    data = np.asarray(data).flatten()
+    if len(data) != len(xi_locations):
+        raise SpatializeError(
+            f"data length ({len(data)}) must match xi_locations length ({len(xi_locations)})"
+        )
+
+    # Create DataFrame with spatial coordinates and values
+    results = pd.DataFrame(xi_locations, columns=['X', 'Y'])
+    results['est'] = data
+
+    # Convert to xarray using X, Y as index dimensions
+    # This automatically handles irregular/sparse grids
+    results_array = results.set_index(['X', 'Y']).to_xarray()
+
+    # Create or use provided axes
+    fig_created = False
+    if ax is not None:
+        plotter = ax
+    else:
+        fig = plt.figure(figsize=figsize, dpi=dpi)
+        gs = fig.add_gridspec(1, 1)
+        plotter = gs.subplots()
+        plotter.set_title(title)
+        fig_created = True
+
+    # Plot the data
+    # xarray creates array with dimensions (X, Y), but imshow expects (Y, X)
+    # Transpose to swap dimensions; origin parameter controls Y-axis direction
+    img = plotter.imshow(results_array.est.T, origin=origin, **imshow_args)
+
+    # Add colorbar
+    divider = make_axes_locatable(plotter)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    cax.grid(False)
+    plt.colorbar(img, orientation='vertical', cax=cax)
+
+    # Return figure if we created it and not in notebook
+    if fig_created and not in_notebook():
+        return fig

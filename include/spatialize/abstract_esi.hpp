@@ -31,6 +31,43 @@ namespace sptlz{
 		return(s.str());
 	}
 
+	std::vector<std::vector<float>> samples_coords_bbox(std::vector<std::vector<std::vector<float>>> *coords, std::vector<std::vector<float>> *queries=NULL){
+		std::vector<std::vector<float>> bbox;
+
+		for(size_t i=0; i<coords->at(0).at(0).size(); i++){
+			bbox.push_back({coords->at(0).at(0).at(i), coords->at(0).at(0).at(i)});
+		}
+
+		for(size_t i=0; i<coords->size(); i++){
+			for(size_t j=0; j<coords->at(i).size(); j++){
+				for(size_t k=0; k<coords->at(i).at(j).size(); k++){
+
+					if(coords->at(i).at(j).at(k) < bbox.at(k).at(0)){
+						bbox.at(k).at(0) = coords->at(i).at(j).at(k);
+					}
+					if(bbox.at(k).at(1) < coords->at(i).at(j).at(k)){
+						bbox.at(k).at(1) = coords->at(i).at(j).at(k);
+					}
+				}
+			}
+		}
+
+		if(queries != NULL){
+			for(size_t i=0; i<queries->size(); i++){
+				for(size_t j=0; j<queries->at(i).size(); j++){
+					if(queries->at(i).at(j) < bbox.at(j).at(0)){
+						bbox.at(j).at(0) = queries->at(i).at(j);
+					}
+					if(bbox.at(j).at(1) < queries->at(i).at(j)){
+						bbox.at(j).at(1) = queries->at(i).at(j);
+					}
+				}
+			}
+		}
+
+		return(bbox);
+	}
+
 	std::vector<std::vector<float>> samples_coords_bbox(std::vector<std::vector<float>> *coords, std::vector<std::vector<float>> *queries=NULL){
 		std::vector<std::vector<float>> bbox;
 
@@ -64,6 +101,7 @@ namespace sptlz{
 
 		return(bbox);
 	}
+
 	float bbox_sum_interval(std::vector<std::vector<float>> bbox){
 		float c = 0.0;
 		for(std::vector<float> axis : bbox){
@@ -272,16 +310,15 @@ namespace sptlz{
   			return(root->search_leaf(point));
   		}
 
-  		std::string to_json(){
+  		std::string to_json(){ 
   			return(root->to_json(""));
   		}
 	};
 
 	class ESI {
 		protected:
-		    std::string class_name;
-		    std::function<int(std::string)> callback_visitor;
-
+			std::string class_name;
+			std::function<int(std::string)> callback_visitor;
 			std::vector<sptlz::MondrianTree*> mondrian_forest;
 			std::vector<std::vector<float>> coords;
 			std::vector<float> values;
@@ -363,7 +400,31 @@ namespace sptlz{
 				return(&(this->values));
 			}
 
-			std::vector<std::vector<int>> get_partitions(){
+			std::vector<std::vector<std::vector<float>>> get_partitions(){
+				std::vector<std::vector<std::vector<float>>> partitions;
+				int n = mondrian_forest.size();
+
+				long count = 0;
+				for(int i=0; i<n; i++){
+
+					std::vector<std::vector<float>> this_partition;
+					// get leaves for i-th tree
+					for(auto leaf: mondrian_forest.at(i)->leaves){
+						std::vector<float> this_leaf;
+						this_leaf.push_back(leaf->leaf_id);
+						for(auto ax_lims: leaf->bbox){
+							this_leaf.push_back(ax_lims[0]);
+							this_leaf.push_back(ax_lims[1]);
+						}
+						count += this_leaf.size();
+						this_partition.push_back(this_leaf);
+					}
+					partitions.push_back(this_partition);
+				}
+				return(partitions);
+			}
+
+			std::vector<std::vector<int>> get_leaf_for_samples(){
 				int n = mondrian_forest.size();
 				std::vector<std::vector<int>> results(this->coords.size());
 

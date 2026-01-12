@@ -9,6 +9,7 @@ from sklearn.model_selection import ParameterGrid
 from spatialize import SpatializeError, logging, GridSearchResult, EstimationResult
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
+import spatialize.gs.esi.scorefunction as sf
 from spatialize._util import signature_overload, in_notebook
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
@@ -24,9 +25,8 @@ class ESIGridSearchResult(GridSearchResult):
     :param agg_function_map: The aggregation function map.
     :param p_process: The partitioning process.
     """
-    def __init__(self, search_result_data, agg_function_map, p_process):
+    def __init__(self, search_result_data, p_process):
         super().__init__(search_result_data)
-        self.agg_func_map = agg_function_map
         self.p_process = p_process
 
     def best_result(self, **kwargs):
@@ -41,8 +41,9 @@ class ESIGridSearchResult(GridSearchResult):
         index = list(row.keys())[0]
         result = row[index]
         result.update({"result_data_index": index,
-                       "agg_function": self.agg_func_map[result["agg_func_name"]],
+                       "agg_function": af.mean,
                        "p_process": self.p_process})
+        
         return result
 
 
@@ -176,8 +177,16 @@ class ESIResult(EstimationResult):
         :param fig_args: Additional figure arguments.
         :return: The figure.
         """
-        if self._xi.shape[1] > 2:
-            raise SpatializeError("quick_plot() for 3D data is not supported")
+        if self.griddata:
+            if self._xi.shape[0] > 2:
+                raise SpatializeError("quick_plot() for 3D data is not supported")
+            x_min, x_max = self._xi[0].min(), self._xi[0].max()
+            y_min, y_max = self._xi[1].min(), self._xi[1].max()
+        else:
+            if self._xi.shape[-1] > 2:
+                raise SpatializeError("quick_plot() for 3D data is not supported")
+            x_min, x_max = self._xi[:,0].min(), self._xi[:,0].max()
+            y_min, y_max = self._xi[:,1].min(), self._xi[:,1].max()
         
         plot_fig_args = fig_args.copy()
         plot_fig_args.setdefault('figsize', (10,8))
@@ -189,11 +198,11 @@ class ESIResult(EstimationResult):
             ax1, ax2 = gs.subplots()
 
             ax1.set_title('Estimation')
-            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap)
+            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap, extent=[x_min, x_max, y_min, y_max])
             ax1.set_aspect('equal')
 
             ax2.set_title('Precision')
-            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
+            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap, extent=[x_min, x_max, y_min, y_max])
             ax2.set_aspect('equal')
 
             if not in_notebook():
@@ -245,10 +254,10 @@ class ESIResult(EstimationResult):
                                  "griddata": False,
                                  "p_process": partitioning_process.MONDRIAN,  # partitioning process
                                  "data_cond": [True, False],  # whether to condition the partitioning process on samples
-                                 # -- valid only when ‘p_process’ is ‘voronoi’.
+                                 # -- valid only when 'p_process' is 'voronoi'.
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
-                                 "agg_function": {"mean": af.mean, "median": af.median},
+                                 "score": sf.neg_log_likelihood,
                                  "seed": np.random.randint(1000, 10000),
                                  "folding_seed": np.random.randint(1000, 10000),
                                  "callback": default_singleton_callback,
@@ -259,7 +268,7 @@ class ESIResult(EstimationResult):
                                      "nugget": [0.0, 0.5, 1.0],
                                      "range": [10.0, 50.0, 100.0, 200.0],
                                      "sill": [0.9, 1.0, 1.1]},
-                        li.ADAPTIVE_IDW: {}
+                        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False}
                     })
 def esi_hparams_search(points, values, xi, **kwargs):
     """
@@ -296,6 +305,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
         grid["range"] = kwargs["range"]
         grid["sill"] = kwargs["sill"]
 
+    if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
+        grid["metric"] = kwargs["metric"]
+
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
 
@@ -311,7 +323,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
     results = {}
 
     def run_scenario(i):
-        param_set = param_grid[i].copy()
+        param_set = param_grid[i].copy()        # dictionary with set 'i' of parameters to evaluate
         param_set["local_interpolator"] = kwargs["local_interpolator"]
         param_set["seed"] = kwargs["seed"]
         param_set["callback"] = singleton_null_callback
@@ -320,15 +332,18 @@ def esi_hparams_search(points, values, xi, **kwargs):
         if kwargs["p_process"] == partitioning_process.MONDRIAN:
             param_set["data_cond"] = True
 
+        if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
+            param_set["parallelize"] = kwargs["parallelize"]
+
         l_args = build_arg_list(points, values, p_xi, param_set)
         if method == "kfold":
             l_args.insert(-2, k)
             l_args.insert(-2, kwargs["folding_seed"])
 
-        model, cv = cross_validate(*l_args)
-
-        for agg_func_name, agg_func in kwargs["agg_function"].items():
-            results[(agg_func_name, i)] = np.nanmean(np.abs(values - agg_func(cv)))
+        _, cv = cross_validate(*l_args)     # returns esi samples for the input data
+        
+        # calculate score:
+        results[i] = kwargs["score"](cv)
 
         kwargs["callback"](logging.progress.inform())
 
@@ -342,17 +357,16 @@ def esi_hparams_search(points, values, xi, **kwargs):
     result_data = pd.DataFrame(columns=list(grid.keys()) + ["cv_error"])
     c = 0
     for k, v in results.items():
-        d = {"agg_func_name": k[0],
-             "cv_error": v,
+        d = {"cv_error": v,
              "local_interpolator": kwargs["local_interpolator"],
              }
-        d.update(param_grid[k[1]])
+        d.update(param_grid[k])
         if not result_data.empty:
             result_data = pd.concat([result_data, pd.DataFrame(d, index=[c])])
         else:
             result_data = pd.DataFrame(d, index=[c])
         c += 1
-    return ESIGridSearchResult(result_data, kwargs["agg_function"], kwargs["p_process"])
+    return ESIGridSearchResult(result_data, kwargs["p_process"])
 
 
 def esi_griddata(points, values, xi, **kwargs):
@@ -405,7 +419,7 @@ def esi_griddata(points, values, xi, **kwargs):
     """
     ng_xi, original_shape = flatten_grid_data(xi)
     estimation, esi_samples = _call_libspatialize(points, values, ng_xi, **kwargs)
-    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape)
+    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape, xi=xi)
 
 
 def esi_nongriddata(points, values, xi, **kwargs):
@@ -462,8 +476,8 @@ def esi_nongriddata(points, values, xi, **kwargs):
                                  },
                     specific_args={
                         li.IDW: {"exponent": 2.0},
-                        li.KRIGING: {"model": 1, "nugget": 0.1, "range": 5000.0, "sill": 1.0},
-                        li.ADAPTIVE_IDW: {}
+                        li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
+                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
                     })
 def _call_libspatialize(points, values, xi, **kwargs):
     """
@@ -542,5 +556,7 @@ def build_arg_list(points, values, xi, nonpos_args):
 
     if nonpos_args["local_interpolator"] == li.ADAPTIVE_IDW:
         l_args.insert(-2, nonpos_args["seed"])
+        l_args.insert(-2, nonpos_args.get("metric", "mae"))
+        l_args.insert(-2, nonpos_args.get("parallelize", False))
 
     return l_args

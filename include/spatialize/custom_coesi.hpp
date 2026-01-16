@@ -20,7 +20,7 @@ namespace sptlz{
 			std::vector<std::vector<float>> coords;
 			std::vector<std::vector<float>> values;
 			std::vector<std::vector<float>> bbox;
-			std::vector<sptlz::MondrianTree*> mondrian_forest; 
+			std::vector<sptlz::MondrianTree*> mondrian_forest;
 			std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<std::vector<float>>*)> post_creation;
 			std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<std::vector<float>>*, std::vector<std::vector<float>>*, std::vector<float> *)> estimation_by_leaf;
 			std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<std::vector<float>>*, std::vector<float> *)> loo_by_leaf;
@@ -111,7 +111,7 @@ namespace sptlz{
 			}
 
 			int forest_size(){
-				return(this->mondrian_forest.size());
+				return(static_cast<int>(this->mondrian_forest.size()));
 			}
 
 			MondrianTree *get_tree(int i){
@@ -127,7 +127,7 @@ namespace sptlz{
 			}
 
 			std::vector<std::vector<int>> get_partitions(){
-				int n = mondrian_forest.size();
+				int n = static_cast<int>(mondrian_forest.size());
 				std::vector<std::vector<int>> results(this->coords.size());
 
 				for(int i=0; i<n; i++){
@@ -145,7 +145,7 @@ namespace sptlz{
 				std::stringstream json;
 				std::vector<std::vector<float>> results(locations->size());
 				std::vector<std::vector<int>> locations_by_leaf;
-				int aux, n = mondrian_forest.size();
+				int aux, n = static_cast<int>(mondrian_forest.size());
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
 				sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 
@@ -166,7 +166,7 @@ namespace sptlz{
 					locations_by_leaf = std::vector<std::vector<int>>(mt->leaves.size());
 
 					// join all locations for same leaf
-					for(j=0; j<locations->size(); j++){
+					for(int j=0; j<locations->size(); j++){
 						aux = mt->search_leaf(locations->at(j));
 						locations_by_leaf.at(aux).push_back(j);
 					}
@@ -187,7 +187,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();
@@ -200,7 +200,7 @@ namespace sptlz{
 			std::vector<std::vector<std::vector<float>>> marginal_leave_one_out(){
 				std::vector<std::vector<std::vector<float>>> results;
 				int i;
-				
+
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 
@@ -219,7 +219,7 @@ namespace sptlz{
 				auto rand = std::mt19937(seed);
 				std::uniform_int_distribution<int> uni_int;
 				int i;
-				
+
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 

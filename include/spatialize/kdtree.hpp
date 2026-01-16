@@ -196,8 +196,8 @@ namespace sptlz{
 			}
 
 			KDTree(std::vector<std::vector<T>> *_coords){
-				this->n_coords = _coords->size();
-				this->n_dims = _coords->at(0).size();
+				this->n_coords = static_cast<int>(_coords->size());
+				this->n_dims = static_cast<int>(_coords->at(0).size());
 				this->coords = (T *)malloc(this->n_coords*this->n_dims*sizeof(T));
 				int *idxs = (int *)malloc(this->n_coords*sizeof(int));
 

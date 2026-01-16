@@ -24,7 +24,7 @@ namespace sptlz{
 
 			VoronoiNode(std::vector<std::vector<float>> _nuclei_coords, std::vector<std::vector<float>> *_coords){
 				this->nuclei_coords = _nuclei_coords;
-				this->n_dims = _coords->at(0).size();
+				this->n_dims = static_cast<int>(_coords->at(0).size());
 			}
 
 			~VoronoiNode(){
@@ -74,7 +74,7 @@ namespace sptlz{
 				this->kdt = new sptlz::KDTree<float>(&(this->nuclei_coords));
 
 				int aux;
-				for(size_t i=0; i< coords->size(); i++){
+				for(int i=0; i< static_cast<int>(coords->size()); i++){
 					aux = search_leaf(coords->at(i)); // we search one nearest nuclei
 					// assign samples to leafs and inverse too
 					this->samples_by_leaf.at(aux).push_back(i);
@@ -180,7 +180,7 @@ namespace sptlz{
 		    }
 
 			int forest_size(){
-				return(this->voronoi_forest.size());
+				return(static_cast<int>(this->voronoi_forest.size()));
 			}
 
 			VoronoiTree *get_tree(int i){
@@ -199,7 +199,7 @@ namespace sptlz{
 				std::stringstream json;
 				std::vector<std::vector<float>> results(locations->size());
 				std::vector<std::vector<int>> locations_by_leaf;
-				int aux, n = voronoi_forest.size();
+				int aux, n = static_cast<int>(voronoi_forest.size());
 
                 sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -214,7 +214,7 @@ namespace sptlz{
 					locations_by_leaf = std::vector<std::vector<int>>(vt->leaves.size());
 
 					// join all locations for same leaf
-					for(size_t j=0; j<locations->size(); j++){
+					for(int j=0; j<static_cast<int>(locations->size()); j++){
 						aux = vt->search_leaf(locations->at(j));
 						locations_by_leaf.at(aux).push_back(j);
 					}
@@ -235,7 +235,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();
@@ -248,7 +248,7 @@ namespace sptlz{
 			std::vector<std::vector<float>> leave_one_out(){
 				std::stringstream json;
 				std::vector<std::vector<float>> results(coords.size());
-				int n = voronoi_forest.size();
+				int n = static_cast<int>(voronoi_forest.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -273,7 +273,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();
@@ -287,9 +287,9 @@ namespace sptlz{
 				std::stringstream json;
 				auto fold_rand = std::mt19937(seed);
 				std::uniform_real_distribution<float> uni_float;
-				auto folds = get_folds(values.size(), k, uni_float(fold_rand));
+				auto folds = get_folds(static_cast<int>(values.size()), k, uni_float(fold_rand));
 				std::vector<std::vector<float>> results(coords.size());
-				int n = voronoi_forest.size();
+				int n = static_cast<int>(voronoi_forest.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -310,7 +310,7 @@ namespace sptlz{
 					}
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();

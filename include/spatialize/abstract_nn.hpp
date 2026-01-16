@@ -40,8 +40,8 @@ namespace sptlz{
 			               std::function<int(std::string)> visitor){
 			    this->class_name = __func__;
 			    this->callback_visitor = visitor;
-				this->n_samples = _coords.size();
-				this->n_dims = _coords.at(0).size();
+				this->n_samples = static_cast<int>(_coords.size());
+				this->n_dims = static_cast<int>(_coords.at(0).size());
 				this->coords = _coords;
 				this->values = _values;
 
@@ -62,7 +62,7 @@ namespace sptlz{
 				std::stringstream json;
 				std::vector<float> result;
 				float value;
-				int n = locations->size();
+				int n = static_cast<int>(locations->size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -74,7 +74,7 @@ namespace sptlz{
                 for(int i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-                  progress->inform(100.0*(i+1.0)/n);
+                  progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(locations->at(i)), radius, 2.0);
                   value = this->estimate_point(&nbs, &(locations->at(i)));
@@ -92,7 +92,7 @@ namespace sptlz{
 				std::stringstream json;
 				std::vector<float> result;
 				float value;
-				int n = coords.size();
+				int n = static_cast<int>(coords.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -101,10 +101,10 @@ namespace sptlz{
 
 				progress->init(n, 1);
 
-                for(int i=0; i<n; i++){
+                for(size_t i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-                  progress->inform(100.0*(i+1.0)/n);
+                  progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(coords.at(i)), radius, 2.0);
                   value = this->estimate_loo(&nbs, i);
@@ -123,9 +123,9 @@ namespace sptlz{
 				std::uniform_real_distribution<float> uni_float;
 				std::mt19937 my_rand(seed);
 				std::vector<float> result;
-				auto folds = get_folds(values.size(), k, uni_float(my_rand));
+				auto folds = get_folds(static_cast<int>(values.size()), k, uni_float(my_rand));
 				float value;
-				int n = coords.size();
+				int n = static_cast<int>(coords.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -137,7 +137,7 @@ namespace sptlz{
                 for(int i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       exit(0);
-                  progress->inform(100.0*(i+1.0)/n);
+                  progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(coords.at(i)), radius, 2.0);
                   value = this->estimate_kfold(&nbs, i, &folds);

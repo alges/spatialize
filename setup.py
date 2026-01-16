@@ -38,7 +38,7 @@ elif sys.platform == 'linux':
     extra_link_args += ['-fopenmp']
 elif sys.platform == 'win32':
     # Windows with MSVC
-    extra_compile_args = ['/std:c++17', '/EHsc','/fsanitize=address', '/Ox']
+    extra_compile_args = ['/std:c++17', '/Ox']
     extra_compile_args += ['/openmp']
 
 libspatialize_extensions = [

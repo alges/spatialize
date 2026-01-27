@@ -341,9 +341,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
             l_args.insert(-2, kwargs["folding_seed"])
 
         _, cv = cross_validate(*l_args)     # returns esi samples for the input data
-        
-        # calculate score:
-        results[i] = kwargs["score"](cv)
+
+        # calculate score - pass true values for MLE-based scoring
+        results[i] = kwargs["score"](cv, true_values=values)
 
         kwargs["callback"](logging.progress.inform())
 

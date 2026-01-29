@@ -6,7 +6,7 @@ from spatialize import in_notebook, logging
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.colors import LinearSegmentedColormap as Colormap
-
+from spatialize.resources import ScientificColourMaps as SCM
 from spatialize import SpatializeError
 from spatialize.logging import log_message
 
@@ -31,21 +31,28 @@ PALETTES = {
     'precision_muted': ['#5b6f9a','#867590','#a77c87','#cb8785','#ed9e8c','#f0c0a4','#f2dfc7'],
     # 'crest' palette from seaborn, reversed
     'crest_r': ['#193458', '#254b7f', '#1c6488','#287a8c', '#40908e', '#59a590', '#7dba91','#a4ceb2'],
-    # Scientific colour maps
-    'navia': ['#0b1627','#16345c','#19598c','#29738e','#398285','#4b9379','#66aa6a','#98ca6e','#d9e5a6','#fcf5d9'],
-    'batlow': ['#011a5a', '#104261', '#205f61', '#4c734d', '#828434', '#c09036', '#f2a069', '#fcb3b3', '#fbcdfa'],
-    'batlowK': ['#011a5a','#104261','#205f61','#4c734d','#828434','#c09036','#f2a069','#fcb3b3','#fee5e5'],
-    'glasgow': ['#371437','#4e1921','#6a2810','#74471c','#716328','#697c47','#61917c','#74a8af','#a8bed7','#dcd1e8'],
-    'lipari': ['#0b1425','#133859','#48587a','#6c5e74','#90606c','#bc6461','#e67960','#e9a278','#e8c79e','#fef5db'],
-    'nuuk': ['#11598c','#2c6384','#4b7182','#70868c','#939b96','#acad95','#bbb98b','#c7c581','#e1e08c','#fbf7b3'],
-    'bamako': ['#073a46','#12433f','#214f33','#385d2c','#547032','#738437','#978e33','#bfa830','#e2c66b','#fee4ab'],
-    'tokio': ['#1f1032','#4b1f42','#6a404e','#715651','#746651','#767a54','#7d9857','#8ec26d','#c3e0a7','#eff5db'],
-    'bilbao': ['#471010' ,'#752329', '#94454b', '#a16157', '#a6775a', '#ac8c5f', '#b6a672', '#c2bca1', '#d4d1cd', '#ffffff']
     }
+
+def _get_scm_colormap(name):
+    """
+    Get a colormap from the Scientific Colour Maps (SCM) package by name.
+
+    Parameters
+    ----------
+    name : str
+        Name of the SCM palette (e.g., 'batlow', 'navia', 'lipari').
+        Append '_r' to get the reversed version.
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap or None
+        The SCM colormap if found, None otherwise.
+    """
+    return getattr(SCM, name, None)
 
 def get_available_palettes():
     """
-    Get a list of all available palette names.
+    Get a list of all available palette names, including Scientific Colour Maps.
 
     Returns
     -------
@@ -56,9 +63,10 @@ def get_available_palettes():
     --------
     >>> palettes = get_available_palettes()
     >>> print(palettes)
-    ['alges', 'alges_muted', 'precision', ...]
+    ['alges', 'alges_muted', 'precision', ..., 'batlow', 'navia', ...]
     """
-    return list(PALETTES.keys())
+    scm_names = sorted(SCM.__all__) if hasattr(SCM, '__all__') else []
+    return list(PALETTES.keys()) + scm_names
 
 def get_palette(name):
     """
@@ -86,7 +94,7 @@ def get_palette(name):
     '#070f15'
 
     >>> # Use palette colors directly
-    >>> colors = get_palette('glasgow')
+    >>> colors = get_palette('alges_muted')
     >>> plt.scatter(x, y, c=colors[3])
     """
     if name not in PALETTES:
@@ -128,10 +136,20 @@ def get_palette_colormap(name, reverse=False):
     >>> style = PlotStyle(cmap=get_palette_colormap('lipari'))
     >>> plt.scatter(x, y, c=values, cmap=style.cmap)
     """
-    colors = get_palette(name)
-    if reverse:
-        colors = colors[::-1]
-    return Colormap.from_list(f'{name}{"_r" if reverse else ""}', colors)
+    if name in PALETTES:
+        colors = get_palette(name)
+        if reverse:
+            colors = colors[::-1]
+        return Colormap.from_list(f'{name}{"_r" if reverse else ""}', colors)
+
+    # Try Scientific Colour Maps
+    scm_name = f'{name}_r' if reverse else name
+    scm_cmap = _get_scm_colormap(scm_name)
+    if scm_cmap is not None:
+        return scm_cmap
+
+    available = ', '.join(get_available_palettes())
+    raise ValueError(f"Palette '{name}' not found. Available palettes: {available}")
 
 def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color Palettes"):
     """
@@ -173,7 +191,8 @@ def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color
         names = get_available_palettes()
     else:
         # Validate provided names
-        invalid = [n for n in names if n not in PALETTES]
+        all_available = set(get_available_palettes())
+        invalid = [n for n in names if n not in all_available]
         if invalid:
             raise ValueError(f"Invalid palette names: {invalid}. Use get_available_palettes() to see options.")
 
@@ -231,7 +250,7 @@ class PlotStyle:
         Primary color for plots
     cmap : str, list, or colormap, optional
         Colormap for plots. Can be:
-        - str: Name from PALETTES (e.g., 'alges', 'batlow') or matplotlib colormap (e.g., 'viridis')
+        - str: Name from PALETTES (e.g., 'alges'), SCM (e.g., 'batlow'), or matplotlib colormap (e.g., 'viridis')
         - list: List of hex colors to create a custom colormap
         - Colormap object: Matplotlib colormap instance
     precision_cmap : str, list, or colormap, optional
@@ -258,7 +277,7 @@ class PlotStyle:
 
     Using custom palettes from PALETTES::
 
-        style = PlotStyle(cmap='batlow')  # Uses palette from PALETTES
+        style = PlotStyle(cmap='batlow')  # Uses SCM palette
         plt.imshow(data, cmap=style.cmap)
 
     Using custom color list::
@@ -335,7 +354,7 @@ class PlotStyle:
                 'ytick.labelsize': 'small', 
             },
             'color': '#41bbc0',
-            'cmap': get_palette_colormap('batlowK'),
+            'cmap': SCM.batlowK,
             'precision_cmap': get_palette_colormap('precision_dark')
         },
         'white': {
@@ -462,13 +481,15 @@ class PlotStyle:
     
     def _set_cmap(self, cmap):
         if cmap:
-            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            # Handle string input - check PALETTES first, then SCM, then matplotlib
             if isinstance(cmap, str):
                 if cmap in PALETTES:
                     return get_palette_colormap(cmap)
-                else:
-                    # Return as-is, assuming it's a matplotlib colormap name
-                    return cmap
+                scm_cmap = _get_scm_colormap(cmap)
+                if scm_cmap is not None:
+                    return scm_cmap
+                # Return as-is, assuming it's a matplotlib colormap name
+                return cmap
             # Handle list input - create colormap from color list
             elif isinstance(cmap, list):
                 return Colormap.from_list('custom_cmap', cmap)
@@ -482,13 +503,15 @@ class PlotStyle:
 
     def _set_precision_cmap(self, cmap):
         if cmap:
-            # Handle string input - check PALETTES first, then assume matplotlib colormap
+            # Handle string input - check PALETTES first, then SCM, then matplotlib
             if isinstance(cmap, str):
                 if cmap in PALETTES:
                     return get_palette_colormap(cmap)
-                else:
-                    # Return as-is, assuming it's a matplotlib colormap name
-                    return cmap
+                scm_cmap = _get_scm_colormap(cmap)
+                if scm_cmap is not None:
+                    return scm_cmap
+                # Return as-is, assuming it's a matplotlib colormap name
+                return cmap
             # Handle list input - create colormap from color list
             elif isinstance(cmap, list):
                 return Colormap.from_list('custom_precision_cmap', cmap)

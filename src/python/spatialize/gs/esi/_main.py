@@ -257,7 +257,7 @@ class ESIResult(EstimationResult):
                                  # -- valid only when 'p_process' is 'voronoi'.
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
-                                 "score": sf.neg_log_likelihood,
+                                 "scoring": sf.mae,
                                  "seed": np.random.randint(1000, 10000),
                                  "folding_seed": np.random.randint(1000, 10000),
                                  "callback": default_singleton_callback,
@@ -311,6 +311,19 @@ def esi_hparams_search(points, values, xi, **kwargs):
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
 
+    _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
+    if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
+        import warnings
+        warnings.warn(
+            f"'{kwargs['scoring'].__name__}' requires at least 30 partitions to fit a reliable "
+            f"distribution, but the smallest value in 'n_partitions' is {min(kwargs['n_partitions'])}. "
+            f"The scoring function has been replaced with 'mae'. "
+            f"To use '{kwargs['scoring'].__name__}', set all values in 'n_partitions' to >= 30.",
+            UserWarning,
+            stacklevel=2,
+        )
+        kwargs["scoring"] = sf.mae
+
     if isinstance(xi, tuple):
         p_xi = deepcopy(xi)
     else:
@@ -342,8 +355,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         _, cv = cross_validate(*l_args)     # returns esi samples for the input data
 
-        # calculate score - pass true values for MLE-based scoring
-        results[i] = kwargs["score"](cv, true_values=values)
+        results[i] = kwargs["scoring"](values, cv)
 
         kwargs["callback"](logging.progress.inform())
 
@@ -356,11 +368,11 @@ def esi_hparams_search(points, values, xi, **kwargs):
     # create a dataframe with all results
     result_data = pd.DataFrame(columns=list(grid.keys()) + ["cv_error"])
     c = 0
-    for k, v in results.items():
+    for idx, v in results.items():
         d = {"cv_error": v,
              "local_interpolator": kwargs["local_interpolator"],
              }
-        d.update(param_grid[k])
+        d.update(param_grid[idx])
         if not result_data.empty:
             result_data = pd.concat([result_data, pd.DataFrame(d, index=[c])])
         else:

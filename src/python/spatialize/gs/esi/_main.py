@@ -156,6 +156,10 @@ class ESIResult(EstimationResult):
         plot_imshow_args = imshow_args.copy()
         if not cmap:
             cmap = plot_imshow_args.pop('cmap', None)
+        if 'extent' not in plot_imshow_args:
+            extent = self._get_extent()
+            if extent is not None:
+                plot_imshow_args['extent'] = extent
 
         with PlotStyle(theme=theme, precision_cmap=cmap) as style:
             self._plot_data(self._precision, ax, w, h, cmap = style.precision_cmap, **plot_imshow_args)
@@ -180,14 +184,10 @@ class ESIResult(EstimationResult):
         if self.griddata:
             if self._xi.shape[0] > 2:
                 raise SpatializeError("quick_plot() for 3D data is not supported")
-            x_min, x_max = self._xi[0].min(), self._xi[0].max()
-            y_min, y_max = self._xi[1].min(), self._xi[1].max()
         else:
             if self._xi.shape[-1] > 2:
                 raise SpatializeError("quick_plot() for 3D data is not supported")
-            x_min, x_max = self._xi[:,0].min(), self._xi[:,0].max()
-            y_min, y_max = self._xi[:,1].min(), self._xi[:,1].max()
-        
+
         plot_fig_args = fig_args.copy()
         plot_fig_args.setdefault('figsize', (10,8))
         plot_fig_args.setdefault('dpi', 120)
@@ -198,11 +198,11 @@ class ESIResult(EstimationResult):
             ax1, ax2 = gs.subplots()
 
             ax1.set_title('Estimation')
-            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap, extent=[x_min, x_max, y_min, y_max])
+            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=style.cmap)
             ax1.set_aspect('equal')
 
             ax2.set_title('Precision')
-            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap, extent=[x_min, x_max, y_min, y_max])
+            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
             ax2.set_aspect('equal')
 
             if not in_notebook():

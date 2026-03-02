@@ -96,6 +96,22 @@ class EstimationResult:
         else:
             return self._estimation
 
+    def _get_extent(self):
+        """Returns [x_min, x_max, y_min, y_max] for 2D spatial data, or None otherwise."""
+        if self._xi is None:
+            return None
+        if self.griddata:
+            if self._xi.shape[0] != 2:
+                return None
+            x_min, x_max = self._xi[0].min(), self._xi[0].max()
+            y_min, y_max = self._xi[1].min(), self._xi[1].max()
+        else:
+            if self._xi.shape[-1] != 2:
+                return None
+            x_min, x_max = self._xi[:, 0].min(), self._xi[:, 0].max()
+            y_min, y_max = self._xi[:, 1].min(), self._xi[:, 1].max()
+        return [x_min, x_max, y_min, y_max]
+
     def plot_estimation(self, ax=None, w=None, h=None, theme='alges', cmap=None, **imshow_args):
         """
         Plots the estimation using `matplotlib`.
@@ -120,6 +136,10 @@ class EstimationResult:
         plot_imshow_args = imshow_args.copy()
         if not cmap:
             cmap = plot_imshow_args.pop('cmap', None)
+        if 'extent' not in plot_imshow_args:
+            extent = self._get_extent()
+            if extent is not None:
+                plot_imshow_args['extent'] = extent
 
         with PlotStyle(theme=theme, cmap=cmap) as style:
             self._plot_data(self.estimation(), ax, w, h, cmap = style.cmap, **plot_imshow_args)

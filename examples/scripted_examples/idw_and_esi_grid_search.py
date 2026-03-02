@@ -53,11 +53,6 @@ search_result = esi_hparams_search(points, values, (grid_x, grid_y),
                                    n_partitions=[100],
                                    exponent=[0.001, 0.01, 0.1, 1, 2],
                                    alpha=(0.95, 0.97, 0.98, 0.985),
-                                   agg_function={"mean": af.mean,
-                                                 "median": af.median,
-                                                 "p25": af.Percentile(25),
-                                                 "p75": af.Percentile(75)
-                                                 },
                                    seed=1500)
 
 search_result.plot_cv_error()

@@ -232,9 +232,7 @@ def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color
         fig.suptitle(title, fontsize=12, fontweight='bold')
 
     plt.tight_layout()
-
-    if not in_notebook():
-        return fig
+    plt.show()
 
 
 class PlotStyle:
@@ -820,3 +818,42 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
     # Return figure if we created it and not in notebook
     if fig_created and not in_notebook():
         return fig
+    
+
+def plot_scatter(points, values, cmap=None, 
+                 xlabel='X', ylabel='Y', title=None,
+                 theme='publication',
+                 figsize=None, dpi=100,
+                 fig=None, ax=None,
+                 show_colorbar=True, cbar_label='Magnitude',
+                 **plot_args):
+    """Helper for 2D scatter plot."""
+
+    X = points[:, 0]
+    Y = points[:, 1]
+    extent = [np.min(X),  np.max(X),  np.min(Y),  np.max(Y)]
+
+    with PlotStyle(theme=theme, cmap=cmap) as style:
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+        plot = ax.scatter(X, Y, c=values, cmap=style.cmap, zorder=3, **plot_args)
+        _ax_format(ax, xlabel, ylabel, title, extent)
+
+        if show_colorbar:
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.1)
+            cax.grid(False)
+            cbar = plt.colorbar(plot, orientation='vertical', cax=cax)
+            cbar.set_label(cbar_label)
+
+    return fig, ax
+
+def _ax_format(ax, xlabel, ylabel, title, extent):
+    x_min, x_max, y_min, y_max = extent
+    ax.set_title(title, loc='center')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_aspect('equal')

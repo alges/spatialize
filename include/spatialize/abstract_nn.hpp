@@ -73,7 +73,7 @@ namespace sptlz{
 
                 for(int i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
                   progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(locations->at(i)), radius, 2.0);
@@ -103,7 +103,7 @@ namespace sptlz{
 
                 for(size_t i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
                   progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(coords.at(i)), radius, 2.0);
@@ -136,7 +136,7 @@ namespace sptlz{
 
                 for(int i=0; i<n; i++){
                   if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
                   progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 
                   auto nbs = this->kdt->query_ball(&(coords.at(i)), radius, 2.0);

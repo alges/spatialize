@@ -65,7 +65,7 @@ namespace sptlz{
             mt->leaf_params.at(j) = post_creation(&leaf_coords, &leaf_values);
           }
           if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-            exit(0);
+            throw pybind11::error_already_set();
 		  progress->inform(i + 1);
         }
 

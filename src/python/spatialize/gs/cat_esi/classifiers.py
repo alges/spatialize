@@ -84,6 +84,8 @@ def _knn_pca_predict(cell_points, cell_values, cell_queries, cell_params):
 
     cell_params layout: [rotation_matrix_flat (D²), anisotropy_scales (D), k_neighbors (1)]
     """
+    if len(np.unique(cell_values)) < 2:
+        return np.full(len(cell_queries), cell_values[0])
     n_dim = cell_points.shape[1]
     k_neighbors = int(round(cell_params[-1]))
     rotation_matrix   = cell_params[: n_dim * n_dim].reshape(n_dim, n_dim)
@@ -288,6 +290,8 @@ def _make_knn_fns(n_neighbors=None):
     def classifier_fn(cell_points, cell_values, cell_queries, cell_params):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
+        if len(np.unique(cell_values)) < 2:
+            return np.full(len(cell_queries), cell_values[0])
         try:
             clf = KNeighborsClassifier(n_neighbors=min(_k, len(cell_points)))
             clf.fit(cell_points, cell_values)
@@ -312,6 +316,8 @@ def _make_svm_fns(C=None, kernel=None, gamma=None, random_state=None):
     def classifier_fn(cell_points, cell_values, cell_queries, cell_params):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
+        if len(np.unique(cell_values)) < 2:
+            return np.full(len(cell_queries), cell_values[0])
         try:
             clf = SVC(C=_C, kernel=_kernel, gamma=_gamma, random_state=_rs)
             clf.fit(cell_points, cell_values)
@@ -334,6 +340,8 @@ def _make_rf_fns(n_estimators=None, max_depth=None, random_state=None):
     def classifier_fn(cell_points, cell_values, cell_queries, cell_params):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
+        if len(np.unique(cell_values)) < 2:
+            return np.full(len(cell_queries), cell_values[0])
         try:
             clf = RandomForestClassifier(n_estimators=_n, max_depth=max_depth, random_state=_rs)
             clf.fit(cell_points, cell_values)
@@ -356,6 +364,8 @@ def _make_dt_fns(max_depth=None, min_samples_split=None, random_state=None):
     def classifier_fn(cell_points, cell_values, cell_queries, cell_params):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
+        if len(np.unique(cell_values)) < 2:
+            return np.full(len(cell_queries), cell_values[0])
         try:
             clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=_mss, random_state=_rs)
             clf.fit(cell_points, cell_values)
@@ -399,6 +409,8 @@ def _make_sklearn_fns(sklearn_classifier):
     def classifier_fn(cell_points, cell_values, cell_queries, cell_params):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
+        if len(np.unique(cell_values)) < 2:
+            return np.full(len(cell_queries), cell_values[0])
         try:
             fitted = copy.deepcopy(sklearn_classifier)
             fitted.fit(cell_points, cell_values)

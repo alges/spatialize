@@ -298,12 +298,13 @@ def _make_knn_fns(n_neighbors=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_svm_fns(C=None, kernel=None, gamma=None):
+def _make_svm_fns(C=None, kernel=None, gamma=None, random_state=None):
     """Wrap sklearn SVC in the C++ callback protocol."""
     from sklearn.svm import SVC
     _C      = C      if C      is not None else 1.0
     _kernel = kernel if kernel is not None else "rbf"
     _gamma  = gamma  if gamma  is not None else "scale"
+    _rs     = random_state if random_state is not None else np.random.randint(0, 100000)
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -312,7 +313,7 @@ def _make_svm_fns(C=None, kernel=None, gamma=None):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
         try:
-            clf = SVC(C=_C, kernel=_kernel, gamma=_gamma)
+            clf = SVC(C=_C, kernel=_kernel, gamma=_gamma, random_state=_rs)
             clf.fit(cell_points, cell_values)
             return clf.predict(cell_queries).astype(np.float64)
         except Exception:
@@ -321,10 +322,11 @@ def _make_svm_fns(C=None, kernel=None, gamma=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_rf_fns(n_estimators=None, max_depth=None):
+def _make_rf_fns(n_estimators=None, max_depth=None, random_state=None):
     """Wrap sklearn RandomForestClassifier in the C++ callback protocol."""
     from sklearn.ensemble import RandomForestClassifier
-    _n = n_estimators if n_estimators is not None else 100
+    _n  = n_estimators if n_estimators is not None else 100
+    _rs = random_state if random_state is not None else np.random.randint(0, 100000)
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -333,7 +335,7 @@ def _make_rf_fns(n_estimators=None, max_depth=None):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
         try:
-            clf = RandomForestClassifier(n_estimators=_n, max_depth=max_depth)
+            clf = RandomForestClassifier(n_estimators=_n, max_depth=max_depth, random_state=_rs)
             clf.fit(cell_points, cell_values)
             return clf.predict(cell_queries).astype(np.float64)
         except Exception:
@@ -342,10 +344,11 @@ def _make_rf_fns(n_estimators=None, max_depth=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_dt_fns(max_depth=None, min_samples_split=None):
+def _make_dt_fns(max_depth=None, min_samples_split=None, random_state=None):
     """Wrap sklearn DecisionTreeClassifier in the C++ callback protocol."""
     from sklearn.tree import DecisionTreeClassifier
     _mss = min_samples_split if min_samples_split is not None else 2
+    _rs  = random_state if random_state is not None else np.random.randint(0, 100000)
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -354,7 +357,7 @@ def _make_dt_fns(max_depth=None, min_samples_split=None):
         if len(cell_queries) == 0 or len(cell_points) == 0:
             return np.full(len(cell_queries), np.nan)
         try:
-            clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=_mss)
+            clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_split=_mss, random_state=_rs)
             clf.fit(cell_points, cell_values)
             return clf.predict(cell_queries).astype(np.float64)
         except Exception:
@@ -371,6 +374,9 @@ SKLEARN_CLASSIFIER_PARAMS = {
     "rf":  ["n_estimators", "max_depth"],
     "dt":  ["max_depth", "min_samples_split"],
 }
+
+# Classifiers that accept a random_state argument (single value, not searched over).
+SKLEARN_RANDOM_STATE_CLASSIFIERS = {"svm", "rf", "dt"}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -453,18 +459,21 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
             C=kwargs.get("C"),
             kernel=kwargs.get("kernel"),
             gamma=kwargs.get("gamma"),
+            random_state=kwargs.get("random_state"),
         )
 
     elif classifier == "rf":
         return _make_rf_fns(
             n_estimators=kwargs.get("n_estimators"),
             max_depth=kwargs.get("max_depth"),
+            random_state=kwargs.get("random_state"),
         )
 
     elif classifier == "dt":
         return _make_dt_fns(
             max_depth=kwargs.get("max_depth"),
             min_samples_split=kwargs.get("min_samples_split"),
+            random_state=kwargs.get("random_state"),
         )
 
     else:

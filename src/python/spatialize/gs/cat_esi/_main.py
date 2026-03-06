@@ -12,7 +12,7 @@ from spatialize import logging
 from spatialize.logging import log_message
 
 from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision
-from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS
+from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
 from .score_functions import resolve_scoring, SCORING_OPTIONS
 
 
@@ -363,11 +363,12 @@ class CatESIGridSearchResult(GridSearchResult):
     Result of a hyperparameter search for categorical ESI.
     """
 
-    def __init__(self, search_result_data, classifier, ordinal_order=None, sklearn_classifier=None):
+    def __init__(self, search_result_data, classifier, ordinal_order=None, sklearn_classifier=None, random_state=None):
         super().__init__(search_result_data)
         self.classifier = classifier
         self.ordinal_order = ordinal_order
         self.sklearn_classifier = sklearn_classifier
+        self.random_state = random_state
 
     def best_result(self, **kwargs):
         """Return a dict of best parameters suitable for passing to cat_esi_nongriddata."""
@@ -390,6 +391,8 @@ class CatESIGridSearchResult(GridSearchResult):
         result["ordinal_order"] = self.ordinal_order
         if self.sklearn_classifier is not None:
             result["sklearn_classifier"] = self.sklearn_classifier
+        if self.random_state is not None:
+            result["random_state"] = self.random_state
         return result
 
 
@@ -412,9 +415,9 @@ class CatESIGridSearchResult(GridSearchResult):
         "knn_pca":      {"n_neighbors": None, "max_points": None, "n_cv_splits": None},
         "scikit-learn": {"sklearn_classifier": None},
         "knn":          {"n_neighbors": None},
-        "svm":          {"C": None, "kernel": None, "gamma": None},
-        "rf":           {"n_estimators": None, "max_depth": None},
-        "dt":           {"max_depth": None, "min_samples_split": None},
+        "svm":          {"C": None, "kernel": None, "gamma": None, "random_state": None},
+        "rf":           {"n_estimators": None, "max_depth": None, "random_state": None},
+        "dt":           {"max_depth": None, "min_samples_split": None, "random_state": None},
     },
 )
 def _call_custom_esi(points, values, xi, **kwargs):
@@ -562,9 +565,9 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
         },
         "scikit-learn": {"sklearn_classifier": None},
         "knn": {"n_neighbors": [3, 5, 7]},
-        "svm": {"C": [0.1, 1.0, 10.0], "kernel": ["rbf", "linear"], "gamma": ["scale"]},
-        "rf":  {"n_estimators": [50, 100, 200], "max_depth": [None, 5, 10]},
-        "dt":  {"max_depth": [None, 3, 5, 10], "min_samples_split": [2, 5]},
+        "svm": {"C": [0.1, 1.0, 10.0], "kernel": ["rbf", "linear"], "gamma": ["scale"], "random_state": None},
+        "rf":  {"n_estimators": [50, 100, 200], "max_depth": [None, 5, 10], "random_state": None},
+        "dt":  {"max_depth": [None, 3, 5, 10], "min_samples_split": [2, 5], "random_state": None},
     },
 )
 def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResult:
@@ -669,6 +672,8 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
             elif kwargs["classifier"] in SKLEARN_CLASSIFIER_PARAMS:
                 for param in SKLEARN_CLASSIFIER_PARAMS[kwargs["classifier"]]:
                     combo[param] = param_set.get(param)
+                if kwargs["classifier"] in SKLEARN_RANDOM_STATE_CLASSIFIERS:
+                    combo["random_state"] = kwargs.get("random_state")
 
             try:
                 estimation, _ = _call_custom_esi(tr_pts, tr_vals, te_pts, **combo)
@@ -699,4 +704,5 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     result_data = pd.DataFrame(rows)
     return CatESIGridSearchResult(result_data, kwargs["classifier"],
                                   ordinal_order=kwargs.get("ordinal_order"),
-                                  sklearn_classifier=kwargs.get("sklearn_classifier"))
+                                  sklearn_classifier=kwargs.get("sklearn_classifier"),
+                                  random_state=kwargs.get("random_state"))

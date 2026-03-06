@@ -234,7 +234,7 @@ namespace sptlz{
 					}
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
 					progress->inform(100.0*(i+1.0)/n);
 				}
 
@@ -272,7 +272,7 @@ namespace sptlz{
 					}
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
 					progress->inform(100.0*(i+1.0)/n);
 				}
 
@@ -309,7 +309,7 @@ namespace sptlz{
 						}
 					}
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      exit(0);
+                      throw pybind11::error_already_set();
 					progress->inform(100.0*(i+1.0)/n);
 				}
 

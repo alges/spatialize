@@ -1,15 +1,16 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 from sklearn.model_selection import ParameterGrid, KFold
 
 import libspatialize as lsp
-from spatialize import EstimationResult, GridSearchResult, SpatializeError
+from spatialize import EstimationResult, GridSearchResult, SpatializeError, in_notebook
 from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
 from spatialize.logging import default_singleton_callback, singleton_null_callback
 from spatialize import logging
 from spatialize.logging import log_message
+from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotStyle
 
 from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision
 from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
@@ -94,77 +95,6 @@ def _decode_samples(esi_samples, code_to_cat):
     indices = np.where(nan_mask, n_codes,
                        np.clip(np.round(flat.astype(np.float64)).astype(int), 0, n_codes - 1))
     return lookup[indices].reshape(esi_samples.shape)
-
-
-# ─────────────────────────────────────────────────────────────
-#  Visualization helpers (adapted from categorical/cat.py)
-# ─────────────────────────────────────────────────────────────
-
-def _sort_categories(categories, custom_order=None):
-    """Sort categories numerically or alphabetically (strings last)."""
-    order_map = {item: i for i, item in enumerate(custom_order)} if custom_order else None
-
-    def key(item):
-        try:
-            return (0, float(item))
-        except (ValueError, TypeError):
-            s = str(item)
-            if order_map is not None:
-                return (1, order_map.get(s, float('inf')))
-            return (1, s)
-
-    return sorted(list(categories), key=key)
-
-
-def _category_colors(n, cmap='Accent'):
-    if n <= 10:
-        cm = plt.colormaps.get(cmap, plt.colormaps['Accent'])
-    elif n <= 20:
-        cm = plt.colormaps['tab20']
-    elif n <= 40:
-        cm = plt.colormaps['plasma']
-    else:
-        cm = plt.colormaps['turbo']
-    return ['#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255))
-            for c in (cm(t) for t in np.linspace(0, 1, n))]
-
-
-def plot_categorical_points(points, values, nonnum_order=None, ax=None,
-                             cmap='Accent', title='', legend_title=''):
-    """
-    Plot 2D scatter coloured by categorical labels.
-
-    Parameters
-    ----------
-    points : (n, 2) coordinates
-    values : (n,) categorical labels
-    nonnum_order : list, optional custom sort order for non-numeric categories
-    ax : matplotlib axes (created if None)
-    cmap : colormap name (≤10 categories)
-    title, legend_title : plot annotation strings
-    """
-    if points.shape[1] != 2:
-        raise SpatializeError("plot_categorical_points only supports 2D data.")
-    unique_cats = _sort_categories(np.unique(values), nonnum_order)
-    colors = _category_colors(len(unique_cats), cmap)
-
-    if ax is None:
-        _, ax = plt.subplots(figsize=(8, 6))
-
-    for i, cat in enumerate(unique_cats):
-        mask = values == cat
-        ax.scatter(points[mask, 0], points[mask, 1],
-                   label=str(cat), color=colors[i], s=10)
-
-    ax.set_xlim(points[:, 0].min(), points[:, 0].max())
-    ax.set_ylim(points[:, 1].min(), points[:, 1].max())
-    ax.set_title(title)
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.grid(True)
-    ax.set_aspect('equal')
-    ax.legend(title=legend_title, loc='center left', bbox_to_anchor=(1.05, 0.5))
-    plt.tight_layout()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -315,38 +245,142 @@ class CatESIResult(EstimationResult):
 
     # ── visualisation ─────────────────────────────────────────
 
-    def plot_estimation(self, ax=None, title='Estimation', cmap='Accent',
-                        nonnum_order=None, **kwargs):
+    def plot_estimation(self, ax=None, w=None, h=None, cmap=None, nonnum_order=None,
+                        title='Estimation', theme='alges',
+                        figsize=None, dpi=100, **kwargs):
         """
-        Scatter plot of the categorical estimation (2D only).
+        Plot the categorical estimation (2D only).
+
+        Uses ``plot_categorical_colormap`` for griddata and
+        ``plot_categorical_scatter`` for non-griddata. The *theme* is applied
+        via ``PlotStyle`` in both cases, mirroring ``ESIResult.plot_estimation``.
 
         Parameters
         ----------
-        ax : matplotlib axes
+        ax : matplotlib Axes, optional
+        cmap : str | matplotlib Colormap | list of colours | None
+            Colour source for the discrete category palette.  Accepts the
+            same options as ``plot_colormap_data``:
+
+            - ``None`` – automatic (``'Accent'`` for ≤10 categories, with
+              fallback to ``tab20`` / ``plasma`` / ``turbo`` for larger sets).
+            - A **spatialize palette** name (e.g. ``'alges'``, ``'crest_r'``).
+            - A **Scientific Colour Map** name (e.g. ``'batlow'``, ``'roma'``).
+            - Any **matplotlib** colourmap name (e.g. ``'tab20'``, ``'viridis'``).
+            - A matplotlib **Colormap object** (sampled at n evenly-spaced points).
+            - A **list of hex/named colours** (cycled if shorter than n categories).
+        nonnum_order : list, optional custom sort order for non-numeric categories
         title : str
-        cmap : colormap for category colours
-        nonnum_order : list, custom category order for legend
+        theme : str, PlotStyle theme. Default ``'alges'``.
+        figsize, dpi : figure size and resolution (when *ax* is None)
+        **kwargs : forwarded to the underlying plot function
         """
         est = self.estimation()
         xi = self._xi
 
+        if self.griddata and len(xi) != 2:
+            raise SpatializeError("plot_estimation only supports 2D griddata.")
+        if not self.griddata and xi.shape[1] != 2:
+            raise SpatializeError("plot_estimation only supports 2D data.")
+
+        with PlotStyle(theme=theme):
+            plot_categorical_colormap(
+                est, cmap=cmap, nonnum_order=nonnum_order,
+                ax=ax, w=w, h=h, griddata=self.griddata,
+                xi_locations=xi,
+                extent=self._get_extent(),
+                title=title, figsize=figsize, dpi=dpi, **kwargs,
+            )
+
+    def plot_precision(self, ax=None, w=None, h=None, theme='alges', cmap=None, **imshow_args):
+        """
+        Plot the precision of the estimation.
+
+        :param ax: The axis to plot on.
+        :param w: The width of the plot.
+        :param h: The height of the plot.
+        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white',
+            'dark', 'alges', 'minimal', 'publication'.
+        :param cmap: Colormap for the plot. If None, uses theme default or 'bwr'.
+        :param imshow_args: Additional imshow arguments to pass to the `_plot_data` function.
+        """
+        if self._precision is None:
+            self._precision = self.precision()
+
+        xi = self._xi
+        if self.griddata and len(xi) != 2:
+            raise SpatializeError("plot_precision only supports 2D griddata.")
+        if not self.griddata and xi.shape[1] != 2:
+            raise SpatializeError("plot_precision only supports 2D data.")
+
+        plot_imshow_args = imshow_args.copy()
+        if not cmap:
+            cmap = plot_imshow_args.pop('cmap', None)
+        if 'extent' not in plot_imshow_args:
+            extent = self._get_extent()
+            if extent is not None:
+                plot_imshow_args['extent'] = extent
+
+        with PlotStyle(theme=theme, precision_cmap=cmap) as style:
+            plot_colormap_data(self._precision, ax=ax, w=w, h=h, xi_locations=xi, griddata=self.griddata, cmap=style.precision_cmap, **plot_imshow_args)
+
+    def quick_plot(self, w=None, h=None,
+                   theme = 'alges',
+                   estimation_cmap = None,
+                   precision_cmap = None,
+                   **fig_args):
+        
+        """
+        Side-by-side plot of estimation and precision.
+
+        Parameters
+        ----------
+        w : float, optional
+            Width scale factor passed to plot_estimation / plot_precision.
+        h : float, optional
+            Height scale factor passed to plot_estimation / plot_precision.
+        theme : str
+            PlotStyle theme. Default ``'alges'``.
+        estimation_cmap : str or Colormap, optional
+            Discrete colormap for the estimation panel. Default ``'Accent'``.
+        precision_cmap : str or Colormap, optional
+            Colormap for the precision panel. Defaults to the theme's colormap.
+        **fig_args :
+            Extra keyword arguments forwarded to ``plt.figure()`` (e.g.
+            ``figsize=(10, 8)``, ``dpi=120``).
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        xi = self._xi
         if xi is None:
-            raise SpatializeError("xi not available; cannot plot.")
+            raise SpatializeError("xi not available; cannot quick_plot.")
 
-        # Flatten griddata for scatter
-        if self.griddata:
-            if xi.shape[0] != 2:
-                raise SpatializeError("plot_estimation only supports 2D griddata.")
-            coords = np.column_stack([xi[0].ravel(), xi[1].ravel()])
-            flat_est = est.ravel()
-        else:
-            if xi.shape[1] != 2:
-                raise SpatializeError("plot_estimation only supports 2D data.")
-            coords = xi
-            flat_est = est
+        if self.griddata and len(xi) > 2:
+            raise SpatializeError("quick_plot() for 3D+ griddata is not supported.")
+        if not self.griddata and xi.shape[1] > 2:
+            raise SpatializeError("quick_plot() for 3D+ data is not supported.")
+        
+        plot_fig_args = fig_args.copy()
+        plot_fig_args.setdefault('figsize', (10,8))
+        plot_fig_args.setdefault('dpi', 120)
 
-        plot_categorical_points(coords, flat_est, nonnum_order=nonnum_order,
-                                 ax=ax, cmap=cmap, title=title)
+        with PlotStyle(theme=theme, precision_cmap=precision_cmap) as style:
+            fig = plt.figure(**plot_fig_args)
+            gs = fig.add_gridspec(1, 2, wspace=0.45)
+            ax1, ax2 = gs.subplots()
+
+            ax1.set_title('Estimation')
+            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=estimation_cmap)
+            ax1.set_aspect('equal')
+
+            ax2.set_title('Precision')
+            self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
+            ax2.set_aspect('equal')
+
+        if not in_notebook():
+            return fig
 
     def __repr__(self):
         est = self.estimation()

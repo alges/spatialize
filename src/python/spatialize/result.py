@@ -101,7 +101,8 @@ class EstimationResult:
         if self._xi is None:
             return None
         if self.griddata:
-            if self._xi.shape[0] != 2:
+            # xi may be a tuple/list of arrays or an ndarray; use len() for dimension count
+            if len(self._xi) != 2:
                 return None
             x_min, x_max = self._xi[0].min(), self._xi[0].max()
             y_min, y_max = self._xi[1].min(), self._xi[1].max()
@@ -160,9 +161,13 @@ class EstimationResult:
         **imshow_args : (optional)
             Additional keyword arguments passed to the figure creation (e.g., DPI, figure size).
         """
-        if not self._xi is None:
-            if self._xi.shape[1] > 2:
-                raise SpatializeError("quick_plot() for 3D data is not supported")
+        if self._xi is not None:
+            if self.griddata:
+                if len(self._xi) > 2:
+                    raise SpatializeError("quick_plot() for 3D+ data is not supported")
+            else:
+                if self._xi.shape[1] > 2:
+                    raise SpatializeError("quick_plot() for 3D data is not supported")
 
         fig = plt.figure(dpi=150, **imshow_args)
         gs = fig.add_gridspec(1, 1, wspace=0.45)

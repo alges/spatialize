@@ -125,6 +125,7 @@ def _set_cell_params_knn_pca(
     n_neighbors: Optional[int] = None,
     max_points: Optional[int] = None,
     n_cv_splits: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> np.ndarray:
     """
     Estimate optimal anisotropic KNN parameters for a single ESI partition.
@@ -159,11 +160,20 @@ def _set_cell_params_knn_pca(
     if n_points < 2:
         return _default_params()
 
+    # Derive a per-partition seed so that cells with the same n_eff don't share
+    # identical splits. Mix the global seed with a hash of the cell's centroid.
+    if seed is not None:
+        centroid_bits = int(np.round(cell_points.mean(axis=0) * 1e6).astype(np.int64).sum())
+        cell_seed = (seed * 2654435761 + centroid_bits) & 0xFFFFFFFF  # Knuth multiplicative hash
+    else:
+        cell_seed = None
+    rng = np.random.default_rng(cell_seed)
+
     max_points_actual   = max_points   if max_points   is not None else min(n_points, 200)
     num_cv_splits_actual = n_cv_splits if n_cv_splits is not None else max(3, min(10, n_points // 10))
 
     if n_points > max_points_actual:
-        idx = np.random.choice(n_points, max_points_actual, replace=False)
+        idx = rng.choice(n_points, max_points_actual, replace=False)
         cell_points_s = np.ascontiguousarray(cell_points[idx], dtype=np.float64)
         cell_values_s = np.ascontiguousarray(cell_values[idx], dtype=np.int64)
         n_eff = max_points_actual
@@ -215,7 +225,7 @@ def _set_cell_params_knn_pca(
     # Generate splits once so every ratio is evaluated on the same folds (correctness + speed)
     splits = []
     for _ in range(num_cv_splits_actual):
-        perm = np.random.permutation(n_eff)
+        perm = rng.permutation(n_eff)
         splits.append((perm[:max_train], perm[max_train:]))
 
     for ratio in anisotropy_ratios:
@@ -444,6 +454,7 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
         n_neighbors = kwargs.get("n_neighbors", None)
         max_points  = kwargs.get("max_points",  None)
         n_cv_splits = kwargs.get("n_cv_splits", None)
+        seed        = kwargs.get("seed",        None)
 
         def set_cell_params_fn(cell_points, cell_values):
             return _set_cell_params_knn_pca(
@@ -451,6 +462,7 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
                 n_neighbors=n_neighbors,
                 max_points=max_points,
                 n_cv_splits=n_cv_splits,
+                seed=seed,
             )
 
         return set_cell_params_fn, _knn_pca_predict

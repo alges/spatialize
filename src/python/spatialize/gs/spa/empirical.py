@@ -1,5 +1,4 @@
 import numpy as np
-from numba import njit
 from scipy.interpolate import Akima1DInterpolator
 
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
@@ -344,6 +343,7 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         :returns: A dictionary containing the computed confidence scores and the parameters used.
         :rtype: dict
         """
+        _ensure_numba()
         # get Parameters from Credible Interval
         credible_info = self.credible_interval(x0, alpha=alpha_credible_target)
         alpha_prob = credible_info['mass']
@@ -448,7 +448,6 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         }        
 
 
-@njit
 def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     """
     Numba-optimized function to find the narrowest interval [i, j]
@@ -519,7 +518,6 @@ def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
         return 0, n - 1, total_entropy # Fallback to full range
 
 
-@njit
 def find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entropy, log_base, epsilon):
     """
     Numba-optimized function to find an interval [a, b] around `center_idx`
@@ -565,7 +563,6 @@ def find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entro
         current_interval_entropy = compute_entropy_numba(pdf, left, right + 1, dx, log_base, epsilon)
     return left, right, current_interval_entropy
 
-@njit
 def compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon):
     """
     Numba-optimized function to compute differential entropy.
@@ -595,7 +592,6 @@ def compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon):
         entropy -= p * np.log(p)
     return entropy * dx / log_base
 
-@njit
 def find_credible_interval_numba(pdf, x, dx, center_idx, alpha):
     """
     Numba-optimized function to find the smallest interval [i, j] around `center_idx` such that
@@ -782,6 +778,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         :returns: Estimated entropy.
         :rtype: float
         """
+        _ensure_numba()
         if a is None:
             a = self.x_[0]
         if b is None:
@@ -831,6 +828,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         :returns: Contains the interval, its entropy, tail entropies, and total entropy.
         :rtype: dict
         """
+        _ensure_numba()
         dx = self.x_[1] - self.x_[0]
 
         # Ensure pdf is normalized:
@@ -872,6 +870,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         :returns: Contains the interval, its entropy, tail entropies, and total entropy.
         :rtype: dict
         """
+        _ensure_numba()
         dx = self.x_[1] - self.x_[0]
 
         # Ensure pdf is normalized:
@@ -930,6 +929,7 @@ class EmpiricalModel(BaseEmpiricalModel):
             - ``right_tail_mass`` (float): The probability mass of the right tail.
             - ``total_mass`` (float): The total probability mass (approximately 1.0).
         """
+        _ensure_numba()
         dx = self.x_[1] - self.x_[0]
         # Use the already normalized pdf_ from __init__
         pdf_for_mass = self.pdf_
@@ -1098,7 +1098,6 @@ class EmpiricalModel(BaseEmpiricalModel):
 
 # --- Functions for Confidence Measures (Optimized with @njit and no type hints) ---
 
-@njit
 def compute_simple_relative_confidence_numba(alpha_prob, L_alpha_prob,
                                              alpha_entropy_percent, L_alpha_entropy, Z):
     """
@@ -1139,7 +1138,6 @@ def compute_simple_relative_confidence_numba(alpha_prob, L_alpha_prob,
         
     return numerator / denominator
 
-@njit
 def compute_relative_harmonic_confidence_numba(alpha_prob, L_alpha_prob,
                                                alpha_entropy_percent, L_alpha_entropy):
     """
@@ -1170,7 +1168,6 @@ def compute_relative_harmonic_confidence_numba(alpha_prob, L_alpha_prob,
     
     return 1 / (1 + term1 + term2)
 
-@njit
 def compute_log_ratio_confidence_numba(alpha_prob, L_alpha_prob,
                                        alpha_entropy_percent, L_alpha_entropy):
     """
@@ -1200,3 +1197,38 @@ def compute_log_ratio_confidence_numba(alpha_prob, L_alpha_prob,
     R = width_product / concentration_product
     return 1 / (1 + R)
 # --- End Functions for Confidence Measures ---
+
+
+# --- Lazy Numba Initialization ---
+
+_numba_initialized = False
+
+
+def _ensure_numba():
+    """Lazily apply @njit to all numba-accelerated functions on first use.
+
+    This avoids importing numba at module load time, which is important for
+    callers (e.g. ESI scoring) that only use EmpiricalModel's CDF/PDF
+    attributes and never invoke the entropy or credible-interval methods.
+    """
+    global _numba_initialized
+    global compute_entropy_numba, find_central_entropy_interval_numba
+    global find_entropy_informative_interval_numba, find_credible_interval_numba
+    global compute_simple_relative_confidence_numba
+    global compute_relative_harmonic_confidence_numba, compute_log_ratio_confidence_numba
+
+    if _numba_initialized:
+        return
+    _numba_initialized = True
+
+    from numba import njit
+
+    # compile leaf function first so dependent functions see a numba Dispatcher
+    # when they are compiled on their first call
+    compute_entropy_numba = njit(compute_entropy_numba)
+    find_central_entropy_interval_numba = njit(find_central_entropy_interval_numba)
+    find_entropy_informative_interval_numba = njit(find_entropy_informative_interval_numba)
+    find_credible_interval_numba = njit(find_credible_interval_numba)
+    compute_simple_relative_confidence_numba = njit(compute_simple_relative_confidence_numba)
+    compute_relative_harmonic_confidence_numba = njit(compute_relative_harmonic_confidence_numba)
+    compute_log_ratio_confidence_numba = njit(compute_log_ratio_confidence_numba)

@@ -10,7 +10,7 @@ from spatialize import SpatializeError, logging, GridSearchResult, EstimationRes
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
 import spatialize.gs.esi.scorefunction as sf
-from spatialize._util import signature_overload, in_notebook
+from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
@@ -168,6 +168,7 @@ class ESIResult(EstimationResult):
                    theme = 'alges',
                    estimation_cmap = None,
                    precision_cmap = None,
+                   show = True,
                    **fig_args):
         """
         Quickly plot the estimation and precision.
@@ -178,8 +179,9 @@ class ESIResult(EstimationResult):
             'dark', 'alges', 'minimal', 'publication'.
         :param estimation_cmap: Colormap for the estimation plot. If None, uses theme default or 'coolwarm'.
         :param precision_cmap: Colormap for the precision plot. If None, uses theme default or 'bwr'.
+        :param show: If True (default), call plt.show() and return None. If False, return the figure.
         :param fig_args: Additional figure arguments.
-        :return: The figure.
+        :return: None if show=True, otherwise the figure.
         """
         if self.griddata:
             if len(self._xi) > 2:
@@ -205,8 +207,10 @@ class ESIResult(EstimationResult):
             self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
             ax2.set_aspect('equal')
 
-            if not in_notebook():
-                return fig      # just in case you want to embed it somewhere else
+        if show:
+            plt.show()
+        else:
+            return fig
 
     def preview_esi_samples(self, n_imgs=9, n_cols=3, title_prefix="ESI sample", title=None,
                             figsize=(10, 10), dpi=120, theme='alges', cmap=None, **imshow_args):

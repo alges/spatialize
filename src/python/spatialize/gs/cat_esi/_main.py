@@ -377,10 +377,10 @@ class CatESIResult(EstimationResult):
             plot_colormap_data(self._precision, ax=ax, w=w, h=h, xi_locations=xi, griddata=self.griddata, cmap=style.precision_cmap, **plot_imshow_args)
 
     def quick_plot(self, w=None, h=None,
-                   theme = 'alges',
-                   estimation_cmap = None,
-                   precision_cmap = None,
-                   show = True,
+                   theme='alges',
+                   estimation_cmap=None,
+                   precision_cmap=None,
+                   show=True,
                    **fig_args):
 
         """
@@ -423,7 +423,7 @@ class CatESIResult(EstimationResult):
 
         with PlotStyle(theme=theme, precision_cmap=precision_cmap) as style:
             fig = plt.figure(**plot_fig_args)
-            gs = fig.add_gridspec(1, 2, wspace=0.45)
+            gs = fig.add_gridspec(1, 2, wspace=0.5)
             ax1, ax2 = gs.subplots()
 
             ax1.set_title('Estimation')

@@ -1385,4 +1385,4 @@ def plot_categorical_colormap(data, categories=None, cmap='Accent',
         for i, cat in enumerate(categories)
     ]
     plotter.legend(handles=legend_elements, title=legend_title,
-                   loc='center left', bbox_to_anchor=(1.05, 0.5))
+                   loc='center left', bbox_to_anchor=(1.02, 0.5))

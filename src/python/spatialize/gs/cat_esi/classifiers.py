@@ -92,7 +92,7 @@ def _knn_pca_predict(cell_points, cell_values, cell_queries, cell_params):
     anisotropy_scales = cell_params[n_dim * n_dim : n_dim * n_dim + n_dim]
 
     if len(cell_points) == 0 or k_neighbors == 0:
-        return np.full(len(cell_queries), -1.0)
+        return np.full(len(cell_queries), np.nan)
 
     k_eff = min(k_neighbors, len(cell_points))
 

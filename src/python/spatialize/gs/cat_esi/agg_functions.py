@@ -82,14 +82,17 @@ def aggregate_with_ordinal_mv(
 
     n_locations, _ = esi_samples.shape
 
-    # Reverse mapping: integer rank → category string (for decoding the result)
-    rank_to_category = {rank: category for category, rank in ordinal_category_order.items()}
+    # Normalize keys to strings so that int keys {0: 0, 1: 1} and string keys
+    # {'Low': 0, 'High': 1} both match decoded sample values (which are str-compared).
+    # rank_to_category preserves the original key type so the returned estimation
+    # has the same type as the user's original category labels.
+    str_keyed_order = {str(k): v for k, v in ordinal_category_order.items()}
+    rank_to_category = {v: k for k, v in ordinal_category_order.items()}
 
     # Validate that every non-None value in the samples has a known rank
-    for value in esi_samples.ravel():
-        if value is None:
-            continue
-        if str(value) not in ordinal_category_order:
+    unique_sample_vals = {v for v in esi_samples.ravel() if v is not None}
+    for value in unique_sample_vals:
+        if str(value) not in str_keyed_order:
             raise ValueError(
                 f"Category '{value}' found in esi_samples but not in ordinal_category_order."
             )
@@ -102,7 +105,7 @@ def aggregate_with_ordinal_mv(
             return None
 
         # Convert categories to integer ranks, then sort to find the median
-        ranks = [ordinal_category_order[str(item)] for item in partition_samples]
+        ranks = [str_keyed_order[str(item)] for item in partition_samples]
         ranks.sort()
         n = len(ranks)
 
@@ -115,7 +118,7 @@ def aggregate_with_ordinal_mv(
             median_rank_lower = ranks[n // 2 - 1]
             median_rank_upper = ranks[n // 2]
             true_median_value = (median_rank_lower + median_rank_upper) / 2.0
-            median_rank = min(ordinal_category_order.values(),
+            median_rank = min(str_keyed_order.values(),
                               key=lambda rank: abs(rank - true_median_value))
 
         return rank_to_category[median_rank]

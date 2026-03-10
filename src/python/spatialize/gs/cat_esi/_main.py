@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -62,6 +63,12 @@ def _make_encoder(values):
     cat_to_code : dict  str(v) -> float code
     code_to_cat : dict  float code -> original value
     """
+    arr = np.asarray(values)
+    if arr.dtype.kind == 'f' and np.isnan(arr).any():
+        raise ValueError(
+            "Input 'values' contains NaN. Remove or impute NaN entries before calling cat_esi."
+        )
+
     seen = {}  # str(v) -> original value, first-seen wins
     for v in values:
         key = str(v)
@@ -90,9 +97,11 @@ def _decode_samples(esi_samples, code_to_cat):
     lookup[n_codes] = None   # NaN sentinel
 
     flat = esi_samples.ravel()
-    nan_mask = np.isnan(flat.astype(np.float64))
-    indices = np.where(nan_mask, n_codes,
-                       np.clip(np.round(flat.astype(np.float64)).astype(int), 0, n_codes - 1))
+    flat_float = flat.astype(np.float64)
+    nan_mask = np.isnan(flat_float)
+    indices = np.full(len(flat), n_codes, dtype=int)   # default: NaN sentinel slot
+    valid = ~nan_mask
+    indices[valid] = np.clip(np.round(flat_float[valid]).astype(int), 0, n_codes - 1)
     return lookup[indices].reshape(esi_samples.shape)
 
 
@@ -350,7 +359,7 @@ class CatESIResult(EstimationResult):
 
     def __repr__(self):
         est = self.estimation()
-        unique = np.unique(est)
+        unique = sorted({str(v) for v in est.ravel() if v is not None})
         return (f"CatESIResult\n"
                 f"  categories : {list(unique)}\n"
                 f"  n_locations: {est.shape[0] if not self.griddata else np.prod(self.original_shape)}\n"
@@ -607,6 +616,9 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     """
     log_message(logging.logger.debug("cat_esi_hparams_search: building parameter grid"))
 
+    points = np.asarray(points)
+    values = np.asarray(values)
+
     scorer = resolve_scoring(kwargs["scoring"])
 
     # Build parameter grid (common args + classifier-specific args)
@@ -689,7 +701,11 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
                 np.concatenate(all_pred),
             )
         else:
-            results[i] = 1.0  # all folds failed
+            warnings.warn(
+                f"All folds failed for param set {param_set}; assigning worst score.",
+                RuntimeWarning, stacklevel=2,
+            )
+            results[i] = 1.0
 
         kwargs["callback"](logging.progress.inform())
 

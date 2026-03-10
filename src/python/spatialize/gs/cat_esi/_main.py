@@ -454,12 +454,13 @@ class CatESIGridSearchResult(GridSearchResult):
     Result of a hyperparameter search for categorical ESI.
     """
 
-    def __init__(self, search_result_data, classifier, ordinal_order=None, sklearn_classifier=None, random_state=None):
+    def __init__(self, search_result_data, classifier, ordinal_order=None, sklearn_classifier=None, random_state=None, seed=None):
         super().__init__(search_result_data)
         self.classifier = classifier
         self.ordinal_order = ordinal_order
         self.sklearn_classifier = sklearn_classifier
         self.random_state = random_state
+        self.seed = seed
 
     def best_result(self, **kwargs):
         """Return a dict of best parameters suitable for passing to cat_esi_nongriddata."""
@@ -484,6 +485,8 @@ class CatESIGridSearchResult(GridSearchResult):
             result["sklearn_classifier"] = self.sklearn_classifier
         if self.random_state is not None:
             result["random_state"] = self.random_state
+        if self.seed is not None:
+            result["seed"] = self.seed
         return result
 
 
@@ -803,4 +806,5 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     return CatESIGridSearchResult(result_data, kwargs["classifier"],
                                   ordinal_order=kwargs.get("ordinal_order"),
                                   sklearn_classifier=kwargs.get("sklearn_classifier"),
-                                  random_state=kwargs.get("random_state"))
+                                  random_state=kwargs.get("random_state"),
+                                  seed=kwargs.get("seed"))

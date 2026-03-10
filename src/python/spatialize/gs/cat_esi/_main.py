@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import ParameterGrid, KFold
 
 import libspatialize as lsp
-from spatialize import EstimationResult, GridSearchResult, SpatializeError, in_notebook
+from spatialize import EstimationResult, GridSearchResult, SpatializeError
 from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
 from spatialize.logging import default_singleton_callback, singleton_null_callback
@@ -337,8 +337,9 @@ class CatESIResult(EstimationResult):
                    theme = 'alges',
                    estimation_cmap = None,
                    precision_cmap = None,
+                   show = True,
                    **fig_args):
-        
+
         """
         Side-by-side plot of estimation and precision.
 
@@ -354,13 +355,15 @@ class CatESIResult(EstimationResult):
             Discrete colormap for the estimation panel. Default ``'Accent'``.
         precision_cmap : str or Colormap, optional
             Colormap for the precision panel. Defaults to the theme's colormap.
+        show : bool, optional
+            If True (default), call plt.show() and return None. If False, return the figure.
         **fig_args :
             Extra keyword arguments forwarded to ``plt.figure()`` (e.g.
             ``figsize=(10, 8)``, ``dpi=120``).
 
         Returns
         -------
-        matplotlib.figure.Figure
+        None if show=True, otherwise matplotlib.figure.Figure.
         """
         xi = self._xi
         if xi is None:
@@ -370,7 +373,7 @@ class CatESIResult(EstimationResult):
             raise SpatializeError("quick_plot() for 3D+ griddata is not supported.")
         if not self.griddata and xi.shape[1] > 2:
             raise SpatializeError("quick_plot() for 3D+ data is not supported.")
-        
+
         plot_fig_args = fig_args.copy()
         plot_fig_args.setdefault('figsize', (10,8))
         plot_fig_args.setdefault('dpi', 120)
@@ -388,7 +391,9 @@ class CatESIResult(EstimationResult):
             self.plot_precision(ax2, w=w, h=h, theme=None, cmap=style.precision_cmap)
             ax2.set_aspect('equal')
 
-        if not in_notebook():
+        if show:
+            plt.show()
+        else:
             return fig
 
     def __repr__(self):

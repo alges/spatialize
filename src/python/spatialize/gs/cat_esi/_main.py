@@ -13,7 +13,7 @@ from spatialize import logging
 from spatialize.logging import log_message
 from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotStyle
 
-from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision
+from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision, categorical_precision_cube
 from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
 from .score_functions import resolve_scoring, SCORING_OPTIONS
 
@@ -137,20 +137,63 @@ class CatESIResult(EstimationResult):
 
     # ── precision ────────────────────────────────────────────
 
-    def precision(self):
+    def precision(self, precision_function=categorical_feature_precision):
         """
-        Per-location precision: proportion of ESI samples matching the estimation.
+        Per-location precision computed by *precision_function*.
+
+        Parameters
+        ----------
+        precision_function : callable, optional
+            A function with signature ``(estimation, esi_samples) → np.ndarray``
+            that returns a per-location float metric (lower or higher = better
+            depending on the function).  Matches the ``loss_function`` convention
+            used by ``ESIResult.precision()``.
+
+            Built-in options (importable from ``spatialize.gs.cat_esi``):
+
+            - ``categorical_feature_precision`` *(default)* – proportion of ESI
+              samples that disagree with the aggregated estimation at each
+              location; values in [0, 1] where 1 means full disagreement
+              (high uncertainty).
+
+            Custom functions must accept ``(estimation, esi_samples)`` and
+            return a 1-D array of length ``p`` (number of query locations).
 
         Returns
         -------
-        np.ndarray of float in [0, 1], shape (p,) or (d1, d2) for griddata.
+        np.ndarray of float, shape (p,) or (d1, d2) for griddata.
         """
-        prec = categorical_feature_precision(self._esi_samples, self._estimation)
+        prec = precision_function(self._estimation, self._esi_samples)
         if self.griddata:
             self._precision = prec.reshape(self.original_shape)
         else:
             self._precision = prec
         return self._precision
+
+    def precision_cube(self, precision_function=categorical_precision_cube):
+        """
+        Per-location, per-partition uncertainty — the unaggregated analogue of
+        :meth:`precision`.
+
+        Mirrors ``ESIResult.precision_cube()``: instead of collapsing across
+        partitions, returns the full ``(p, n_partitions)`` array so that callers
+        can apply their own aggregation or inspect the distribution per location.
+
+        Parameters
+        ----------
+        precision_function : callable, optional
+            Signature ``(estimation, esi_samples) → np.ndarray of shape (p, n)``.
+            Default is ``categorical_precision_cube``: 1.0 where the partition
+            prediction disagrees with the estimation, 0.0 otherwise.
+
+        Returns
+        -------
+        np.ndarray, shape (p, n_partitions) or (d1, d2, n_partitions) for griddata.
+        """
+        cube = precision_function(self._estimation, self._esi_samples)
+        if self.griddata:
+            return cube.reshape(self.original_shape[0], self.original_shape[1], cube.shape[1])
+        return cube
 
     # ── ordinal order ─────────────────────────────────────────
 

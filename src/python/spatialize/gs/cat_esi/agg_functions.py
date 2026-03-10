@@ -134,39 +134,64 @@ def aggregate_with_ordinal_mv(
 #  Precision scoring
 # ─────────────────────────────────────────────────────────────
 
-def categorical_feature_precision(
+def categorical_precision_cube(
+    estimation: np.ndarray,
     esi_samples: np.ndarray,
-    esi_estimation: np.ndarray,
 ) -> np.ndarray:
     """
-    Compute per-location precision as the proportion of ESI samples that
-    match the aggregated estimation.
+    Per-location, per-partition uncertainty indicator (0-1 loss).
+
+    Analogous to ``mse_cube`` / ``mae_cube`` in ESI: returns the unaggregated
+    loss over all partitions rather than collapsing to a scalar per location.
+    Higher values indicate higher uncertainty.
+
+    - 1.0 where the partition prediction *disagrees* with the estimation.
+    - 0.0 where it agrees.
+
+    ``categorical_feature_precision`` is the mean of this cube along axis 1.
 
     Parameters
     ----------
+    estimation : np.ndarray, shape (p,)
     esi_samples : np.ndarray, shape (p, n)
-    esi_estimation : np.ndarray, shape (p,)
 
     Returns
     -------
-    np.ndarray, shape (p,), float – proportion in [0, 1].
+    np.ndarray, shape (p, n), float in {0.0, 1.0}.
     """
-    if esi_samples.shape[0] != esi_estimation.shape[0]:
-        raise ValueError("The p dimension of esi_samples and esi_estimation must match.")
-    if esi_estimation.ndim != 1:
-        raise ValueError("esi_estimation must be a 1-D array.")
+    est_str     = np.array([str(e) for e in estimation])   # (p,)
+    samples_str = np.vectorize(str)(esi_samples)            # (p, n)
+    return (samples_str != est_str[:, None]).astype(np.float64)
 
-    n_locations, n_partitions = esi_samples.shape
-    precision_scores = np.empty(n_locations, dtype=np.float64)
 
-    for location_idx in range(n_locations):
-        # Compare as strings so numeric codes and string labels are handled uniformly
-        estimated_category   = str(esi_estimation[location_idx])
-        matching_partitions  = np.sum([str(x) == estimated_category
-                                       for x in esi_samples[location_idx, :]])
-        precision_scores[location_idx] = matching_partitions / n_partitions
+def categorical_feature_precision(
+    estimation: np.ndarray,
+    esi_samples: np.ndarray,
+) -> np.ndarray:
+    """
+    Per-location uncertainty: proportion of ESI samples that disagree with
+    the aggregated estimation (mean 0-1 loss over partitions).
 
-    return precision_scores
+    Analogous to ``mse_loss`` / ``mae_loss`` in ESI. Higher values indicate
+    higher uncertainty.
+
+    - Value → 0: all partitions agree (low uncertainty).
+    - Value → 1: partitions spread across categories (high uncertainty).
+
+    Equivalent to ``categorical_precision_cube(...).mean(axis=1)``.
+
+    Parameters
+    ----------
+    estimation : np.ndarray, shape (p,)
+        Aggregated category predictions (e.g. from majority vote).
+    esi_samples : np.ndarray, shape (p, n)
+        Full ensemble samples across all partitions.
+
+    Returns
+    -------
+    np.ndarray, shape (p,), float in [0, 1].
+    """
+    return categorical_precision_cube(estimation, esi_samples).mean(axis=1)
 
 
 # ─────────────────────────────────────────────────────────────

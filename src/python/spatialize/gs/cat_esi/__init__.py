@@ -9,6 +9,7 @@ from .agg_functions import (
     aggregate_with_mv,
     aggregate_with_ordinal_mv,
     categorical_feature_precision,
+    categorical_precision_cube,
 )
 from .score_functions import (
     accuracy,
@@ -30,6 +31,7 @@ __all__ = [
     "aggregate_with_mv",
     "aggregate_with_ordinal_mv",
     "categorical_feature_precision",
+    "categorical_precision_cube",
     "accuracy",
     "f1_macro",
     "f1_weighted",

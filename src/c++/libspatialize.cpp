@@ -1500,9 +1500,17 @@ PYBIND11_MODULE(libspatialize, m) {
       "Custom COESI marginal distribution leave one out"
     );
     m.def(
-      "marginal_kfold_custom_coesi", 
-      &marginal_kfold_custom_coesi, 
+      "marginal_kfold_custom_coesi",
+      &marginal_kfold_custom_coesi,
       "Custom COESI marginal distribution kfold validation"
+    );
+
+    // On macOS/pyenv, libomp's atexit cleanup can hang during Jupyter kernel reset
+    // because the OpenMP thread pool stays alive for the entire process lifetime.
+    // Registering an atexit that collapses the pool to 1 thread first lets libomp's
+    // own atexit handler complete cleanly.
+    py::module_::import("atexit").attr("register")(
+        py::cpp_function([]() { omp_set_num_threads(1); }, py::name("_spatialize_omp_cleanup"))
     );
 }
 

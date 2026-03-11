@@ -13,9 +13,6 @@ by ``libspatialize.estimation_custom_esi``.
 import numpy as np
 from typing import Optional, Tuple
 
-from scipy.spatial import KDTree
-from sklearn.decomposition import PCA
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  knn_pca classifier
@@ -33,9 +30,11 @@ def _knn_pca_weighted_diffs(cell_points, cell_values, max_neighbors=10):
     if k <= 0:
         return np.empty((0, cell_points.shape[1]))
 
-    # Use KDTree to find k-nearest neighbors: O(n log n) instead of O(n²D)
-    _, neighbor_idx = KDTree(cell_points).query(cell_points, k=k + 1)
-    neighbor_idx = neighbor_idx[:, 1:]  # exclude self  (n, k)
+    # Brute-force pairwise squared distances — faster than KDTree for small cells
+    diffs_all = cell_points[:, np.newaxis, :] - cell_points[np.newaxis, :, :]  # (n, n, D)
+    sq_dists  = np.einsum('ijk,ijk->ij', diffs_all, diffs_all)                 # (n, n)
+    np.fill_diagonal(sq_dists, np.inf)                                         # exclude self
+    neighbor_idx = np.argpartition(sq_dists, k, axis=1)[:, :k]                # (n, k)
 
     # Categorical dissimilarity weight
     dissimilarity = (cell_values[neighbor_idx] != cell_values[:, np.newaxis]).astype(np.float64)
@@ -48,10 +47,10 @@ def _knn_pca_weighted_diffs(cell_points, cell_values, max_neighbors=10):
 
 def _knn_pca_direction(cell_points, cell_values):
     """
-    PCA on categorical boundary gradients to find the principal anisotropy direction.
+    SVD on categorical boundary gradients to find the principal anisotropy direction.
 
-    Returns (principal_direction, explained_variance_ratio, pca_object).
-    Returns (zeros, zeros, None) if PCA cannot be computed.
+    Returns (principal_direction, explained_variance_ratio, rotation_matrix).
+    Returns (zeros, zeros, None) if SVD cannot be computed.
     """
     if cell_points.shape[0] < 2:
         raise ValueError("At least 2 points required.")
@@ -63,16 +62,20 @@ def _knn_pca_direction(cell_points, cell_values):
     weighted_diffs = _knn_pca_weighted_diffs(cell_points_f, cell_values_i, max_neighbors)
 
     n_dim = cell_points.shape[1]
-    if weighted_diffs.shape[0] == 0:
+    # Need at least n_dim samples for a full-rank rotation matrix
+    if weighted_diffs.shape[0] < n_dim:
         return np.zeros(n_dim), np.zeros(n_dim), None
 
-    pca = PCA(n_components=n_dim)
+    centered = weighted_diffs - weighted_diffs.mean(axis=0)  # zero-center before decomposition
     try:
-        pca.fit(weighted_diffs)
-    except Exception:
+        # full_matrices=False: Vt is (n_dim, n_dim) when n_samples >= n_dim
+        _, S, Vt = np.linalg.svd(centered, full_matrices=False)
+    except np.linalg.LinAlgError:
         return np.zeros(n_dim), np.zeros(n_dim), None
 
-    return pca.components_[0], pca.explained_variance_ratio_, pca
+    total_s2 = np.dot(S, S)
+    evr = S ** 2 / total_s2 if total_s2 > 0 else np.zeros(len(S))  # proportion of variance per axis
+    return Vt[0], evr, Vt  # principal direction, explained variance ratio, full rotation matrix
 
 
 def _knn_pca_predict(cell_points, cell_values, cell_queries, cell_params):
@@ -182,11 +185,9 @@ def _set_cell_params_knn_pca(
         cell_values_s = np.ascontiguousarray(cell_values, dtype=np.int64)
         n_eff = n_points
 
-    _, explained_variance_ratio, pca_object = _knn_pca_direction(cell_points_s, cell_values_s)
-    if pca_object is None:
+    _, explained_variance_ratio, pca_rotation = _knn_pca_direction(cell_points_s, cell_values_s)
+    if pca_rotation is None:
         return _default_params()
-
-    pca_rotation = pca_object.components_  # (D, D)
 
     # k candidates
     if n_neighbors is not None:

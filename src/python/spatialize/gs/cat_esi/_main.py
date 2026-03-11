@@ -499,7 +499,7 @@ class CatESIGridSearchResult(GridSearchResult):
     common_args={
         "n_partitions": 300,
         "alpha": 0.8,
-        "seed": np.random.randint(1000, 10000),
+        "seed": None,
         "agg_function": 'mv',
         "ordinal_order": None,
         "callback": default_singleton_callback,
@@ -522,9 +522,11 @@ def _call_custom_esi(points, values, xi, **kwargs):
     classifier callbacks, calls C++, decodes results, and applies
     the aggregation function.
     """
-    # log_message(logging.logger.debug("calling estimation_custom_esi"))  # TODO: move to facade layer
+    if kwargs.get("seed") is None:
+        kwargs["seed"] = np.random.randint(1000, 10000)  # generate per-call so each run is independent
 
     if kwargs["best_params_found"] is not None:
+        #seed_before_override = kwargs["seed"]
         try:
             best = kwargs["best_params_found"]["n_partitions"]
             log_message(logging.logger.debug(f"best number of partitions found: {best}"))
@@ -644,8 +646,8 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
         "n_partitions": [100, 300],
         "alpha": [0.7, 0.8, 0.9],
         "scoring": "f1_macro",
-        "seed": np.random.randint(1000, 10000),
-        "folding_seed": np.random.randint(1000, 10000),
+        "seed": None,
+        "folding_seed": None,
         "agg_function": 'mv',
         "ordinal_order": None,
         "callback": default_singleton_callback,
@@ -699,6 +701,11 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     -------
     CatESIGridSearchResult
     """
+    if kwargs.get("seed") is None:
+        kwargs["seed"] = np.random.randint(1000, 10000)          # ESI partitioning seed
+    if kwargs.get("folding_seed") is None:
+        kwargs["folding_seed"] = np.random.randint(1000, 10000)  # KFold shuffle seed
+
     log_message(logging.logger.debug("cat_esi_hparams_search: building parameter grid"))
 
     points = np.asarray(points)

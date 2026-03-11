@@ -10,8 +10,11 @@ which returns the ``(set_cell_params_fn, classifier_fn)`` pair expected
 by ``libspatialize.estimation_custom_esi``.
 """
 
+#import logging as _logging
 import numpy as np
 from typing import Optional, Tuple
+
+#_log = _logging.getLogger("spatialize.cat_esi")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -168,8 +171,13 @@ def _set_cell_params_knn_pca(
     if seed is not None:
         centroid_bits = int(np.round(cell_points.mean(axis=0) * 1e6).astype(np.int64).sum())
         cell_seed = (seed * 2654435761 + centroid_bits) & 0xFFFFFFFF  # Knuth multiplicative hash
+        #_log.debug("knn_pca set_cell_params: global seed=%d → cell_seed=%d (centroid_bits=%d)", seed, cell_seed, centroid_bits)
     else:
         cell_seed = None
+        """_log.warning(
+            "knn_pca set_cell_params: seed is None → np.random.default_rng(None) will use OS "
+            "entropy (non-deterministic). Pass an explicit seed to cat_esi_griddata/nongriddata."
+        )"""
     rng = np.random.default_rng(cell_seed)
 
     max_points_actual   = max_points   if max_points   is not None else min(n_points, 200)
@@ -313,13 +321,23 @@ def _make_knn_fns(n_neighbors=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_svm_fns(C=None, kernel=None, gamma=None, random_state=None):
+def _make_svm_fns(C=None, kernel=None, gamma=None, random_state=None, seed=None):
     """Wrap sklearn SVC in the C++ callback protocol."""
     from sklearn.svm import SVC
     _C      = C      if C      is not None else 1.0
     _kernel = kernel if kernel is not None else "rbf"
     _gamma  = gamma  if gamma  is not None else "scale"
-    _rs     = random_state if random_state is not None else np.random.randint(0, 100000)
+    if random_state is not None:
+        _rs = random_state
+    elif seed is not None:
+        _rs = int((seed * 1000003) & 0xFFFFFFFF)  # derive deterministically from ESI seed
+        #_log.debug("svm: random_state not set, derived from seed=%d → random_state=%d", seed, _rs)
+    else:
+        _rs = np.random.randint(0, 100000)
+        """_log.warning(
+            "svm: neither random_state nor seed provided → random_state=%d drawn from global RNG "
+            "(non-deterministic). Pass seed= to cat_esi_griddata/nongriddata for reproducibility.", _rs
+        )"""
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -339,11 +357,21 @@ def _make_svm_fns(C=None, kernel=None, gamma=None, random_state=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_rf_fns(n_estimators=None, max_depth=None, random_state=None):
+def _make_rf_fns(n_estimators=None, max_depth=None, random_state=None, seed=None):
     """Wrap sklearn RandomForestClassifier in the C++ callback protocol."""
     from sklearn.ensemble import RandomForestClassifier
     _n  = n_estimators if n_estimators is not None else 100
-    _rs = random_state if random_state is not None else np.random.randint(0, 100000)
+    if random_state is not None:
+        _rs = random_state
+    elif seed is not None:
+        _rs = int((seed * 999983) & 0xFFFFFFFF)
+        #_log.debug("rf: random_state not set, derived from seed=%d → random_state=%d", seed, _rs)
+    else:
+        _rs = np.random.randint(0, 100000)
+        """_log.warning(
+            "rf: neither random_state nor seed provided → random_state=%d drawn from global RNG "
+            "(non-deterministic). Pass seed= to cat_esi_griddata/nongriddata for reproducibility.", _rs
+        )"""
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -363,11 +391,21 @@ def _make_rf_fns(n_estimators=None, max_depth=None, random_state=None):
     return set_cell_params_fn, classifier_fn
 
 
-def _make_dt_fns(max_depth=None, min_samples_split=None, random_state=None):
+def _make_dt_fns(max_depth=None, min_samples_split=None, random_state=None, seed=None):
     """Wrap sklearn DecisionTreeClassifier in the C++ callback protocol."""
     from sklearn.tree import DecisionTreeClassifier
     _mss = min_samples_split if min_samples_split is not None else 2
-    _rs  = random_state if random_state is not None else np.random.randint(0, 100000)
+    if random_state is not None:
+        _rs = random_state
+    elif seed is not None:
+        _rs = int((seed * 998244353) & 0xFFFFFFFF)
+        #_log.debug("dt: random_state not set, derived from seed=%d → random_state=%d", seed, _rs)
+    else:
+        _rs = np.random.randint(0, 100000)
+        """_log.warning(
+            "dt: neither random_state nor seed provided → random_state=%d drawn from global RNG "
+            "(non-deterministic). Pass seed= to cat_esi_griddata/nongriddata for reproducibility.", _rs
+        )"""
 
     def set_cell_params_fn(cell_points, cell_values):
         return np.array([], dtype=np.float64)
@@ -485,6 +523,7 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
             kernel=kwargs.get("kernel"),
             gamma=kwargs.get("gamma"),
             random_state=kwargs.get("random_state"),
+            seed=kwargs.get("seed"),
         )
 
     elif classifier == "rf":
@@ -492,6 +531,7 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
             n_estimators=kwargs.get("n_estimators"),
             max_depth=kwargs.get("max_depth"),
             random_state=kwargs.get("random_state"),
+            seed=kwargs.get("seed"),
         )
 
     elif classifier == "dt":
@@ -499,6 +539,7 @@ def get_classifier_fns(classifier: str, **kwargs) -> Tuple:
             max_depth=kwargs.get("max_depth"),
             min_samples_split=kwargs.get("min_samples_split"),
             random_state=kwargs.get("random_state"),
+            seed=kwargs.get("seed"),
         )
 
     else:

@@ -31,9 +31,7 @@ def aggregate_with_mv(esi_samples: np.ndarray) -> np.ndarray:
         """Return the most frequent category across partitions for one location."""
         if len(partition_samples) == 0:
             return None
-        # Convert to strings so that mixed types (int, float, str) compare consistently
-        string_samples = [str(x) for x in partition_samples]
-        counts = Counter(string_samples)
+        counts = Counter(partition_samples)  # count occurrences of each label
         if not counts:
             return None
         # Iterate counts to find the winner; first-encountered wins on ties
@@ -159,9 +157,8 @@ def categorical_precision_cube(
     -------
     np.ndarray, shape (p, n), float in {0.0, 1.0}.
     """
-    est_str     = np.array([str(e) for e in estimation])   # (p,)
-    samples_str = np.vectorize(str)(esi_samples)            # (p, n)
-    return (samples_str != est_str[:, None]).astype(np.float64)
+    # 1 where a partition disagrees with the aggregated estimate, 0 where it agrees
+    return (esi_samples != estimation[:, None]).astype(np.float64)
 
 
 def categorical_feature_precision(

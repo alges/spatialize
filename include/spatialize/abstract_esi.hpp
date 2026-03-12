@@ -472,6 +472,8 @@ namespace sptlz{
 							for(size_t k=0; k<locations_by_leaf.at(j).size(); k++){
 								results.at(locations_by_leaf.at(j).at(k)).push_back(predictions.at(k));
 							}
+							if (PyErr_CheckSignals() != 0)  // check after each leaf callback
+								throw pybind11::error_already_set();
 						}
 					}
 

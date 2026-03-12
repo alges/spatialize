@@ -1505,12 +1505,21 @@ PYBIND11_MODULE(libspatialize, m) {
       "Custom COESI marginal distribution kfold validation"
     );
 
-    // On macOS/pyenv, libomp's atexit cleanup can hang during Jupyter kernel reset
-    // because the OpenMP thread pool stays alive for the entire process lifetime.
-    // Registering an atexit that collapses the pool to 1 thread first lets libomp's
-    // own atexit handler complete cleanly.
+    // On macOS, libomp's atexit cleanup hangs during Jupyter kernel restart because
+    // worker threads are sleeping and cannot be joined cleanly.
+    // Fix: at module load, set blocktime=0 so threads sleep immediately (not spin-wait).
+    // At atexit, call omp_pause_resource_all(omp_pause_hard) which terminates all worker
+    // threads (OpenMP 5.0), leaving nothing to join when libomp's own destructor runs.
+    #ifdef _OPENMP
+    kmp_set_blocktime(0);
+    #endif
     py::module_::import("atexit").attr("register")(
-        py::cpp_function([]() { omp_set_num_threads(1); }, py::name("_spatialize_omp_cleanup"))
+        py::cpp_function([]() {
+            #ifdef _OPENMP
+            omp_pause_resource_all(omp_pause_hard);
+            omp_set_num_threads(1);
+            #endif
+        }, py::name("_spatialize_omp_cleanup"))
     );
 }
 

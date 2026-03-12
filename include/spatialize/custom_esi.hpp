@@ -63,6 +63,8 @@ namespace sptlz{
               leaf_values.push_back(values.at(mt->samples_by_leaf.at(j).at(k)));
             }
             mt->leaf_params.at(j) = post_creation(&leaf_coords, &leaf_values);
+            if (PyErr_CheckSignals() != 0)  // check after each leaf (Python callback may be slow)
+              throw pybind11::error_already_set();
           }
           if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
             throw pybind11::error_already_set();

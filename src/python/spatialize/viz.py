@@ -885,7 +885,9 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
 
 
 def plot_nongriddata(data, xi_locations, ax=None, title="",
-                       figsize=None, dpi=120, origin='lower', **imshow_args):
+                       figsize=None, dpi=120, origin='lower', 
+                       show_colorbar=True, cbar_label='Value',
+                       **imshow_args):
     """
     Plots a colormap visualization for non-rectangular/irregular spatial data.
 
@@ -986,10 +988,12 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
     img = plotter.imshow(results_array.est.T, origin=origin, **imshow_args)
 
     # Add colorbar
-    divider = make_axes_locatable(plotter)
-    cax = divider.append_axes("right", size="5%", pad=0.1)
-    cax.grid(False)
-    plt.colorbar(img, orientation='vertical', cax=cax)
+    if show_colorbar:
+        divider = make_axes_locatable(plotter)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cax.grid(False)
+        cbar = plt.colorbar(img, orientation='vertical', cax=cax)
+        cbar.set_label(cbar_label)
 
     # Return figure if we created it and not in notebook
     if fig_created and not in_notebook():
@@ -1001,8 +1005,9 @@ def plot_scatter(points, values, cmap=None,
                  theme='publication',
                  figsize=None, dpi=100,
                  fig=None, ax=None,
+                 extent=None,
                  show_colorbar=True, cbar_label='Value',
-                 **plot_args):
+                 **scatter_args):
     """
     Create a 2D scatter plot of spatial data coloured by value.
 
@@ -1041,7 +1046,7 @@ def plot_scatter(points, values, cmap=None,
         Whether to append a colorbar. Default is ``True``.
     cbar_label : str, optional
         Colorbar label. Default is ``'Value'``.
-    **plot_args
+    **scatter_args
         Additional keyword arguments forwarded to
         :func:`matplotlib.axes.Axes.scatter`.
 
@@ -1062,16 +1067,20 @@ def plot_scatter(points, values, cmap=None,
     >>> fig, ax = plt.subplots()
     >>> plot_scatter(points, values, ax=ax, fig=fig, show_colorbar=False)
     """
-
     X = points[:, 0]
     Y = points[:, 1]
-    extent = [np.min(X),  np.max(X),  np.min(Y),  np.max(Y)]
+
+    plot_scatter_args = scatter_args.copy()
+    plot_scatter_args.setdefault('zorder', 3)
+
+    if not extent:
+        extent = [X.min(), X.max(), Y.min(), Y.max()]
 
     with PlotStyle(theme=theme, cmap=cmap) as style:
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
-        plot = ax.scatter(X, Y, c=values, cmap=style.cmap, zorder=3, **plot_args)
+        plot = ax.scatter(X, Y, c=values, cmap=style.cmap, **plot_scatter_args)
         _ax_format(ax, xlabel, ylabel, title, extent)
 
         # Optional colorbar
@@ -1213,6 +1222,7 @@ def plot_categorical_scatter(points, values, cmap='Accent',
                               fig=None, ax=None,
                               extent=None,
                               legend_title='Category',
+                              show_legend=True,
                               **scatter_args):
     """
     2D scatter plot coloured by categorical labels.
@@ -1239,6 +1249,7 @@ def plot_categorical_scatter(points, values, cmap='Accent',
     theme : str, PlotStyle theme name (default 'publication')
     figsize, dpi : figure size and resolution
     fig, ax : existing matplotlib Figure/Axes to plot into
+    show_legend : bool, whether to show the legend (default True)
     legend_title : str, title for the legend
     **scatter_args : forwarded to ``ax.scatter()``
 
@@ -1257,17 +1268,21 @@ def plot_categorical_scatter(points, values, cmap='Accent',
     if not extent:
         extent = [X.min(), X.max(), Y.min(), Y.max()]
 
+    # set kwargs for the plot
+    plot_scatter_args = scatter_args.copy()
+    plot_scatter_args.setdefault('zorder', 3)
+
     with PlotStyle(theme=theme):
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
         for i, cat in enumerate(unique_cats):
             mask = values == cat
-            ax.scatter(X[mask], Y[mask], label=str(cat), color=colors[i],
-                       zorder=3, **scatter_args)
+            ax.scatter(X[mask], Y[mask], label=str(cat), color=colors[i], **scatter_args)
 
         _ax_format(ax, xlabel, ylabel, title, extent)
-        ax.legend(title=legend_title, loc='center left', bbox_to_anchor=(1.05, 0.5))
+        if show_legend:
+            ax.legend(title=legend_title, loc='center left', bbox_to_anchor=(1.05, 0.5))
 
     return fig, ax
 
@@ -1280,6 +1295,7 @@ def plot_categorical_colormap(data, categories=None, cmap='Accent',
                                ax=None, w=None, h=None, xi_locations=None,
                                griddata=False, nonnum_order=None,
                                extent=None, title=None, legend_title='Category',
+                               show_legend=True,
                                figsize=None, dpi=120, **kwargs):
     """
     Image-style categorical map using a discrete ``ListedColormap``.
@@ -1314,6 +1330,7 @@ def plot_categorical_colormap(data, categories=None, cmap='Accent',
     extent : list [x_min, x_max, y_min, y_max], optional, passed to imshow.
     title : str, plot title (only when ``ax`` is None).
     legend_title : str, legend title.
+    show_legend : bool, whether to show the legend (default True).
     figsize, dpi : figure size / resolution (only when ``ax`` is None).
     """
     data = np.asarray(data, dtype=object)
@@ -1384,5 +1401,6 @@ def plot_categorical_colormap(data, categories=None, cmap='Accent',
         Patch(facecolor=colors[i], label=str(cat))
         for i, cat in enumerate(categories)
     ]
-    plotter.legend(handles=legend_elements, title=legend_title,
-                   loc='center left', bbox_to_anchor=(1.02, 0.5))
+    if show_legend:
+        plotter.legend(handles=legend_elements, title=legend_title,
+                       loc='center left', bbox_to_anchor=(1.02, 0.5))

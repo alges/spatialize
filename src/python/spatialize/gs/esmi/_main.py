@@ -1,16 +1,25 @@
 import numpy as np
 import math
 from spatialize import SpatializeError, logging
-from spatialize.gs import lib_spatialize_facade
+from spatialize.gs import lib_spatialize_facade, local_interpolator as li
+from spatialize._util import signature_overload
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 
 # ============================================================================
 # Shared utility functions
 # ============================================================================
 
-def _get_esi_estimates(points, values, xi, T, alpha_t, exp, seed, callback):
+@signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
+                    common_args={"seed": 0,
+                                 "callback": default_singleton_callback},
+                    specific_args={
+                        li.IDW: {"exponent": 3.0},
+                        li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
+                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
+                    })
+def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     """
-    Get T spatial estimates for each location in xi using ESI-IDW.
+    Get T spatial estimates for each location in xi using ESI.
 
     Parameters
     ----------
@@ -25,12 +34,26 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, exp, seed, callback):
     alpha_t : float
         Spatial partition granularity parameter. Range: [0, 1].
         Higher values create smaller, more granular partitions.
-    exp : float
-        IDW exponent. Must be > 0.
-    seed : int
+    local_interpolator : str, default="idw"
+        Local interpolator type: "idw", "kriging", or "adaptiveidw".
+    seed : int, default=0
         Random seed for reproducibility.
     callback : callable
         Callback function for progress reporting.
+    exponent : float, default=3.0
+        IDW exponent (IDW only).
+    model : str, default="spherical"
+        Variogram model (Kriging only): "spherical", "exponential", "cubic", "gaussian".
+    nugget : float, default=0.1
+        Kriging nugget parameter (Kriging only).
+    range : float, default=5000.0
+        Kriging range parameter (Kriging only).
+    sill : float, default=1.0
+        Kriging sill parameter (Kriging only).
+    metric : str, default="mae"
+        Error metric for adaptive IDW (Adaptive IDW only).
+    parallelize : bool, default=False
+        Whether to parallelize adaptive IDW fitting (Adaptive IDW only).
 
     Returns
     -------
@@ -42,9 +65,29 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, exp, seed, callback):
     values = np.asarray(values)
     xi = np.asarray(xi)
 
-    _, esi_samples = lib_spatialize_facade.get_operator(points, "idw", "estimate", "mondrian")(
-        points, values, T, alpha_t, exp, seed, xi, callback
-    )
+    interp_type = kwargs["local_interpolator"]
+    estimate = lib_spatialize_facade.get_operator(points, interp_type, "estimate", "mondrian")
+
+    # Base args common to all interpolators
+    l_args = [points, values, T, alpha_t]
+
+    if interp_type == li.IDW:
+        l_args.append(kwargs["exponent"])
+        l_args.append(kwargs["seed"])
+    elif interp_type == li.KRIGING:
+        l_args.append(lib_spatialize_facade.get_kriging_model_number(kwargs["model"]))
+        l_args.append(kwargs["nugget"])
+        l_args.append(kwargs["range"])
+        l_args.append(kwargs["sill"])
+        l_args.append(kwargs["seed"])
+    elif interp_type == li.ADAPTIVE_IDW:
+        l_args.append(kwargs["seed"])
+        l_args.append(kwargs["metric"])
+        l_args.append(kwargs["parallelize"])
+
+    l_args.extend([xi, kwargs["callback"]])
+
+    _, esi_samples = estimate(*l_args)
     return esi_samples
 
 
@@ -163,7 +206,9 @@ class SpatialEntropy:
                  alpha_t=0.9,
                  alpha_m=0.6,
                  seed=0,
-                 callback=None
+                 callback=None,
+                 local_interpolator="idw",
+                 **interp_kwargs
                  ):
         """
         Initialize Spatial Entropy estimator.
@@ -184,6 +229,13 @@ class SpatialEntropy:
             Random seed for reproducibility.
         callback : callable, optional
             Callback function for progress reporting. If None, uses default progress callback.
+        local_interpolator : str, default="idw"
+            Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
+        **interp_kwargs
+            Interpolator-specific parameters:
+            - IDW: exponent (float, default=3.0)
+            - Kriging: model (str), nugget (float), range (float), sill (float)
+            - Adaptive IDW ("adaptiveidw"): metric (str), parallelize (bool)
 
         Raises
         ------
@@ -205,13 +257,15 @@ class SpatialEntropy:
         self.alpha_m = alpha_m
         self.seed = seed
         self.callback = callback if callback is not None else default_singleton_callback
+        self.local_interpolator = local_interpolator
+        self.interp_kwargs = interp_kwargs
 
-    def calculate_entropy(self, points, values, xi, exp=3.0):
+    def calculate_entropy(self, points, values, xi):
         """
         Calculate ensemble spatial entropy for all points in xi.
 
         For each target location x_i, computes h(U|X=x_i) by:
-        1. Generating T spatial estimates via ESI-IDW
+        1. Generating T spatial estimates via ESI
         2. Partitioning the value range using M Mondrian trees
         3. Computing differential entropy from cell probabilities and sizes
 
@@ -223,8 +277,6 @@ class SpatialEntropy:
             Sample values.
         xi : array-like, shape (n_targets, n_dims)
             Target locations for entropy calculation.
-        exp : float, default=3.0
-            IDW exponent for interpolation. Must be > 0.
 
         Returns
         -------
@@ -244,11 +296,14 @@ class SpatialEntropy:
         if len(xi) == 0:
             raise SpatializeError("xi must contain at least one target location")
 
-        log_message(logging.logger.debug(f'generating {self.T} ESI samples using alpha_t={self.alpha_t}, exponent={exp}'))
+        log_message(logging.logger.debug(f'generating {self.T} ESI samples using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
         print("Generating ESI samples...")
         # Get esi_samples for all points in xi (progress tracked by C++ code)
-        esi_samples = _get_esi_estimates(points, values, xi, self.T, self.alpha_t, exp, self.seed, self.callback)
+        esi_samples = _get_esi_estimates(points, values, xi, self.T, self.alpha_t,
+                                         local_interpolator=self.local_interpolator,
+                                         seed=self.seed, callback=self.callback,
+                                         **self.interp_kwargs)
         self.esi_samples = esi_samples
 
         # Pre-allocate array for efficiency
@@ -360,7 +415,9 @@ class SpatialMutualInformation:
                  alpha_t=0.9,
                  alpha_m=0.6,
                  seed=0,
-                 callback=None
+                 callback=None,
+                 local_interpolator="idw",
+                 **interp_kwargs
                  ):
         """
         Initialize Spatial Mutual Information estimator.
@@ -381,6 +438,13 @@ class SpatialMutualInformation:
             Random seed for reproducibility.
         callback : callable, optional
             Callback function for progress reporting. If None, uses default progress callback.
+        local_interpolator : str, default="idw"
+            Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
+        **interp_kwargs
+            Interpolator-specific parameters:
+            - IDW: exponent (float, default=3.0)
+            - Kriging: model (str), nugget (float), range (float), sill (float)
+            - Adaptive IDW ("adaptiveidw"): metric (str), parallelize (bool)
 
         Raises
         ------
@@ -402,6 +466,8 @@ class SpatialMutualInformation:
         self.alpha_m = alpha_m
         self.seed = seed
         self.callback = callback if callback is not None else default_singleton_callback
+        self.local_interpolator = local_interpolator
+        self.interp_kwargs = interp_kwargs
 
     def _calculate_marginal_entropy_from_joint(self, partitions_2d, leaf_indexes_2d, marginal='u'):
         """
@@ -525,7 +591,7 @@ class SpatialMutualInformation:
     def calculate_mutual_information(self,
                                      points_u, values_u,
                                      points_v, values_v,
-                                     xi, exp=3.0):
+                                     xi):
         """
         Calculate spatial mutual information I(U;V | X=x, Y=y) for all points in xi.
 
@@ -547,8 +613,6 @@ class SpatialMutualInformation:
             Sample values for variable V.
         xi : array-like, shape (n_targets, n_dims)
             Target locations (used for both U and V).
-        exp : float, default=3.0
-            IDW exponent for interpolation. Must be > 0.
 
         Returns
         -------
@@ -572,17 +636,23 @@ class SpatialMutualInformation:
         if len(xi) == 0:
             raise SpatializeError("xi must contain at least one target location")
 
-        log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable U using alpha_t={self.alpha_t}, exponent={exp}'))
+        log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable U using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
         print("Generating ESI samples for U...")
         # Get ESI estimates for both variables at all target locations (progress tracked by C++ code)
-        estimates_u = _get_esi_estimates(points_u, values_u, xi, self.T, self.alpha_t, exp, self.seed, self.callback)
+        estimates_u = _get_esi_estimates(points_u, values_u, xi, self.T, self.alpha_t,
+                                         local_interpolator=self.local_interpolator,
+                                         seed=self.seed, callback=self.callback,
+                                         **self.interp_kwargs)
         self.esi_samples_u = estimates_u
 
-        log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable V using alpha_t={self.alpha_t}, exponent={exp}'))
+        log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable V using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
         print("Generating ESI samples for V...")
-        estimates_v = _get_esi_estimates(points_v, values_v, xi, self.T, self.alpha_t, exp, self.seed + 1, self.callback)
+        estimates_v = _get_esi_estimates(points_v, values_v, xi, self.T, self.alpha_t,
+                                         local_interpolator=self.local_interpolator,
+                                         seed=self.seed + 1, callback=self.callback,
+                                         **self.interp_kwargs)
         self.esi_samples_v = estimates_v
 
         # Pre-allocate arrays for efficiency

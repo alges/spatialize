@@ -67,8 +67,8 @@ xi = generate_regular_grid(grid_ranges, grid_step)
 points, values = generate_samples(n_samples, xi, mu)
 
 # Calculate spatial entropy
-entropy_estimator = SpatialEntropy(T=800, M=300, alpha_t=0.8, alpha_m=0.4)
-estimates = entropy_estimator.calculate_entropy(points, values, xi, exp=2.5)
+entropy_estimator = SpatialEntropy(T=800, M=300, alpha_t=0.8, alpha_m=0.4, exponent=2.5)
+estimates = entropy_estimator.calculate_entropy(points, values, xi)
 
 # Visualize results
 with PlotStyle(theme='publication', cmap='batlow') as style:

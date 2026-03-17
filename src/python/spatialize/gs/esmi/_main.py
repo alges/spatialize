@@ -1,7 +1,7 @@
 import numpy as np
 import math
-import libspatialize as lsp
 from spatialize import SpatializeError, logging
+from spatialize.gs import lib_spatialize_facade
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 
 # ============================================================================
@@ -42,7 +42,7 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, exp, seed, callback):
     values = np.asarray(values)
     xi = np.asarray(xi)
 
-    _, esi_samples = lsp.estimation_esi_idw(
+    _, esi_samples = lib_spatialize_facade.get_operator(points, "idw", "estimate", "mondrian")(
         points, values, T, alpha_t, exp, seed, xi, callback
     )
     return esi_samples
@@ -79,7 +79,7 @@ def _create_partitions(samples, M, alpha_m, seed):
     if samples.ndim == 1:
         samples = samples.reshape(-1, 1)
 
-    partitions = lsp.get_partitions_using_esi(
+    partitions = lib_spatialize_facade.get_partitions_using_esi(
         samples, M, alpha_m, None, seed
     )
 
@@ -117,7 +117,7 @@ def _get_leaf_indexes(samples, M, alpha_m, seed):
     if samples.ndim == 1:
         samples = samples.reshape(-1, 1)
 
-    return lsp.get_leaf_for_samples_using_esi(
+    return lib_spatialize_facade.get_leaf_for_samples_using_esi(
         samples, M, alpha_m, None, seed
     )
 

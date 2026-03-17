@@ -4,8 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import ParameterGrid, KFold
 
-import libspatialize as lsp
 from spatialize import EstimationResult, GridSearchResult, SpatializeError
+from spatialize.gs import lib_spatialize_facade
 from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
 from spatialize.logging import default_singleton_callback, singleton_null_callback
@@ -553,7 +553,7 @@ def _call_custom_esi(points, values, xi, **kwargs):
     )
 
     try:
-        _, esi_samples_raw = lsp.estimation_custom_esi(
+        _, esi_samples_raw = lib_spatialize_facade.get_custom_esi_operator()(
             np.float64(points),
             encoded_values,
             kwargs["n_partitions"],

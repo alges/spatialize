@@ -182,7 +182,7 @@ class ESIResult(EstimationResult):
         :return: The figure.
         """
         if self.griddata:
-            if self._xi.shape[0] > 2:
+            if len(self._xi) > 2:
                 raise SpatializeError("quick_plot() for 3D data is not supported")
         else:
             if self._xi.shape[-1] > 2:

@@ -47,6 +47,264 @@ class ESIGridSearchResult(GridSearchResult):
         return result
 
 
+class ESIParetoResult:
+    """Results of a Pareto hyperparameter search for ESI.
+
+    Analogous to :class:`ESIGridSearchResult` but carries two objectives per
+    configuration — the encoder error ε̂ and the decoder error R_CV — and
+    exposes the Pareto frontier between them.
+
+    Attributes
+    ----------
+    all_results : list of dict
+        One entry per evaluated parameter configuration.  Keys:
+        ``"params"`` (dict), ``"epsilon"`` (float, ε̂), ``"decoder_error"``
+        (float, R_CV).
+    frontier : list of dict
+        Non-dominated subset of ``all_results`` (lower is better for both
+        objectives).
+    p_process : str
+        Partitioning process used during optimisation.
+    local_interpolator : str
+        Local interpolator used during optimisation.
+    """
+
+    def __init__(
+        self,
+        all_results: list,
+        p_process: str,
+        local_interpolator: str,
+    ) -> None:
+        self.all_results = all_results
+        self.p_process = p_process
+        self.local_interpolator = local_interpolator
+        self.frontier = self._compute_frontier(all_results)
+
+    # ------------------------------------------------------------------
+    # Public retrieval methods
+    # ------------------------------------------------------------------
+
+    def best_result(self, strategy: str = "min_decoder") -> dict:
+        """Return the best configuration from the Pareto frontier.
+
+        When the frontier contains a single point the strategy is irrelevant.
+        For multi-point frontiers the following strategies are available:
+
+        ``"min_decoder"`` *(default)*
+            Select the frontier point with the lowest decoder error R_CV.
+        ``"min_epsilon"``
+            Select the frontier point with the lowest encoder error ε̂.
+        ``"knee"``
+            Geometric *knee* point: maximum perpendicular distance from the
+            line connecting the two extreme frontier points (in normalised
+            objective space).  Represents the most balanced trade-off.
+        ``"utopia"``
+            Closest frontier point to the *utopia* point (the vector of
+            individual objective minima) in normalised objective space.
+
+        Parameters
+        ----------
+        strategy : str
+            One of ``"min_decoder"``, ``"min_epsilon"``, ``"knee"``,
+            ``"utopia"``.
+
+        Returns
+        -------
+        dict
+            Configuration dict compatible with :func:`esi_griddata`
+            ``best_params_found`` argument.  Contains all parameter keys from
+            ``"params"`` plus ``"epsilon"``, ``"decoder_error"``,
+            ``"agg_function"``, ``"p_process"``, and ``"local_interpolator"``.
+
+        Raises
+        ------
+        ValueError
+            If the frontier is empty or an unknown strategy is specified.
+        """
+        if not self.frontier:
+            raise ValueError("Pareto frontier is empty — no results were evaluated.")
+
+        r = self.frontier[0] if len(self.frontier) == 1 else self._select_frontier_point(strategy)
+        return self._format_result(r)
+
+    def best_for_tau(self, tau: float):
+        """Minimum decoder error subject to ε̂ ≤ *tau*.
+
+        Searches across **all** evaluated configurations, not only the
+        frontier, so this can return a dominated point when the constraint
+        forces a sub-optimal encoder error.
+
+        Parameters
+        ----------
+        tau : float
+            Upper bound on the encoder error ε̂.
+
+        Returns
+        -------
+        dict or None
+            Best feasible configuration dict (same format as
+            :meth:`best_result`), or ``None`` if no configuration satisfies
+            the constraint.
+        """
+        feasible = [r for r in self.all_results if r["epsilon"] <= tau]
+        if not feasible:
+            return None
+        return self._format_result(min(feasible, key=lambda r: r["decoder_error"]))
+
+    # ------------------------------------------------------------------
+    # Visualisation
+    # ------------------------------------------------------------------
+
+    def plot(self, ax=None, show: bool = True, annotate: bool = False,
+             theme: str = 'alges', scatter_color=None, frontier_color=None):
+        """Scatter plot of all configs with the Pareto frontier highlighted.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes to draw on.  A new figure is created when ``None``.
+        show : bool
+            Call ``plt.show()`` when ``True`` (default).
+        annotate : bool
+            Annotate frontier points with their parameter values.
+        theme : str, optional
+            Theme name passed to :class:`~spatialize.viz.PlotStyle`.
+            Available: ``'whitegrid'``, ``'darkgrid'``, ``'white'``, ``'dark'``,
+            ``'alges'``, ``'minimal'``, ``'publication'``.  Default: ``'alges'``.
+        scatter_color : str, optional
+            Color for the all-configs scatter points.  Defaults to the theme's
+            primary color (``style.color``).
+        frontier_color : str, optional
+            Color for the Pareto frontier line and markers.  Defaults to the
+            first color of the theme's ``precision_cmap``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+        """
+        with PlotStyle(theme=theme) as style:
+            _scatter_color  = scatter_color  if scatter_color  is not None else style.color
+            _frontier_color = frontier_color if frontier_color is not None else style.precision_cmap(0.15)
+
+            if ax is None:
+                _, ax = plt.subplots(figsize=(7, 5))
+
+            eps_all = [r["epsilon"] for r in self.all_results]
+            dec_all = [r["decoder_error"] for r in self.all_results]
+            ax.scatter(eps_all, dec_all, color=_scatter_color, alpha=0.5, s=40,
+                       label="all configs", zorder=2)
+
+            if self.frontier:
+                front_sorted = sorted(self.frontier, key=lambda r: r["epsilon"])
+                eps_f = [r["epsilon"] for r in front_sorted]
+                dec_f = [r["decoder_error"] for r in front_sorted]
+                ax.plot(eps_f, dec_f, "o-", color=_frontier_color, lw=2, ms=7,
+                        label="Pareto frontier", zorder=3)
+
+                if annotate:
+                    for r in front_sorted:
+                        label = ", ".join(f"{k}={v}" for k, v in r["params"].items())
+                        ax.annotate(
+                            label, (r["epsilon"], r["decoder_error"]),
+                            textcoords="offset points", xytext=(5, 5), fontsize=7,
+                        )
+
+            ax.set_xlabel("Encoder error ε̂")
+            ax.set_ylabel("Decoder error R_CV")
+            ax.set_title("Encoder–Decoder Pareto Frontier")
+            ax.legend()
+
+            if show:
+                plt.tight_layout()
+                plt.show()
+
+        return ax
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _format_result(self, r: dict) -> dict:
+        """Return a result dict compatible with ESI estimation ``best_params_found``."""
+        result = dict(r["params"])
+        result.update({
+            "epsilon":            r["epsilon"],
+            "decoder_error":      r["decoder_error"],
+            "agg_function":       af.mean,
+            "p_process":          self.p_process,
+            "local_interpolator": self.local_interpolator,
+        })
+        return result
+
+    def _select_frontier_point(self, strategy: str) -> dict:
+        if strategy == "min_decoder":
+            return min(self.frontier, key=lambda r: r["decoder_error"])
+        if strategy == "min_epsilon":
+            return min(self.frontier, key=lambda r: r["epsilon"])
+        if strategy in ("knee", "utopia"):
+            return self._geometric_selection(strategy)
+        raise ValueError(
+            f"Unknown strategy '{strategy}'. "
+            "Choose from 'min_decoder', 'min_epsilon', 'knee', 'utopia'."
+        )
+
+    def _geometric_selection(self, strategy: str) -> dict:
+        """Knee or utopia selection on the normalised frontier."""
+        front = sorted(self.frontier, key=lambda r: r["epsilon"])
+        eps = np.array([r["epsilon"] for r in front], dtype=float)
+        dec = np.array([r["decoder_error"] for r in front], dtype=float)
+
+        eps_range = eps.max() - eps.min()
+        dec_range = dec.max() - dec.min()
+
+        if eps_range == 0.0 or dec_range == 0.0:
+            return min(front, key=lambda r: r["decoder_error"])
+
+        eps_n = (eps - eps.min()) / eps_range
+        dec_n = (dec - dec.min()) / dec_range
+
+        if strategy == "utopia":
+            dist = np.hypot(eps_n, dec_n)
+            return front[int(np.argmin(dist))]
+
+        p1 = np.array([eps_n[0], dec_n[0]])
+        p2 = np.array([eps_n[-1], dec_n[-1]])
+        line_vec = p2 - p1
+        line_len = float(np.linalg.norm(line_vec))
+        if line_len == 0.0:
+            return front[0]
+        line_unit = line_vec / line_len
+
+        dists = [
+            float(np.linalg.norm(
+                np.array([en, dn]) - p1
+                - np.dot(np.array([en, dn]) - p1, line_unit) * line_unit
+            ))
+            for en, dn in zip(eps_n, dec_n)
+        ]
+        return front[int(np.argmax(dists))]
+
+    @staticmethod
+    def _compute_frontier(results: list) -> list:
+        """Return non-dominated configurations (lower is better for both objectives)."""
+        dominated: set = set()
+        for i, r_i in enumerate(results):
+            if i in dominated:
+                continue
+            for j, r_j in enumerate(results):
+                if i == j:
+                    continue
+                if (
+                    r_j["epsilon"]       <= r_i["epsilon"] and
+                    r_j["decoder_error"] <= r_i["decoder_error"] and
+                    (r_j["epsilon"] < r_i["epsilon"] or
+                     r_j["decoder_error"] < r_i["decoder_error"])
+                ):
+                    dominated.add(i)
+                    break
+        return [r for i, r in enumerate(results) if i not in dominated]
+
+
 class ESIResult(EstimationResult):
     """
     A class to represent the result of an ESI estimation. 
@@ -476,6 +734,166 @@ def esi_nongriddata(points, values, xi, **kwargs):
     """
     estimation, esi_samples = _call_libspatialize(points, values, xi, **kwargs)
     return ESIResult(estimation, esi_samples, xi=xi)
+
+
+@signature_overload(
+    pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
+    common_args={
+        "p_process":            partitioning_process.MONDRIAN,
+        "scoring":              sf.neg_log_likelihood,
+        "k":                    5,
+        "n_partitions":         [100, 200, 300],
+        "alpha":                list(np.flip(np.arange(0.70, 0.90, 0.05))),
+        "seed":                 np.random.randint(1000, 10000),
+        "folding_seed":         np.random.randint(1000, 10000),
+        "pair_strategy":        "max_min",
+        "point_model_name":     "kde",
+        "nan_model_name":       "ignore",
+        "support_sample_size":  500,
+        "callback":             default_singleton_callback,
+    },
+    specific_args={
+        li.IDW:          {"exponent":  list(np.arange(1.0, 5.0, 1.0))},
+        li.KRIGING:      {
+            "model":  ["spherical", "exponential"],
+            "nugget": [0.0, 0.5],
+            "range":  [50.0, 200.0],
+            "sill":   [0.9, 1.0],
+        },
+        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False},
+    },
+)
+def esi_pareto_hparams_search(points, values, **kwargs):
+    """Pareto hyperparameter optimisation for ESI.
+
+    Jointly minimises the encoder error ε̂ (empirical robustness bound via
+    fitted density models) and the decoder error R_CV (cross-validation
+    score), returning an :class:`ESIParetoResult` that exposes the Pareto
+    frontier and several strategies for selecting a single best configuration.
+
+    Parameters
+    ----------
+    points : array-like, shape (n, d)
+        Training sample locations.
+    values : array-like, shape (n,)
+        Training sample values.
+    local_interpolator : str, optional
+        ``"idw"`` (default), ``"kriging"``, or ``"adaptiveidw"``.
+    p_process : str, optional
+        Partitioning process.  Default: ``"mondrian"``.
+    scoring : str or callable, optional
+        Decoder scoring function: ``"nll"`` (default), ``"crps"``,
+        ``"rmse"``, ``"mae"``, or any callable
+        ``(true_values, esi_samples) → float``.
+    k : int or str, optional
+        Number of CV folds or ``"loo"`` / ``-1`` for leave-one-out.
+        Default: ``5``.
+    n_partitions : list of int, optional
+        Ensemble sizes to search.  Default: ``[100, 200, 300]``.
+    alpha : list of float, optional
+        Partition granularities to search.
+    seed : int, optional
+        Random seed (shared by encoder and decoder).
+    folding_seed : int, optional
+        Secondary seed for k-fold assignment.
+    pair_strategy : str, optional
+        Pair-selection for the robustness bound: ``"max_min"`` (default) or
+        ``"exhaustive"``.
+    point_model_name : str, optional
+        Density model for fitted KL: ``"kde"`` (default), ``"emm"``,
+        ``"vim"``.
+    nan_model_name : str, optional
+        NaN strategy: ``"ignore"`` (default) or ``"replace"``.
+    support_sample_size : int, optional
+        KL evaluation grid resolution (default 500).
+    callback : callable, optional
+        Progress callback.
+    exponent : list of float, optional *(IDW only)*
+        IDW exponents to search.
+    model, nugget, range, sill : list *(Kriging only)*
+        Variogram parameters to search.
+    metric : list of str, optional *(Adaptive IDW only)*
+
+    Returns
+    -------
+    ESIParetoResult
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import spatialize.gs.esi.scorefunction as sf
+        from spatialize.gs.esi import esi_pareto_hparams_search
+
+        result = esi_pareto_hparams_search(
+            points, values,
+            local_interpolator="idw",
+            n_partitions=[100, 200, 300],
+            alpha=[0.75, 0.80, 0.85],
+            exponent=[1.0, 2.0],
+            scoring=sf.neg_log_likelihood,
+            k=5,
+        )
+
+        # Best balanced trade-off
+        best = result.best_result(strategy="knee")
+
+        # Constrained: encoder error must be ≤ 0.5
+        constrained = result.best_for_tau(tau=0.5)
+
+        result.plot()
+    """
+    param_grid = {
+        "n_partitions": kwargs["n_partitions"],
+        "alpha":        kwargs["alpha"],
+    }
+    if kwargs["local_interpolator"] == li.IDW:
+        param_grid["exponent"] = kwargs["exponent"]
+    elif kwargs["local_interpolator"] == li.KRIGING:
+        param_grid["model"]  = kwargs["model"]
+        param_grid["nugget"] = kwargs["nugget"]
+        param_grid["range"]  = kwargs["range"]
+        param_grid["sill"]   = kwargs["sill"]
+    elif kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
+        param_grid["metric"] = kwargs["metric"]
+
+    # Fixed (non-searchable) interpolator kwargs — execution flags that are
+    # forwarded as-is to every ESI call, not iterated over in the grid.
+    fixed_interp_kwargs = {}
+    if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
+        fixed_interp_kwargs["parallelize"] = kwargs["parallelize"]
+
+    _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
+    if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
+        import warnings
+        warnings.warn(
+            f"'{kwargs['scoring'].__name__}' requires at least 30 partitions to fit a reliable "
+            f"distribution, but the smallest value in 'n_partitions' is {min(kwargs['n_partitions'])}. "
+            f"The scoring function has been replaced with 'mae'. "
+            f"To use '{kwargs['scoring'].__name__}', set all values in 'n_partitions' to >= 30.",
+            UserWarning,
+            stacklevel=2,
+        )
+        kwargs["scoring"] = sf.mae
+
+    from spatialize.gs.esi.pareto import ParetoOptimizer
+    optimizer = ParetoOptimizer(
+        param_grid          = param_grid,
+        local_interpolator  = kwargs["local_interpolator"],
+        p_process           = kwargs["p_process"],
+        scoring             = kwargs["scoring"],
+        k                   = kwargs["k"],
+        seed                = kwargs["seed"],
+        folding_seed        = kwargs["folding_seed"],
+        pair_strategy       = kwargs["pair_strategy"],
+        point_model_name    = kwargs["point_model_name"],
+        nan_model_name      = kwargs["nan_model_name"],
+        support_sample_size = kwargs["support_sample_size"],
+        fixed_interp_kwargs = fixed_interp_kwargs,
+        callback            = kwargs["callback"],
+    )
+    all_results = optimizer.fit(points, values)
+    return ESIParetoResult(all_results, kwargs["p_process"], kwargs["local_interpolator"])
 
 
 # =========================================== END of PUBLIC API ======================================================

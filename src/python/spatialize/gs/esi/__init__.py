@@ -1,1 +1,1 @@
-from ._main import esi_hparams_search, esi_griddata, esi_nongriddata, ESIResult, ESIGridSearchResult
+from ._main import esi_hparams_search, esi_griddata, esi_nongriddata, ESIResult, ESIGridSearchResult, esi_pareto_hparams_search, ESIParetoResult

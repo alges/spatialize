@@ -508,6 +508,7 @@ def _call_libspatialize(points, values, xi, **kwargs):
     log_message(logging.logger.debug('calling libspatialize'))
 
     if not kwargs["best_params_found"] is None:
+        kwargs["best_params_found"] = dict(kwargs["best_params_found"])  # copy to avoid mutating caller's dict
         try:
             best = kwargs["best_params_found"]["n_partitions"]
             log_message(logging.logger.debug(f"best number of partitions found: "
@@ -540,6 +541,26 @@ def _call_libspatialize(points, values, xi, **kwargs):
     return estimation, esi_samples
 
 
+def _validate_alpha(alpha):
+    """Raise ValueError if alpha >= 1; warn if alpha > 0.95."""
+    if isinstance(alpha, (list, tuple)):
+        for a in alpha:
+            _validate_alpha(a)
+        return
+    if alpha >= 1.0:
+        raise ValueError(
+            f"alpha must be < 1 (got {alpha}). "
+        )
+    if alpha > 0.95:
+        import warnings
+        warnings.warn(
+            f"alpha={alpha} is very close to 1. This produces very fine partitions "
+            "and may cause slow computation.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
 def build_arg_list(points, values, xi, nonpos_args):
     """
     Build the argument list for the libspatialize function.
@@ -551,6 +572,7 @@ def build_arg_list(points, values, xi, nonpos_args):
     :return: The argument list.
     """
     alpha = nonpos_args["alpha"]
+    _validate_alpha(alpha)
     if nonpos_args["p_process"] == partitioning_process.VORONOI and not nonpos_args["data_cond"]:
         alpha *= -1
 

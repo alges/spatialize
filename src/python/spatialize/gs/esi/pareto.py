@@ -130,7 +130,13 @@ class EmpiricalRobustnessBound:
             points, self.n_partitions, self.alpha, None, self.seed
         )  # shape (n, T)
 
-        # Step 3 — sweep cells and accumulate max KL
+        # Step 3 — pre-fit one density model per training point (fit once, reuse).
+        # Each point's KDE is fitted exactly once here; the inner loop then calls
+        # _kl_from_models() which uses score_samples() directly, skipping the
+        # EmpiricalModel Akima-interpolator layer and all redundant refitting.
+        models = self._prefit_models(self.esi_samples)
+
+        # Step 4 — sweep cells and accumulate max KL
         eps_hat = 0.0
         seen: set[tuple[int, int]] = set()
 
@@ -144,12 +150,9 @@ class EmpiricalRobustnessBound:
                     if (i, j) in seen:
                         continue
                     seen.add((i, j))
-                    d = _fitted_kl(
-                        self.esi_samples[i],
-                        self.esi_samples[j],
-                        factory=self._factory,
-                        support_sample_size=self.support_sample_size,
-                    )
+                    if models[i] is None or models[j] is None:
+                        continue
+                    d = _kl_from_models(models[i], models[j], self.support_sample_size)
                     if d > eps_hat:
                         eps_hat = d
 
@@ -192,6 +195,27 @@ class EmpiricalRobustnessBound:
         if i_max == i_min:
             return []
         return [(i_max, i_min), (i_min, i_max)]
+
+    def _prefit_models(self, samples: np.ndarray) -> list:
+        """Fit one density model per training point; return list of (model, d_min, d_max) or None.
+
+        Uses ``sklearn.base.clone`` to create an independent estimator instance
+        per point so that fitting is non-destructive and the list can be safely
+        reused across all KL pair evaluations.
+        """
+        from sklearn.base import clone as _sklearn_clone
+        result = []
+        for idx in range(len(samples)):
+            s = samples[idx].astype(np.float64)
+            s = s[~np.isnan(s)]
+            if len(s) < 2:
+                result.append(None)
+                continue
+            model = _sklearn_clone(self._factory.model).fit(s.reshape(-1, 1))
+            d_min, d_max = float(s.min()), float(s.max())
+            ext = (d_max - d_min) * 0.1
+            result.append((model, d_min - ext, d_max + ext))
+        return result
 
 
 # ===========================================================================
@@ -404,6 +428,47 @@ class ParetoOptimizer:
 # ===========================================================================
 # Private helpers
 # ===========================================================================
+
+def _kl_from_models(
+    model_tuple_i: tuple,
+    model_tuple_j: tuple,
+    support_sample_size: int = 500,
+) -> float:
+    """D_KL(p̂_i ‖ p̂_j) from two pre-fitted sklearn density models.
+
+    Uses ``score_samples`` directly on the shared evaluation grid, bypassing
+    the :class:`EmpiricalModel` Akima-interpolator layer and avoiding redundant
+    model fitting when the same model is reused across multiple pairs.
+    Called by :meth:`EmpiricalRobustnessBound.estimate` via the model cache
+    built by :meth:`EmpiricalRobustnessBound._prefit_models`.
+    """
+    model_i, d_min_i, d_max_i = model_tuple_i
+    model_j, d_min_j, d_max_j = model_tuple_j
+
+    x_min = min(d_min_i, d_min_j)
+    x_max = max(d_max_i, d_max_j)
+    if x_max <= x_min:
+        return 0.0
+
+    x_shared, dx = np.linspace(x_min, x_max, support_sample_size, retstep=True)
+    xs = x_shared.reshape(-1, 1)
+
+    p_i = np.nan_to_num(np.exp(model_i.score_samples(xs)).ravel(), nan=0.0).clip(0.0)
+    p_j = np.nan_to_num(np.exp(model_j.score_samples(xs)).ravel(), nan=0.0).clip(0.0)
+
+    sum_i = p_i.sum() * dx
+    sum_j = p_j.sum() * dx
+    if sum_i == 0.0 or sum_j == 0.0:
+        return 0.0
+
+    p_i /= sum_i
+    p_j /= sum_j
+
+    mask = p_i > 0.0
+    p_j_floor = dx / (support_sample_size * 10.0)
+    p_j_safe = np.maximum(p_j[mask], p_j_floor)
+    return max(float(np.sum(p_i[mask] * np.log(p_i[mask] / p_j_safe)) * dx), 0.0)
+
 
 def _fitted_kl(
     samples_i,

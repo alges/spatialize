@@ -29,7 +29,7 @@ from itertools import permutations, product
 import spatialize.gs.esi.scorefunction as sf
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
 from spatialize.gs.esi._main import build_arg_list
-from spatialize.gs.spa.empirical import EmpiricalModel, FittedModelFactory
+from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
 from spatialize import logging
 

@@ -11,7 +11,7 @@ from sklearn.exceptions import ConvergenceWarning
 import warnings
 
 from spatialize import logging
-from spatialize.gs.spa.empirical import FittedModelFactory, EmpiricalModel
+from spatialize.empirical import FittedModelFactory, EmpiricalModel
 from spatialize.logging import log_message, default_singleton_callback
 from spatialize.viz import plot_colormap_array
 

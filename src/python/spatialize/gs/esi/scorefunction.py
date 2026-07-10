@@ -142,7 +142,7 @@ def crps(true_values, samples):
     float
         Average CRPS. Lower values indicate better probabilistic predictions.
     """
-    from spatialize.gs.spa.empirical import EmpiricalModel      # local import to avoid circularities
+    from spatialize.empirical import EmpiricalModel      # local import to avoid circularities
 
     n_points = len(samples)
     total_crps = 0.0

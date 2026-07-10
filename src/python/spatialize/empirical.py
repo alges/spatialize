@@ -360,13 +360,13 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         if Z_normalization == 0: Z_normalization = 1.0 # Prevent division by zero if range is 0
 
         # calculate Confidence Measures
-        simple_rel_conf = compute_simple_relative_confidence_numba(
+        simple_rel_conf = _compute_simple_relative_confidence_numba(
             alpha_prob, L_alpha_prob, alpha_entropy_percent, L_alpha_entropy, Z_normalization
         )
-        harm_rel_conf = compute_relative_harmonic_confidence_numba(
+        harm_rel_conf = _compute_relative_harmonic_confidence_numba(
             alpha_prob, L_alpha_prob, alpha_entropy_percent, L_alpha_entropy
         )
-        log_ratio_conf = compute_log_ratio_confidence_numba(
+        log_ratio_conf = _compute_log_ratio_confidence_numba(
             alpha_prob, L_alpha_prob, alpha_entropy_percent, L_alpha_entropy
         )
 
@@ -448,7 +448,7 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         }        
 
 
-def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
+def _find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     """
     Numba-optimized function to find the narrowest interval [i, j]
     that contains `alpha` percentage of the total entropy.
@@ -471,7 +471,7 @@ def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     """
     n = len(pdf)
 
-    total_entropy = compute_entropy_numba(pdf, 0, n, dx, log_base, epsilon)
+    total_entropy = _compute_entropy_numba(pdf, 0, n, dx, log_base, epsilon)
     target_entropy = alpha * total_entropy
 
     best_i_nonzero_width = -1 # Stores the best non-zero width interval
@@ -487,7 +487,7 @@ def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     # Iterate through all possible intervals
     for i in range(n):
         for j in range(i, n):
-            current_ent = compute_entropy_numba(pdf, i, j + 1, dx, log_base, epsilon)
+            current_ent = _compute_entropy_numba(pdf, i, j + 1, dx, log_base, epsilon)
             
             if current_ent >= target_entropy:
                 found_any_valid_interval = True
@@ -518,7 +518,7 @@ def find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
         return 0, n - 1, total_entropy # Fallback to full range
 
 
-def find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entropy, log_base, epsilon):
+def _find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entropy, log_base, epsilon):
     """
     Numba-optimized function to find an interval [a, b] around `center_idx`
     that contains `target_entropy`. The interval is expanded outwards
@@ -543,7 +543,7 @@ def find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entro
     """
     n = len(pdf)
     left, right = center_idx, center_idx
-    current_interval_entropy = compute_entropy_numba(pdf, left, right + 1, dx, log_base, epsilon)
+    current_interval_entropy = _compute_entropy_numba(pdf, left, right + 1, dx, log_base, epsilon)
     if current_interval_entropy >= target_entropy: return left, right, current_interval_entropy
     while current_interval_entropy < target_entropy and (left > 0 or right < n - 1):
         expand_left, expand_right = (left > 0), (right < n - 1)
@@ -560,10 +560,10 @@ def find_entropy_informative_interval_numba(pdf, x, dx, center_idx, target_entro
         if expand_left and (not expand_right or left_contrib_val >= right_contrib_val): left -= 1
         elif expand_right: right += 1
         else: break
-        current_interval_entropy = compute_entropy_numba(pdf, left, right + 1, dx, log_base, epsilon)
+        current_interval_entropy = _compute_entropy_numba(pdf, left, right + 1, dx, log_base, epsilon)
     return left, right, current_interval_entropy
 
-def compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon):
+def _compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon):
     """
     Numba-optimized function to compute differential entropy.
     Assumes pdf is already normalized such that sum(pdf * dx) = 1.
@@ -592,7 +592,7 @@ def compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon):
         entropy -= p * np.log(p)
     return entropy * dx / log_base
 
-def find_credible_interval_numba(pdf, x, dx, center_idx, alpha):
+def _find_credible_interval_numba(pdf, x, dx, center_idx, alpha):
     """
     Numba-optimized function to find the smallest interval [i, j] around `center_idx` such that
     the total probability mass is >= alpha.
@@ -811,7 +811,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         # It's to avoid numerical issues in the entropy calculation - for example, if the pdf is not normalized,
         # the differential entropy could be negative or diverge.
         pdf = self.pdf_ / np.sum(self.pdf_)
-        return compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon)
+        return _compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon)
 
 
     def central_entropy_interval(self, alpha=0.9, base=np.e, epsilon=1e-10):
@@ -839,7 +839,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         log_base = np.log(base)
 
         # Call the Numba-optimized function to find the interval
-        i, j, total_entropy = find_central_entropy_interval_numba(pdf_for_entropy, self.x_, dx, alpha, log_base, epsilon)
+        i, j, total_entropy = _find_central_entropy_interval_numba(pdf_for_entropy, self.x_, dx, alpha, log_base, epsilon)
 
         a, b = self.x_[i], self.x_[j]
 
@@ -889,7 +889,7 @@ class EmpiricalModel(BaseEmpiricalModel):
 
         # Call the Numba-optimized function to find the interval around x0
         left_idx, right_idx, current_interval_entropy = \
-            find_entropy_informative_interval_numba(
+            _find_entropy_informative_interval_numba(
                 pdf_for_entropy, self.x_, dx, center_idx, target_entropy, log_base, epsilon
             )
 
@@ -935,7 +935,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         pdf_for_mass = self.pdf_
 
         center_idx = np.argmin(np.abs(self.x_ - estimator))
-        left_idx, right_idx, central_mass = find_credible_interval_numba(pdf_for_mass, self.x_, dx, center_idx, alpha)
+        left_idx, right_idx, central_mass = _find_credible_interval_numba(pdf_for_mass, self.x_, dx, center_idx, alpha)
 
         a = self.x_[left_idx]
         b = self.x_[right_idx]
@@ -1098,7 +1098,7 @@ class EmpiricalModel(BaseEmpiricalModel):
 
 # --- Functions for Confidence Measures (Optimized with @njit and no type hints) ---
 
-def compute_simple_relative_confidence_numba(alpha_prob, L_alpha_prob,
+def _compute_simple_relative_confidence_numba(alpha_prob, L_alpha_prob,
                                              alpha_entropy_percent, L_alpha_entropy, Z):
     """
     Calculates the Simple Relative Confidence (C_simple^rel).
@@ -1138,7 +1138,7 @@ def compute_simple_relative_confidence_numba(alpha_prob, L_alpha_prob,
         
     return numerator / denominator
 
-def compute_relative_harmonic_confidence_numba(alpha_prob, L_alpha_prob,
+def _compute_relative_harmonic_confidence_numba(alpha_prob, L_alpha_prob,
                                                alpha_entropy_percent, L_alpha_entropy):
     """
     Calculates the Relative Harmonic Confidence (C_harm^rel).
@@ -1168,7 +1168,7 @@ def compute_relative_harmonic_confidence_numba(alpha_prob, L_alpha_prob,
     
     return 1 / (1 + term1 + term2)
 
-def compute_log_ratio_confidence_numba(alpha_prob, L_alpha_prob,
+def _compute_log_ratio_confidence_numba(alpha_prob, L_alpha_prob,
                                        alpha_entropy_percent, L_alpha_entropy):
     """
     Calculates the Log-Ratio Confidence (C_log-ratio).
@@ -1212,10 +1212,10 @@ def _ensure_numba():
     attributes and never invoke the entropy or credible-interval methods.
     """
     global _numba_initialized
-    global compute_entropy_numba, find_central_entropy_interval_numba
-    global find_entropy_informative_interval_numba, find_credible_interval_numba
-    global compute_simple_relative_confidence_numba
-    global compute_relative_harmonic_confidence_numba, compute_log_ratio_confidence_numba
+    global _compute_entropy_numba, _find_central_entropy_interval_numba
+    global _find_entropy_informative_interval_numba, _find_credible_interval_numba
+    global _compute_simple_relative_confidence_numba
+    global _compute_relative_harmonic_confidence_numba, _compute_log_ratio_confidence_numba
 
     if _numba_initialized:
         return
@@ -1225,10 +1225,10 @@ def _ensure_numba():
 
     # compile leaf function first so dependent functions see a numba Dispatcher
     # when they are compiled on their first call
-    compute_entropy_numba = njit(compute_entropy_numba)
-    find_central_entropy_interval_numba = njit(find_central_entropy_interval_numba)
-    find_entropy_informative_interval_numba = njit(find_entropy_informative_interval_numba)
-    find_credible_interval_numba = njit(find_credible_interval_numba)
-    compute_simple_relative_confidence_numba = njit(compute_simple_relative_confidence_numba)
-    compute_relative_harmonic_confidence_numba = njit(compute_relative_harmonic_confidence_numba)
-    compute_log_ratio_confidence_numba = njit(compute_log_ratio_confidence_numba)
+    _compute_entropy_numba = njit(_compute_entropy_numba)
+    _find_central_entropy_interval_numba = njit(_find_central_entropy_interval_numba)
+    _find_entropy_informative_interval_numba = njit(_find_entropy_informative_interval_numba)
+    _find_credible_interval_numba = njit(_find_credible_interval_numba)
+    _compute_simple_relative_confidence_numba = njit(_compute_simple_relative_confidence_numba)
+    _compute_relative_harmonic_confidence_numba = njit(_compute_relative_harmonic_confidence_numba)
+    _compute_log_ratio_confidence_numba = njit(_compute_log_ratio_confidence_numba)

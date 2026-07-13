@@ -72,11 +72,16 @@ class GridSearchResult:
 
 
 class EstimationResult:
-    def __init__(self, estimation, griddata=False, original_shape=None, xi=None):
+    def __init__(self, estimation, griddata=False, original_shape=None, xi=None,
+                 points=None, values=None):
         self._estimation = estimation
         self.griddata = griddata
         self.original_shape = original_shape
         self._xi = xi
+        # original observed data (when available), used e.g. to calibrate ensemble
+        # widening against a spatial target variance
+        self.points = points
+        self.values = values
 
     def estimation(self):
         """

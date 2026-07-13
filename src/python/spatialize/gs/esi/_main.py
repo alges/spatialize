@@ -316,10 +316,19 @@ class ESIResult(EstimationResult):
     based on some loss function.
 
     """
-    def __init__(self, estimation, esi_samples, griddata=False, original_shape=None, xi=None):
-        super().__init__(estimation, griddata, original_shape, xi=xi)
+    def __init__(self, estimation, esi_samples, griddata=False, original_shape=None, xi=None,
+                 points=None, values=None):
+        super().__init__(estimation, griddata, original_shape, xi=xi, points=points, values=values)
         self._esi_samples = esi_samples
         self._precision = None
+        # query coordinates flattened to line up 1:1 with `esi_samples` rows, regardless of
+        # whether `xi` is grid-shaped -- used to calibrate ensemble widening
+        if xi is None:
+            self._xi_flat = None
+        elif griddata:
+            self._xi_flat, _ = flatten_grid_data(xi)
+        else:
+            self._xi_flat = xi
 
     def precision(self, loss_function=lf.mse_loss):
         """
@@ -693,7 +702,8 @@ def esi_griddata(points, values, xi, **kwargs):
     """
     ng_xi, original_shape = flatten_grid_data(xi)
     estimation, esi_samples = _call_libspatialize(points, values, ng_xi, **kwargs)
-    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape, xi=xi)
+    return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape, xi=xi,
+                     points=points, values=values)
 
 
 def esi_nongriddata(points, values, xi, **kwargs):
@@ -733,7 +743,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
         The result as :func:`ESIResult`.
     """
     estimation, esi_samples = _call_libspatialize(points, values, xi, **kwargs)
-    return ESIResult(estimation, esi_samples, xi=xi)
+    return ESIResult(estimation, esi_samples, xi=xi, points=points, values=values)
 
 
 @signature_overload(

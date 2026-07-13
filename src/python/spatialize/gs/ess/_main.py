@@ -11,7 +11,8 @@ from sklearn.exceptions import ConvergenceWarning
 import warnings
 
 from spatialize import logging
-from spatialize.empirical import FittedModelFactory, EmpiricalModel
+from spatialize.empirical import (FittedModelFactory, EmpiricalModel, _local_target_variance,
+                                   _local_target_skewness)
 from spatialize.logging import log_message, default_singleton_callback
 from spatialize.viz import plot_colormap_array
 
@@ -146,11 +147,29 @@ def ess_sample(esi_result,
 
     log_message(logging.logger.debug(f"esi_samples shape: {esi_samples.shape}"))
 
+    target_var_arr = None
+    target_skew_arr = None
+    if fitted_model_factory.widening:
+        if esi_result.points is None or esi_result.values is None:
+            raise ValueError(
+                "fitted_model_factory.widening requires esi_result to carry the original "
+                "points/values (build it with esi_griddata/esi_nongriddata from this version "
+                "of spatialize)."
+            )
+        target_var_arr = _local_target_variance(esi_result.points, esi_result.values,
+                                                 esi_result._xi_flat)
+        if fitted_model_factory.widening == "skew_normal":
+            target_skew_arr = _local_target_skewness(esi_result.points, esi_result.values,
+                                                      esi_result._xi_flat)
+
     def run_serial():
         scenarios = np.empty([esi_samples.shape[0], n_sims])
         callback(logging.progress.init(esi_samples.shape[0], 1))
         for esi_sample_idx in range(esi_samples.shape[0]):
-            model, _ = fitted_model_factory.create(esi_samples[esi_sample_idx, :])
+            target_var = target_var_arr[esi_sample_idx] if target_var_arr is not None else None
+            target_skew = target_skew_arr[esi_sample_idx] if target_skew_arr is not None else None
+            model, _ = fitted_model_factory.create(esi_samples[esi_sample_idx, :],
+                                                    target_var=target_var, target_skew=target_skew)
 
             # sampling from the fitted model
             if fitted_model_factory.point_model_name in {"vim", "emm"}:
@@ -166,9 +185,9 @@ def ess_sample(esi_result,
         return scenarios
 
     # to run in parallel ------------------------------------------------------------------------
-    def sample_single_scenario(idx, sample_row, n_sims, model_factory, progress_q):
+    def sample_single_scenario(idx, sample_row, n_sims, model_factory, target_var, target_skew, progress_q):
         try:
-            model, _ = model_factory.create(sample_row)
+            model, _ = model_factory.create(sample_row, target_var=target_var, target_skew=target_skew)
 
             # Sample based on model type
             if model_factory.point_model_name in {"vim", "emm"}:
@@ -210,7 +229,10 @@ def ess_sample(esi_result,
 
             results = Parallel(n_jobs=n_jobs, backend='loky')(
                 delayed(sample_single_scenario)(
-                    i, esi_samples[i, :], n_sims, fitted_model_factory, progress_queue
+                    i, esi_samples[i, :], n_sims, fitted_model_factory,
+                    target_var_arr[i] if target_var_arr is not None else None,
+                    target_skew_arr[i] if target_skew_arr is not None else None,
+                    progress_queue
                 )
                 for i in range(esi_samples.shape[0])
             )

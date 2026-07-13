@@ -16,7 +16,8 @@ from spatialize.gs.esi._main import build_arg_list
 from spatialize._util import signature_overload
 from spatialize.logging import default_singleton_callback, log_message
 from spatialize import SpatializeError, logging  # Assuming 'logging' here refers to your custom logging
-from spatialize.empirical import EmpiricalModel, FittedModelFactory
+from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
+                                   _loo_target_skewness)
 
 
 class PosteriorSampleAnalyzer:
@@ -57,9 +58,25 @@ class PosteriorSampleAnalyzer:
         self.emodels = {}
         self.sample_quantiles = {}
         self.sample_entropy = {}
+
+        # ensemble widening needs a target local variance (and, for widening="skew_normal",
+        # a target local skewness); this is a leave-one-out CV result, so points and
+        # sample_values coincide -- use the self-excluding k-NN variant to avoid each point's
+        # zero-distance match to itself deflating its target
+        target_var_arr = (
+            _loo_target_variance(points, sample_values) if fitted_model_factory.widening else None
+        )
+        target_skew_arr = (
+            _loo_target_skewness(points, sample_values)
+            if fitted_model_factory.widening == "skew_normal" else None
+        )
+
         for i in range(len(self.sample_values)):
             data = np.append(self.post_result[i, :], self.sample_values[i])
-            emodel = EmpiricalModel(sample=data, fitted_model_factory=fitted_model_factory)
+            target_var = target_var_arr[i] if target_var_arr is not None else None
+            target_skew = target_skew_arr[i] if target_skew_arr is not None else None
+            emodel = EmpiricalModel(sample=data, fitted_model_factory=fitted_model_factory,
+                                    target_var=target_var, target_skew=target_skew)
             self.emodels[i] = emodel
             try:
                 h = emodel.entropy()
@@ -505,7 +522,7 @@ def cv_sample_pred_posterior(points, values, xi, **kwargs):
     return PosteriorSampleAnalyzer(cv, points, values, kwargs['fitted_model_factory'],
                                    callback=kwargs['callback'])
 
-
+#todo: move this function to viz
 def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, bins=25, figsize=(15, 10)):
     """
     Plots a grid of histograms for specified data samples.
@@ -551,13 +568,6 @@ def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, b
         ax = axs[i]
         if i < N:
             idx = data_indices[i]
-            if idx >= r.shape[0]:
-                log_message(
-                    logging.logger.warning(f"Index {idx} out of bounds for posterior samples matrix r. Skipping."))
-                ax.axis('off')
-                continue
-
-            data = r[idx, :]
 
             try:
                 # Access emodel, works if emodels is dict keyed by idx, or list if idx is 0-based sequential
@@ -572,6 +582,18 @@ def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, b
                     f"Emodels is not a valid collection (dict/list). Skipping plot for index {idx}."))
                 ax.axis('off')
                 continue
+
+            # histogram the data actually fitted (post-widening, when configured) so it
+            # lines up with the overlaid PDF/CDF; fall back to the raw posterior matrix
+            # for models that don't carry it (e.g. built directly from a skl_model)
+            data = getattr(emodel, "data_", None)
+            if data is None:
+                if idx >= r.shape[0]:
+                    log_message(
+                        logging.logger.warning(f"Index {idx} out of bounds for posterior samples matrix r. Skipping."))
+                    ax.axis('off')
+                    continue
+                data = r[idx, :]
 
             color = warm_pastel_colors[i % len(warm_pastel_colors)]
 

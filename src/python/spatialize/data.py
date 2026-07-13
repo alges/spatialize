@@ -44,6 +44,16 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
     fn = os.path.join(result_dir_path, meta_data['xi'])
     xi = pd.read_csv(fn).values
 
+    # load the observed points/values used to build the result, if this directory was
+    # saved by a version of spatialize that persisted them (needed to calibrate ensemble
+    # widening after reload; older saved directories simply won't have these keys)
+    points = values = None
+    if 'points' in meta_data and 'values' in meta_data:
+        fn = os.path.join(result_dir_path, meta_data['points'])
+        points = pd.read_csv(fn).values
+        fn = os.path.join(result_dir_path, meta_data['values'])
+        values = pd.read_csv(fn).values.reshape(-1)
+
     try:
         # load the esi_samples
         fn = os.path.join(result_dir_path, meta_data['esi_samples'])
@@ -56,12 +66,12 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
         return EstimationResult(estimation,
                                 griddata=meta_data['griddata'],
                                 original_shape=meta_data['original_shape'],
-                                xi=xi)
+                                xi=xi, points=points, values=values)
 
     esi_result = ESIResult(estimation, esi_samples,
                            griddata=meta_data['griddata'],
                            original_shape=meta_data['original_shape'],
-                           xi=xi)
+                           xi=xi, points=points, values=values)
 
     if meta_data["main_result"] == "estimation" or just_esi_result:
         log_message(logging.logger.info(f"an instance of ESIResult was loaded"))
@@ -152,6 +162,17 @@ def save_result(result_dir_path, result):
     fn = os.path.join(result_dir_path, meta_data['xi'])
     columns = ["x", "y"]
     pd.DataFrame(est_result._xi).to_csv(fn, index=False, header=columns)
+
+    # save the observed points/values used to build the result, if available (needed to
+    # calibrate ensemble widening after reload)
+    if est_result.points is not None and est_result.values is not None:
+        meta_data['points'] = "points.csv"
+        meta_data['values'] = "values.csv"
+        fn = os.path.join(result_dir_path, meta_data['points'])
+        columns = [f"x{i}" for i in range(np.asarray(est_result.points).shape[1])]
+        pd.DataFrame(est_result.points).to_csv(fn, index=False, header=columns)
+        fn = os.path.join(result_dir_path, meta_data['values'])
+        pd.DataFrame(est_result.values).to_csv(fn, index=False, header=["value"])
 
     if isinstance(est_result, ESIResult):
         # save the esi_samples

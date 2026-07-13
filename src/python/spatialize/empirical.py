@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.interpolate import Akima1DInterpolator
+from scipy.spatial import cKDTree
+from scipy.stats import skew as _scipy_skew, skewnorm
 
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from sklearn.neighbors import KernelDensity
@@ -11,18 +13,206 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
+# --- Ensemble widening (corrects (A)ESA/ESI ensembles that are under-dispersed because
+# each member is a partition-*average* and so only captures between-partition variance) ---
+
+_WIDENING_KNN = 12  # neighbours used to estimate the local target variance
+
+#todo: review unused funtions _local_target_variance, _loo_target_variance
+def _local_target_variance(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
+    """Target local variance at each query point = variance of its knn nearest OBSERVED
+    neighbours (captures the local spread, including the nugget)."""
+    obs_pts = np.asarray(obs_pts, float)
+    obs_vals = np.asarray(obs_vals, float)
+    query_pts = np.asarray(query_pts, float)
+    k = min(knn, len(obs_pts))
+    _, idx = cKDTree(obs_pts).query(query_pts, k=k)
+    # scipy squeezes the trailing axis when k==1, returning shape (m,) instead of (m,1);
+    # np.atleast_2d would prepend rather than append the missing axis in that case, so
+    # reshape explicitly against the known number of query points instead.
+    idx = np.reshape(idx, (len(query_pts), k))
+    return np.var(obs_vals[idx], axis=1)
+
+
+def _loo_target_variance(obs_pts, obs_vals, knn=_WIDENING_KNN):
+    """Leave-one-out variant of `_local_target_variance` for when the query points ARE the
+    observed points (e.g. cross-validation) -- excludes each point's match to itself, which
+    would otherwise be a zero-distance neighbour deflating its own target variance. Excludes
+    by array index rather than by dropping the nearest column, since duplicate/co-located
+    points can rank a distinct tied neighbour ahead of self."""
+    obs_pts = np.asarray(obs_pts, float)
+    obs_vals = np.asarray(obs_vals, float)
+    n = len(obs_pts)
+    k = min(knn + 1, n)
+    _, idx = cKDTree(obs_pts).query(obs_pts, k=k)
+    idx = np.reshape(idx, (n, k))
+    target_var = np.empty(n)
+    for i in range(n):
+        neighbours = idx[i][idx[i] != i][:knn]
+        if neighbours.size == 0:  # degenerate: no distinct neighbour available
+            neighbours = idx[i][:knn]
+        target_var[i] = np.var(obs_vals[neighbours])
+    return target_var
+
+
+def _local_target_skewness(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
+    """Target local skewness at each query point = (Fisher-Pearson) skewness of its knn
+    nearest OBSERVED neighbours. Calibrates `widening='skew_normal'` the same way
+    `_local_target_variance` calibrates 'gamma'."""
+    obs_pts = np.asarray(obs_pts, float)
+    obs_vals = np.asarray(obs_vals, float)
+    query_pts = np.asarray(query_pts, float)
+    k = min(knn, len(obs_pts))
+    _, idx = cKDTree(obs_pts).query(query_pts, k=k)
+    idx = np.reshape(idx, (len(query_pts), k))
+    return _scipy_skew(obs_vals[idx], axis=1)
+
+
+def _loo_target_skewness(obs_pts, obs_vals, knn=_WIDENING_KNN):
+    """Leave-one-out variant of `_local_target_skewness`, mirroring `_loo_target_variance`
+    (see its docstring for why the self-match must be excluded by index)."""
+    obs_pts = np.asarray(obs_pts, float)
+    obs_vals = np.asarray(obs_vals, float)
+    n = len(obs_pts)
+    k = min(knn + 1, n)
+    _, idx = cKDTree(obs_pts).query(obs_pts, k=k)
+    idx = np.reshape(idx, (n, k))
+    target_skew = np.empty(n)
+    for i in range(n):
+        neighbours = idx[i][idx[i] != i][:knn]
+        if neighbours.size == 0:  # degenerate: no distinct neighbour available
+            neighbours = idx[i][:knn]
+        target_skew[i] = _scipy_skew(obs_vals[neighbours])
+    return target_skew
+
+
+def _resample_to_size(draws, n_out, rng):
+    """Resample a pool of widened draws down/up to exactly `n_out`."""
+    if draws.size >= n_out:
+        return rng.choice(draws, size=n_out, replace=False)
+    return rng.choice(draws, size=n_out, replace=True)
+
+
+def _widen_precheck(z, target_var, n_out, rng, eps=1e-9):
+    """Shared setup for the Gamma/SkewNormal widen components: drop non-finite members and
+    compute `need` -- the extra variance (beyond the ensemble's own between-member variance)
+    that must be injected so the mixture variance matches `target_var`. Returns `(early_exit,
+    z, need)`: when `early_exit` is not None, the caller should return it immediately without
+    calibrating -- either the sample was empty (NaN-filled draws) or the ensemble already
+    disperses at least as much as the target (a true no-op: raw members, resampled
+    untouched)."""
+    z = z[np.isfinite(z)]
+    if z.size == 0:
+        return np.full(n_out, np.nan), z, None
+    between = np.var(z) if z.size > 1 else 0.0
+    need = target_var - between
+    if need <= eps or not np.isfinite(need):
+        return rng.choice(z, size=n_out, replace=True), z, None
+    return None, z, need
+
+
+def _gamma_widen_component(z, target_var, n_out, rng, eps=1e-9):
+    """Widen one location's ensemble `z` into `n_out` draws from a Gamma-mixture predictive
+    sample calibrated so its variance matches `target_var`. Each member `z_t` is treated as
+    the mean of a `Gamma(shape=k, scale=z_t/k)` component (mean-preserving, positive
+    support); `k` is solved from the law of total variance so the mixture variance equals
+    `target_var`. Falls back to resampling the raw members when the ensemble already
+    disperses at least as much as the target."""
+    early_exit, z, need = _widen_precheck(z, target_var, n_out, rng, eps)
+    if early_exit is not None:
+        return early_exit
+    if np.any(z < eps):
+        # UserWarning, not RuntimeWarning: this module suppresses RuntimeWarning at import
+        # time (line 12) for noisy sklearn/numpy internals, which would silently swallow
+        # this warning too if it shared that category.
+        warnings.warn(
+            "widening='gamma' received non-positive ensemble members; they were clipped to "
+            "a small positive epsilon before calibration. Use widening='skew_normal' or "
+            "'auto' for variables that may be negative.",
+            UserWarning,
+        )
+    z = np.clip(z, eps, None)  # Gamma needs positive means
+    mean_sq = np.mean(z ** 2)
+    k = float(np.clip(mean_sq / need, 0.05, 1e6))
+    per = max(1, n_out // z.size)
+    draws = rng.gamma(shape=k, scale=(z / k)[:, None], size=(z.size, per)).ravel()
+    return _resample_to_size(draws, n_out, rng)
+
+
+# limiting |skewness| of a skew-normal as its shape parameter -> +-infinity, i.e.
+# (4-pi)/2 * (2/(pi-2))^1.5 (~0.9953); target skewness values are clipped to this range since
+# no skew-normal can match anything more extreme.
+_SKEW_NORMAL_MAX_ABS_SKEW = (4 - np.pi) / 2 * (2 / (np.pi - 2)) ** 1.5
+
+
+def _delta_from_skewness(target_skew, eps=1e-9):
+    """Method-of-moments estimate of a skew-normal's `delta = alpha/sqrt(1+alpha**2)` shape
+    parameter from a target (Fisher-Pearson) skewness, via Azzalini's moment equations.
+    Skewness depends only on `delta` (not on location/scale), and the mapping is monotonic
+    and bounded by `+-_SKEW_NORMAL_MAX_ABS_SKEW`, so out-of-range or undefined (NaN, e.g. a
+    zero-variance neighbourhood) targets fall back to `delta=0` -- the symmetric case."""
+    if target_skew is None or not np.isfinite(target_skew):
+        return 0.0
+    target_skew = np.clip(target_skew, -_SKEW_NORMAL_MAX_ABS_SKEW + eps, _SKEW_NORMAL_MAX_ABS_SKEW - eps)
+    c = ((4 - np.pi) / 2) ** (2 / 3)
+    a = np.abs(target_skew) ** (2 / 3)
+    delta2 = (np.pi / 2) * a / (a + c)
+    return float(np.sign(target_skew) * np.sqrt(delta2))
+
+
+def _skew_normal_widen_component(z, target_var, target_skew, n_out, rng, eps=1e-9):
+    """Widen one location's ensemble `z` into `n_out` draws from a skew-normal-mixture
+    predictive sample calibrated so its variance matches `target_var` and its shape matches
+    `target_skew` (a k-NN estimate from observed data, see
+    `_local_target_skewness`/`_loo_target_skewness`). Each member `z_t` is treated as the mean
+    of a `SkewNormal(loc, omega, alpha)` component: `alpha` (via `delta`) is solved once from
+    `target_skew` -- shared across members, since skewness doesn't depend on location/scale --
+    `omega` from the law of total variance so the mixture variance equals `target_var`, and
+    `loc` shifted per member so the component mean stays `z_t` (mean-preserving). Reduces to a
+    symmetric Normal-mixture widening when `target_skew` is 0 (delta=0 => SkewNormal =
+    Normal)."""
+    early_exit, z, need = _widen_precheck(z, target_var, n_out, rng, eps)
+    if early_exit is not None:
+        return early_exit
+    delta = _delta_from_skewness(target_skew, eps)
+    omega = np.sqrt(need / max(1.0 - 2.0 * delta ** 2 / np.pi, eps))
+    loc = z - omega * delta * np.sqrt(2.0 / np.pi)  # shift so component mean stays z_t
+    alpha = delta / np.sqrt(max(1.0 - delta ** 2, eps))
+    per = max(1, n_out // z.size)
+    draws = skewnorm.rvs(alpha, loc=loc[:, None], scale=omega, size=(z.size, per),
+                          random_state=rng)
+    return _resample_to_size(draws.ravel(), n_out, rng)
+
+
+def _widen_sample(sample, widening, target_var, target_skew, rng, eps=1e-9):
+    """Dispatch to the Gamma or SkewNormal widening component per `widening`
+    ('gamma'/'skew_normal'/'auto'). No-op when `target_var` is unavailable -- callers that
+    can't supply a spatial target (e.g. no points/values in scope) simply get the unwidened
+    sample back. `target_skew` is only used by 'skew_normal' (falls back to the symmetric
+    case, `delta=0`, when None -- see `_delta_from_skewness`)."""
+    if target_var is None:
+        return sample
+    mode = widening
+    if mode == "auto":
+        mode = "gamma" if np.all(sample >= 0) else "skew_normal"
+    if mode == "gamma":
+        return _gamma_widen_component(sample, target_var, sample.size, rng, eps)
+    return _skew_normal_widen_component(sample, target_var, target_skew, sample.size, rng, eps)
+
+
 class FittedModelFactory:
     def __init__(self, nan_model_name="replace", nan_replace_func_name="median",
                  point_model_name="kde", kernel="gaussian",
-                 bgm_sample_size=1000, bgm_max_iter=100, n_components=3):
+                 bgm_sample_size=1000, bgm_max_iter=100, n_components=3,
+                 widening=False):
         """
         Factory for creating and fitting probabilistic models on sample data.
 
-        This class supports handling missing values (NaNs) and fitting various types of 
-        density estimation models, such as Kernel Density Estimation (KDE), Gaussian 
+        This class supports handling missing values (NaNs) and fitting various types of
+        density estimation models, such as Kernel Density Estimation (KDE), Gaussian
         Mixture Models (GMM), and Variational Inference-based models.
 
-        :param nan_model_name: Strategy for handling NaN values. Use "replace" to replace NaNs 
+        :param nan_model_name: Strategy for handling NaN values. Use "replace" to replace NaNs
             using a statistical function, or "ignore" to discard them. Default is "replace".
         :param nan_replace_func_name: Function used to replace NaNs when nan_model_name="replace".
             Valid values are "mean" and "median". Default is "median".
@@ -37,6 +227,18 @@ class FittedModelFactory:
             Default is 1000.
         :param bgm_max_iter: Maximum number of iterations for GMM fitting. Default is 100.
         :param n_components: Number of mixture components for GMM models. Default is 3.
+        :param widening: Corrects ensembles that under-represent local (nugget) spread
+            because each member is a partition-average. Options:
+                - False: no widening (default).
+                - "gamma": widen with mean-preserving Gamma components (requires
+                  non-negative values).
+                - "skew_normal": widen with mean-preserving SkewNormal components, shaped to
+                  match a target local skewness (safe for negative values; falls back to a
+                  symmetric Normal-mixture shape when no target skewness is available).
+                - "auto": "gamma" if the sample is non-negative, otherwise "skew_normal".
+            Widening is calibrated per-call against a target local variance (and, for
+            "skew_normal", a target local skewness) estimated from observed data; it is a
+            no-op when that target isn't available (see `create`).
         :raises ValueError: If invalid parameters are provided.
         """
 
@@ -46,6 +248,10 @@ class FittedModelFactory:
         self.bgm_sample_size = bgm_sample_size
         self.bgm_max_iter = bgm_max_iter
         self.n_components = n_components
+
+        if widening not in (False, "gamma", "skew_normal", "auto"):
+            raise ValueError("widening must be one of False, 'gamma', 'skew_normal', 'auto'")
+        self.widening = widening
 
         if nan_replace_func_name == "median":
             nan_replace_func_def = np.nanmedian
@@ -79,18 +285,28 @@ class FittedModelFactory:
         else:
             raise ValueError("point_model_name must be either 'kde', 'vim', or 'emm'")
 
-    def create(self, sample):
+    def create(self, sample, target_var=None, target_skew=None):
         """
         Fit the configured model to the given sample data.
 
         This method processes the input sample according to the specified
-        NaN-handling strategy and then fits the selected model to the cleaned data.
+        NaN-handling strategy, optionally widens it (see `widening`), and then fits the
+        selected model to the result.
 
         :param sample: NumPy array of data points to fit the model to.
-        :return: A tuple containing the fitted model and the processed sample data.
+        :param target_var: Target local variance to calibrate widening against (typically a
+            k-NN estimate from observed data at this sample's location). Only used when
+            `widening` is not False; if None, widening is skipped even if configured, since
+            there is nothing to calibrate against.
+        :param target_skew: Target local skewness to calibrate `widening="skew_normal"`
+            against (typically a k-NN estimate from observed data, e.g.
+            `_local_target_skewness`/`_loo_target_skewness`). Ignored by "gamma"; if None
+            while `widening="skew_normal"`, falls back to the symmetric shape (delta=0).
+        :return: A tuple containing the fitted model and the processed (possibly widened)
+            sample data.
         :raises ValueError: If the sample is not a NumPy array or becomes empty after
             NaN processing.
-        """        
+        """
         if not isinstance(sample, np.ndarray):
             raise ValueError("Sample must be a numpy array")
 
@@ -100,6 +316,30 @@ class FittedModelFactory:
         if data.size == 0:
             raise ValueError("Sample data is empty after removing NaNs.")
 
+        if self.widening is not False:
+            if target_var is None:
+                # UserWarning, not RuntimeWarning: this module suppresses RuntimeWarning at
+                # import time (line 12) for noisy sklearn/numpy internals, which would
+                # silently swallow this warning too if it shared that category.
+                warnings.warn(
+                    f"widening={self.widening!r} is configured but no target_var was "
+                    "supplied to create() -- widening is skipped for this sample. This "
+                    "happens when the caller (e.g. a density model built directly from "
+                    "EmpiricalModel/FittedModelFactory rather than through "
+                    "ess_sample/cv_sample_pred_posterior) has no spatial target to "
+                    "calibrate against.",
+                    UserWarning,
+                )
+            elif self.widening == "skew_normal" and target_skew is None:
+                warnings.warn(
+                    "widening='skew_normal' is configured but no target_skew was supplied "
+                    "to create() -- falling back to the symmetric shape for this sample.",
+                    UserWarning,
+                )
+            # unseeded by design: this class doesn't control the randomness of its other
+            # model fits either (GMM/VIM have no exposed seed), so widening matches that.
+            data = _widen_sample(data, self.widening, target_var, target_skew, rng=np.random.default_rng())
+
         return self.model.fit(data.reshape(-1, 1)), data
 
     def __repr__(self):
@@ -108,7 +348,8 @@ class FittedModelFactory:
                 f"kernel={self.kernel}, "
                 f"n_components={self.n_components}, "
                 f"bgm_sample_size={self.bgm_sample_size}, "
-                f"bgm_max_iter={self.bgm_max_iter}")
+                f"bgm_max_iter={self.bgm_max_iter}, "
+                f"widening={self.widening}")
 
 # --- Base Class for Probabilistic Models ---
 
@@ -447,7 +688,6 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
             'alpha_entropy_target': alpha_entropy_target
         }        
 
-
 def _find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     """
     Numba-optimized function to find the narrowest interval [i, j]
@@ -700,7 +940,8 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     def __init__(self, skl_model=None, sample=None,
                        support_sample_size=1000,
-                       fitted_model_factory=FittedModelFactory()):
+                       fitted_model_factory=FittedModelFactory(),
+                       target_var=None, target_skew=None):
         """
         Initialize the model wrapper and prepare PDF, CDF, and inverse CDF functions.
 
@@ -712,12 +953,21 @@ class EmpiricalModel(BaseEmpiricalModel):
         :type support_sample_size: int, optional
         :param fitted_model_factory: Factory to create a model when fitting from sample data.
         :type fitted_model_factory: FittedModelFactory, optional
+        :param target_var: Target local variance passed through to
+            ``fitted_model_factory.create`` for ensemble widening; ignored unless the
+            factory is configured with ``widening``.
+        :type target_var: float, optional
+        :param target_skew: Target local skewness passed through to
+            ``fitted_model_factory.create`` for ``widening="skew_normal"``; ignored by other
+            widening modes.
+        :type target_skew: float, optional
         :raises ValueError: If neither ``skl_model`` nor ``sample`` is provided, or if ``sample``
             is not a NumPy array.
         :raises Warning: If the estimated PDF integrates to zero (e.g., due to model or data issues).
         """
         if skl_model is not None:
             self.model = skl_model
+            self.data_ = None
             # Sample from the model to determine min/max range for grid
             s = self.model.sample(support_sample_size * 10)[0] # Use a larger sample for range
             self.d_min, self.d_max = s.min(), s.max()
@@ -727,7 +977,12 @@ class EmpiricalModel(BaseEmpiricalModel):
             if not isinstance(sample, np.ndarray):
                 raise ValueError("Sample must be a numpy array")
 
-            self.model, data = fitted_model_factory.create(sample)
+            self.model, data = fitted_model_factory.create(sample, target_var=target_var,
+                                                            target_skew=target_skew)
+            # the (possibly widened) data actually used to fit `self.model` -- distinct from
+            # `sample` whenever widening resampled it; plotting code should histogram this,
+            # not the pre-widening input, or the overlaid PDF/CDF won't match the histogram
+            self.data_ = data
             self.d_min, self.d_max = data.min(), data.max()
 
         # Extend the range slightly to avoid interpolation issues at boundaries

@@ -518,6 +518,7 @@ def _fitted_kl(
             bgm_sample_size       = getattr(f, "bgm_sample_size", 1000),
             bgm_max_iter          = getattr(f, "bgm_max_iter", 100),
             n_components          = getattr(f, "n_components", 3),
+            widening              = getattr(f, "widening", False),
         )
 
     try:

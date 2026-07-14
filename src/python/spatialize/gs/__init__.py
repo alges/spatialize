@@ -77,6 +77,8 @@ class lib_spatialize_facade:
         "gaussian": 4
     }
 
+    get_leaf_for_samples_using_esi = lsp.get_leaf_for_samples_using_esi
+
     @classmethod
     def get_operator(cls, points, local_interpolator, operation, partitioning_process):
         d = int(points.shape[1])

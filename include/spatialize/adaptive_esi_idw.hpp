@@ -322,6 +322,18 @@ namespace sptlz{
 
         bool interrupted = false;
 
+        // Pre-draw one seed per tree sequentially from the shared engine
+        // *before* entering the parallel region. Concurrent threads must
+        // never read/write the same std::mt19937 instance (that would be a
+        // data race, silently corrupting the sequence and making results
+        // depend on thread scheduling instead of `seed`), so each iteration
+        // below gets its own independent, deterministically-seeded engine.
+        std::uniform_int_distribution<unsigned int> uni_int;
+        std::vector<unsigned int> tree_seeds(mondrian_forest.size());
+        for(size_t i=0; i<mondrian_forest.size(); i++){
+          tree_seeds[i] = uni_int(this->my_rand);
+        }
+
         #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic, 1) shared(interrupted)
         #endif
@@ -329,6 +341,8 @@ namespace sptlz{
           #ifdef _OPENMP
           if(interrupted) continue;  // Skip remaining work if interrupted
           #endif
+
+          std::mt19937 leaf_rand(tree_seeds[i]);
 
           auto mt = mondrian_forest.at(i);
           for(int j=0; j<mt->samples_by_leaf.size(); j++){
@@ -339,7 +353,7 @@ namespace sptlz{
               leaf_values.push_back(values.at(mt->samples_by_leaf.at(j).at(k)));
             }
 
-            mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values);
+            mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values, leaf_rand);
           }
 
           #ifdef _OPENMP
@@ -410,7 +424,7 @@ namespace sptlz{
         return(centroid);
       }
 
-      std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+      std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::mt19937 &rng){
         std::uniform_real_distribution<float> uni_float(0, 1);
         int best_of = 3;
         if(coords->size()==0){
@@ -438,7 +452,7 @@ namespace sptlz{
           for(int i=0; i<best_of; i++){
             starting_point = {};
             for(int j=0; j<ranges.size(); j++){
-              starting_point.push_back(ranges.at(j).at(0)+uni_float(this->my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
+              starting_point.push_back(ranges.at(j).at(0)+uni_float(rng)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
             candidate = sptlz::grid_search<LOO2D>(func, &ranges, starting_point);
             aux = func->eval(candidate);
@@ -463,7 +477,7 @@ namespace sptlz{
           for(int i=0; i<best_of; i++){
             starting_point = {};
             for(int j=0; j<ranges.size(); j++){
-              starting_point.push_back(ranges.at(j).at(0)+uni_float(this->my_rand)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
+              starting_point.push_back(ranges.at(j).at(0)+uni_float(rng)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
             candidate = sptlz::grid_search<LOO3D>(func, &ranges, starting_point);
             aux = func->eval(candidate);

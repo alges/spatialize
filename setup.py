@@ -55,7 +55,7 @@ libspatialize_extensions = [
 if __name__ == '__main__':
     setup(
         name='spatialize',
-        version='1.1.1',
+        version='1.1.2',
         author='ALGES Laboratory',
         author_email='dev@alges.cl',
         description='Python Library for Generative Geostatistics and Spatial Analysis',

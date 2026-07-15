@@ -202,7 +202,7 @@ class FittedModelFactory:
     def __init__(self, nan_model_name="replace", nan_replace_func_name="median",
                  point_model_name="kde", kernel="gaussian",
                  bgm_sample_size=1000, bgm_max_iter=100, n_components=3,
-                 widening=False, widening_knn=12):
+                 widening=False, widening_knn=12, seed=None):
         """
         Factory for creating and fitting probabilistic models on sample data.
 
@@ -241,6 +241,13 @@ class FittedModelFactory:
             target local variance/skewness that widening is calibrated against (see
             `_local_target_variance`/`_loo_target_variance`/`_local_target_skewness`/
             `_loo_target_skewness`). Ignored when `widening` is False. Default is 12.
+        :param seed: Random seed for reproducibility. Seeds the "emm"/"vim" model fits
+            (passed as `random_state` to `GaussianMixture`/`BayesianGaussianMixture`,
+            since their EM initialization is stochastic; "kde" fitting has no randomness
+            and ignores this). Also used as the default seed for widening (see `create`),
+            since resampling/Gamma/SkewNormal draws there are stochastic too. If None
+            (default), all of the above remain unseeded/non-deterministic, matching prior
+            behaviour.
         :raises ValueError: If invalid parameters are provided.
         """
 
@@ -250,6 +257,7 @@ class FittedModelFactory:
         self.bgm_sample_size = bgm_sample_size
         self.bgm_max_iter = bgm_max_iter
         self.n_components = n_components
+        self.seed = seed
 
         if widening not in (False, "gamma", "skew_normal", "auto"):
             raise ValueError("widening must be one of False, 'gamma', 'skew_normal', 'auto'")
@@ -280,15 +288,19 @@ class FittedModelFactory:
 
         # the bandwidth is calculated automatically using the silverman method
         if point_model_name == "kde":
+            # KDE fitting is deterministic (no random_state in sklearn's KernelDensity
+            # constructor); `seed` is not used here.
             self.model = KernelDensity(kernel=self.kernel, bandwidth="silverman", atol=0.5, rtol=0.5)
         elif point_model_name == "vim":  # Variational inference dirichlet process gaussian mixture model
-            self.model = BayesianGaussianMixture(n_components=self.n_components, covariance_type='full')
+            self.model = BayesianGaussianMixture(n_components=self.n_components, covariance_type='full',
+                                                  random_state=self.seed)
         elif point_model_name == "emm":  # Expectation-Maximisation gaussian mixture model
-            self.model = GaussianMixture(n_components=self.n_components, covariance_type='full')
+            self.model = GaussianMixture(n_components=self.n_components, covariance_type='full',
+                                          random_state=self.seed)
         else:
             raise ValueError("point_model_name must be either 'kde', 'vim', or 'emm'")
 
-    def create(self, sample, target_var=None, target_skew=None):
+    def create(self, sample, target_var=None, target_skew=None, seed=None):
         """
         Fit the configured model to the given sample data.
 
@@ -305,6 +317,12 @@ class FittedModelFactory:
             against (typically a k-NN estimate from observed data, e.g.
             `_local_target_skewness`/`_loo_target_skewness`). Ignored by "gamma"; if None
             while `widening="skew_normal"`, falls back to the symmetric shape (delta=0).
+        :param seed: Random seed for this call's widening draws, overriding the factory's
+            `seed` for this sample only. Callers that invoke `create()` once per spatial
+            location (e.g. `ess_sample`, `PosteriorSampleAnalyzer`) should derive a distinct
+            per-location seed from a shared base seed (e.g. `base_seed + location_index`) so
+            that widening doesn't draw identical noise at every location. Falls back to
+            `self.seed` when None.
         :return: A tuple containing the fitted model and the processed (possibly widened)
             sample data.
         :raises ValueError: If the sample is not a NumPy array or becomes empty after
@@ -339,9 +357,9 @@ class FittedModelFactory:
                     "to create() -- falling back to the symmetric shape for this sample.",
                     UserWarning,
                 )
-            # unseeded by design: this class doesn't control the randomness of its other
-            # model fits either (GMM/VIM have no exposed seed), so widening matches that.
-            data = _widen_sample(data, self.widening, target_var, target_skew, rng=np.random.default_rng())
+            effective_seed = seed if seed is not None else self.seed
+            data = _widen_sample(data, self.widening, target_var, target_skew,
+                                  rng=np.random.default_rng(effective_seed))
 
         return self.model.fit(data.reshape(-1, 1)), data
 
@@ -353,7 +371,8 @@ class FittedModelFactory:
                 f"bgm_sample_size={self.bgm_sample_size}, "
                 f"bgm_max_iter={self.bgm_max_iter}, "
                 f"widening={self.widening}, "
-                f"widening_knn={self.widening_knn}")
+                f"widening_knn={self.widening_knn}, "
+                f"seed={self.seed}")
 
 # --- Base Class for Probabilistic Models ---
 
@@ -945,7 +964,7 @@ class EmpiricalModel(BaseEmpiricalModel):
     def __init__(self, skl_model=None, sample=None,
                        support_sample_size=1000,
                        fitted_model_factory=FittedModelFactory(),
-                       target_var=None, target_skew=None):
+                       target_var=None, target_skew=None, seed=None):
         """
         Initialize the model wrapper and prepare PDF, CDF, and inverse CDF functions.
 
@@ -965,6 +984,10 @@ class EmpiricalModel(BaseEmpiricalModel):
             ``fitted_model_factory.create`` for ``widening="skew_normal"``; ignored by other
             widening modes.
         :type target_skew: float, optional
+        :param seed: Random seed passed through to ``fitted_model_factory.create`` for this
+            sample's widening draws, overriding the factory's own ``seed`` (see
+            ``FittedModelFactory.create``). Ignored when ``skl_model`` is given.
+        :type seed: int, optional
         :raises ValueError: If neither ``skl_model`` nor ``sample`` is provided, or if ``sample``
             is not a NumPy array.
         :raises Warning: If the estimated PDF integrates to zero (e.g., due to model or data issues).
@@ -982,7 +1005,7 @@ class EmpiricalModel(BaseEmpiricalModel):
                 raise ValueError("Sample must be a numpy array")
 
             self.model, data = fitted_model_factory.create(sample, target_var=target_var,
-                                                            target_skew=target_skew)
+                                                            target_skew=target_skew, seed=seed)
             # the (possibly widened) data actually used to fit `self.model` -- distinct from
             # `sample` whenever widening resampled it; plotting code should histogram this,
             # not the pre-widening input, or the overlaid PDF/CDF won't match the histogram

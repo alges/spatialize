@@ -19,6 +19,7 @@ from spatialize.logging import default_singleton_callback, log_message
 from spatialize import SpatializeError, logging  # Assuming 'logging' here refers to your custom logging
 from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
                                    _loo_target_skewness)
+from spatialize.viz import PlotStyle
 
 
 class PosteriorSampleAnalyzer:
@@ -241,7 +242,7 @@ class PosteriorSampleAnalyzer:
 
         return pd.DataFrame({'value': self.sample_values, 'category': categories_results})
 
-    def plot_summary(self, **figargs):
+    def plot_summary(self, theme='alges', color=None, **figargs):
         """
         Plots a summary of the posterior sample analysis.
 
@@ -250,29 +251,33 @@ class PosteriorSampleAnalyzer:
         2. Histogram of the calculated sample percentiles (CDFs).
         3. Histogram of the calculated sample entropies.
 
+        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Defaults to 'alges'.
+        :param color: Color for the histograms. If None, uses theme default.
         :param figargs: Keyword arguments to be passed to `matplotlib.pyplot.subplots`.
                         For example, `figsize=(12, 4)`.
         :type figargs: dict, optional
         """
-        fig, ax = plt.subplots(1, 3, **figargs)
-        fig.suptitle("Posterior Sample Analysis")
-        fig.subplots_adjust(wspace=0.5)
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 3, **figargs)
+            fig.suptitle("Posterior Sample Analysis")
+            fig.subplots_adjust(wspace=0.5)
 
-        ax[0].hist(self.sample_values, 25, density=True, histtype='stepfilled', alpha=0.3)
-        ax[0].set_title("Value")
+            ax[0].hist(self.sample_values, 25, density=True, histtype='stepfilled', alpha=0.3, color=style.color)
+            ax[0].set_title("Value")
 
-        ax[1].hist(list(self.sample_quantiles.values()), 25, density=True, histtype='stepfilled',
-                   alpha=0.3)  # Ensure it's a list for hist
-        ax[1].set_title("Percentiles")
+            ax[1].hist(list(self.sample_quantiles.values()), 25, density=True, histtype='stepfilled',
+                       alpha=0.3, color=style.color)  # Ensure it's a list for hist
+            ax[1].set_title("Percentiles")
 
-        ax[2].hist(list(self.sample_entropy.values()), 25, density=True, histtype='stepfilled',
-                   alpha=0.3)  # Ensure it's a list for hist
-        ax[2].set_title("Entropy")
+            ax[2].hist(list(self.sample_entropy.values()), 25, density=True, histtype='stepfilled',
+                       alpha=0.3, color=style.color)  # Ensure it's a list for hist
+            ax[2].set_title("Entropy")
 
         # Consider plt.show() or returning fig if used in non-interactive environments
         # plt.show()
 
-    def quick_plot_models(self, n_imgs=6, n_cols=3, seed=42, **figargs):
+    def quick_plot_models(self, n_imgs=6, n_cols=3, seed=42, theme='alges', cmap=None, **figargs):
         """
         Plots a grid of individual empirical model fits for a random sample of data points.
 
@@ -288,6 +293,9 @@ class PosteriorSampleAnalyzer:
         :param seed: Seed for the random number generator to ensure reproducibility
                      of sample selection. Defaults to 42. If None, a random seed is used.
         :type seed: int, optional
+        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Defaults to 'alges'.
+        :param cmap: Colormap used to color each subplot's histogram. If None, uses theme default.
         :param figargs: Keyword arguments passed to `matplotlib.pyplot.subplots`
                         when creating the figure.
         :type figargs: dict, optional
@@ -320,9 +328,9 @@ class PosteriorSampleAnalyzer:
         rd.setstate(current_random_state)  # Restore random state
 
         plot_histogram_grid_with_pdf_cdf(r, hist_idx, self.emodels, n_rows, n_cols,
-                                         bins=25, **figargs)
+                                         bins=25, theme=theme, cmap=cmap, **figargs)
 
-    def plot_ranking(self, samples_ranking, cmap='viridis', figsize=(11, 6)):
+    def plot_ranking(self, samples_ranking, theme='alges', color=None, cmap=None, figsize=(11, 6)):
         """
         Plots the sample ranking results.
 
@@ -333,85 +341,86 @@ class PosteriorSampleAnalyzer:
         :param samples_ranking: DataFrame containing 'value' and 'category' columns,
                                 as returned by `rank_samples`.
         :type samples_ranking: pandas.DataFrame
+        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Defaults to 'alges'.
+        :param color: Color for the bar chart. If None, uses theme default.
+        :param cmap: Colormap used for the categorized scatter plot. If None, uses theme default.
         :param figsize: Size of the figure for plotting. Defaults to (11, 6).
         :type figsize: tuple, optional
         """
-        fig, ax = plt.subplots(1, 2, figsize=figsize)
+        with PlotStyle(theme=theme, color=color, cmap=cmap) as style:
+            fig, ax = plt.subplots(1, 2, figsize=figsize)
 
-        categories_series = samples_ranking["category"]  # This is a pandas Series
-        # For bar plot, count occurrences of each category
-        category_counts = categories_series.value_counts().sort_index()
+            categories_series = samples_ranking["category"]  # This is a pandas Series
+            # For bar plot, count occurrences of each category
+            category_counts = categories_series.value_counts().sort_index()
 
-        ax[0].bar(category_counts.index.astype(str), category_counts.values)
-        ax[0].set_title("Categories")
-        ax[0].tick_params(axis='x', rotation=45)  # Rotate labels if they overlap
+            ax[0].bar(category_counts.index.astype(str), category_counts.values, color=style.color)
+            ax[0].set_title("Categories")
+            ax[0].tick_params(axis='x', rotation=45)  # Rotate labels if they overlap
 
-        # Scatter plot part
-        # Ensure categories are strings for consistent processing
-        categories_str = categories_series.astype(str).values
-        unique_cats = sorted(
-            list(set(c for c in categories_str if c != 'None')))  # Exclude 'None' if it's an error marker
+            # Scatter plot part
+            # Ensure categories are strings for consistent processing
+            categories_str = categories_series.astype(str).values
+            unique_cats = sorted(
+                list(set(c for c in categories_str if c != 'None')))  # Exclude 'None' if it's an error marker
 
-        if not unique_cats:
-            log_message(logging.logger.warning("No valid categories to plot in plot_ranking scatter plot."))
-            ax[1].set_title("Categorized Samples (No data)")
+            if not unique_cats:
+                log_message(logging.logger.warning("No valid categories to plot in plot_ranking scatter plot."))
+                ax[1].set_title("Categorized Samples (No data)")
+                plt.tight_layout()
+                # plt.show() # Depending on usage
+                return
+
+            cat_to_num = {cat: i for i, cat in enumerate(unique_cats)}
+
+            # Map categories to numbers, handling potential 'None' or unmapped
+            category_nums = np.array([cat_to_num.get(str(cat), -1) for cat in categories_series.values])
+
+            # Filter out points where category was None or unmapped (-1)
+            valid_indices = (category_nums != -1)
+
+            if not np.any(valid_indices):
+                log_message(logging.logger.warning("All categories are unmapped or None in plot_ranking."))
+                ax[1].set_title("Categorized Samples (No valid data)")
+                plt.tight_layout()
+                # plt.show()
+                return
+
+            points_to_plot = self.points[valid_indices]
+            category_nums_to_plot = category_nums[valid_indices]
+
+            # Check array lengths
+            if len(points_to_plot) != len(category_nums_to_plot):  # Should not happen if logic is correct
+                log_message(logging.logger.error("Mismatch between points and categories after filtering!"))
+                # Fallback or raise error
+                plt.tight_layout()
+                return
+
+            # Create custom colormap from the theme/user-provided cmap (resolved by PlotStyle,
+            # so palette names like 'batlow' or 'alges' work here too, not just matplotlib names)
+            base_cmap = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
+            n_colors = max(len(unique_cats), 2)
+            cat_cmap = ListedColormap(base_cmap.resampled(n_colors)(np.linspace(0, 1, len(unique_cats))))
+
+            # Plot
+            if points_to_plot.shape[0] > 0:  # Check if there's anything to plot
+                sc = ax[1].scatter(points_to_plot[:, 0], points_to_plot[:, 1],
+                                   c=category_nums_to_plot, cmap=cat_cmap, s=30, edgecolor='none')
+                # Add colorbar
+                cbar = plt.colorbar(sc, ax=ax[1], ticks=list(range(len(unique_cats))), orientation='vertical')
+                cbar.set_ticklabels(unique_cats)  # Set colorbar labels to category names
+            else:
+                log_message(logging.logger.info("No points to display in categorized scatter plot."))
+
+            # Set the aspect ratio to 1:1 (equal axes)
+            ax[1].set_aspect('equal', adjustable='box')
+            ax[1].set_title("Categorized Samples")
+            ax[1].set_xlabel("X")
+            ax[1].set_ylabel("Y")
+            # plt.grid(True) # grid can sometimes make scatter plots busy
             plt.tight_layout()
             # plt.show() # Depending on usage
-            return
-
-        cat_to_num = {cat: i for i, cat in enumerate(unique_cats)}
-
-        # Map categories to numbers, handling potential 'None' or unmapped
-        category_nums = np.array([cat_to_num.get(str(cat), -1) for cat in categories_series.values])
-
-        # Filter out points where category was None or unmapped (-1)
-        valid_indices = (category_nums != -1)
-
-        if not np.any(valid_indices):
-            log_message(logging.logger.warning("All categories are unmapped or None in plot_ranking."))
-            ax[1].set_title("Categorized Samples (No valid data)")
-            plt.tight_layout()
-            # plt.show()
-            return
-
-        points_to_plot = self.points[valid_indices]
-        category_nums_to_plot = category_nums[valid_indices]
-
-        # Check array lengths
-        if len(points_to_plot) != len(category_nums_to_plot):  # Should not happen if logic is correct
-            log_message(logging.logger.error("Mismatch between points and categories after filtering!"))
-            # Fallback or raise error
-            plt.tight_layout()
-            return
-
-        # Create custom colormap
-        # cmap = ListedColormap(plt.cm.plasma(np.linspace(0, 1, len(unique_cats))))
-        # Use a robust colormap if plt.cm.plasma is not always available or for better distinction
-        try:
-            cmap_colors = matplotlib.colormaps[cmap].resampled(len(unique_cats))
-        except ValueError:  # Fallback if len(unique_cats) is 0 or 1
-            cmap_colors = matplotlib.colormaps[cmap].resampled(2)  # Default to at least 2 colors
-
-        cmap = ListedColormap(cmap_colors(np.linspace(0, 1, len(unique_cats))))
-
-        # Plot
-        if points_to_plot.shape[0] > 0:  # Check if there's anything to plot
-            sc = ax[1].scatter(points_to_plot[:, 0], points_to_plot[:, 1],
-                               c=category_nums_to_plot, cmap=cmap, s=30, edgecolor='none')
-            # Add colorbar
-            cbar = plt.colorbar(sc, ax=ax[1], ticks=list(range(len(unique_cats))), orientation='vertical')
-            cbar.set_ticklabels(unique_cats)  # Set colorbar labels to category names
-        else:
-            log_message(logging.logger.info("No points to display in categorized scatter plot."))
-
-        # Set the aspect ratio to 1:1 (equal axes)
-        ax[1].set_aspect('equal', adjustable='box')
-        ax[1].set_title("Categorized Samples")
-        ax[1].set_xlabel("X")
-        ax[1].set_ylabel("Y")
-        # plt.grid(True) # grid can sometimes make scatter plots busy
-        plt.tight_layout()
-        # plt.show() # Depending on usage
 
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
@@ -529,7 +538,8 @@ def cv_sample_pred_posterior(points, values, xi, **kwargs):
                                    callback=kwargs['callback'])
 
 #todo: move this function to viz
-def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, bins=25, figsize=(15, 10)):
+def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, bins=25, figsize=(15, 10),
+                                     theme='alges', cmap=None):
     """
     Plots a grid of histograms for specified data samples.
 
@@ -560,80 +570,84 @@ def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, b
     :param figsize: Overall figure size (width, height) in inches.
                     Defaults to (15, 10).
     :type figsize: tuple[float, float], optional
+    :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+        'alges', 'minimal', 'publication'. Defaults to 'alges'.
+    :param cmap: Colormap used to color each subplot's histogram. If None, uses theme default.
     """
-    warm_pastel_colors = [
-        "#FDBE85", "#FDD0A2", "#FCC5B0",
-        "#F4A582", "#F6C5A3", "#EECFCB"
-    ]
+    with PlotStyle(theme=theme, cmap=cmap) as style:
+        base_cmap = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
+        n_colors = max(n_rows * n_cols, 2)
+        panel_colors = base_cmap(np.linspace(0.15, 0.85, n_colors))
+        pdf_color = plt.rcParams['text.color']
 
-    N = len(data_indices)
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize)
-    axs = axs.flatten()  # Flatten to easily iterate regardless of grid shape
+        N = len(data_indices)
+        fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize)
+        axs = axs.flatten()  # Flatten to easily iterate regardless of grid shape
 
-    for i in range(n_rows * n_cols):
-        ax = axs[i]
-        if i < N:
-            idx = data_indices[i]
+        for i in range(n_rows * n_cols):
+            ax = axs[i]
+            if i < N:
+                idx = data_indices[i]
 
-            try:
-                # Access emodel, works if emodels is dict keyed by idx, or list if idx is 0-based sequential
-                emodel = emodels[idx]
-            except (KeyError, IndexError):
-                log_message(
-                    logging.logger.warning(f"Empirical model for index {idx} not found. Skipping plot for this index."))
-                ax.axis('off')
-                continue
-            except TypeError:  # If emodels is None or not subscriptable
-                log_message(logging.logger.error(
-                    f"Emodels is not a valid collection (dict/list). Skipping plot for index {idx}."))
-                ax.axis('off')
-                continue
-
-            # histogram the data actually fitted (post-widening, when configured) so it
-            # lines up with the overlaid PDF/CDF; fall back to the raw posterior matrix
-            # for models that don't carry it (e.g. built directly from a skl_model)
-            data = getattr(emodel, "data_", None)
-            if data is None:
-                if idx >= r.shape[0]:
+                try:
+                    # Access emodel, works if emodels is dict keyed by idx, or list if idx is 0-based sequential
+                    emodel = emodels[idx]
+                except (KeyError, IndexError):
                     log_message(
-                        logging.logger.warning(f"Index {idx} out of bounds for posterior samples matrix r. Skipping."))
+                        logging.logger.warning(f"Empirical model for index {idx} not found. Skipping plot for this index."))
                     ax.axis('off')
                     continue
-                data = r[idx, :]
+                except TypeError:  # If emodels is None or not subscriptable
+                    log_message(logging.logger.error(
+                        f"Emodels is not a valid collection (dict/list). Skipping plot for index {idx}."))
+                    ax.axis('off')
+                    continue
 
-            color = warm_pastel_colors[i % len(warm_pastel_colors)]
+                # histogram the data actually fitted (post-widening, when configured) so it
+                # lines up with the overlaid PDF/CDF; fall back to the raw posterior matrix
+                # for models that don't carry it (e.g. built directly from a skl_model)
+                data = getattr(emodel, "data_", None)
+                if data is None:
+                    if idx >= r.shape[0]:
+                        log_message(
+                            logging.logger.warning(f"Index {idx} out of bounds for posterior samples matrix r. Skipping."))
+                        ax.axis('off')
+                        continue
+                    data = r[idx, :]
 
-            # Plot histogram
-            ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.3, color=color, edgecolor='black')
+                color = panel_colors[i % len(panel_colors)]
 
-            # Plot PDF
-            if hasattr(emodel, 'x_') and hasattr(emodel, 'pdf_'):
-                ax.plot(emodel.x_, emodel.pdf_, '-k', label="PDF")
+                # Plot histogram
+                ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.3, color=color, edgecolor='black')
+
+                # Plot PDF
+                if hasattr(emodel, 'x_') and hasattr(emodel, 'pdf_'):
+                    ax.plot(emodel.x_, emodel.pdf_, '-', color=pdf_color, label="PDF")
+                else:
+                    log_message(logging.logger.warning(f"Emodel for index {idx} missing x_ or pdf_ attributes."))
+
+                # Get current axis limits for scaling CDF
+                # ymin, ymax = ax.get_ylim() # Get ylim *after* histogram and PDF are plotted for better scale
+
+                # Plot scaled CDF
+                if hasattr(emodel, 'x_') and hasattr(emodel, 'cdf_'):
+                    # Ensure PDF is plotted first to set a reasonable y-axis scale
+                    # If PDF wasn't plotted, ylim might not be representative
+                    current_ymin, current_ymax = ax.get_ylim()
+                    scaled_cdf = emodel.cdf_ * (current_ymax - current_ymin) + current_ymin
+                    ax.plot(emodel.x_, scaled_cdf, '-b', label="CDF (scaled)")
+                else:
+                    log_message(
+                        logging.logger.warning(f"Emodel for index {idx} missing x_ or cdf_ attributes for CDF plotting."))
+
+                # Label
+                ax.set_title(f'Sample {idx}', fontsize=10)
+                ax.set_xlabel('Value', fontsize=8)
+                ax.set_ylabel('Density', fontsize=8)
+                ax.tick_params(axis='both', which='major', labelsize=7)  # Smaller tick labels
+                ax.legend(fontsize=6)
             else:
-                log_message(logging.logger.warning(f"Emodel for index {idx} missing x_ or pdf_ attributes."))
+                ax.axis('off')  # hide unused plots
 
-            # Get current axis limits for scaling CDF
-            # ymin, ymax = ax.get_ylim() # Get ylim *after* histogram and PDF are plotted for better scale
-
-            # Plot scaled CDF
-            if hasattr(emodel, 'x_') and hasattr(emodel, 'cdf_'):
-                # Ensure PDF is plotted first to set a reasonable y-axis scale
-                # If PDF wasn't plotted, ylim might not be representative
-                current_ymin, current_ymax = ax.get_ylim()
-                scaled_cdf = emodel.cdf_ * (current_ymax - current_ymin) + current_ymin
-                ax.plot(emodel.x_, scaled_cdf, '-b', label="CDF (scaled)")
-            else:
-                log_message(
-                    logging.logger.warning(f"Emodel for index {idx} missing x_ or cdf_ attributes for CDF plotting."))
-
-            # Label
-            ax.set_title(f'Sample {idx}', fontsize=10)
-            ax.set_xlabel('Value', fontsize=8)
-            ax.set_ylabel('Density', fontsize=8)
-            ax.tick_params(axis='both', which='major', labelsize=7)  # Smaller tick labels
-            ax.legend(fontsize=6)
-        else:
-            ax.axis('off')  # hide unused plots
-
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()

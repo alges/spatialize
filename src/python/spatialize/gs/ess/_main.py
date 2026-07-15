@@ -14,7 +14,7 @@ from spatialize import logging
 from spatialize.empirical import (FittedModelFactory, EmpiricalModel, _local_target_variance,
                                    _local_target_skewness)
 from spatialize.logging import log_message, default_singleton_callback
-from spatialize.viz import plot_colormap_array
+from spatialize.viz import plot_colormap_array, PlotStyle
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -61,7 +61,8 @@ class ESSResult:
     def __repr__(self):
         return str(self.desc)
 
-    def quick_plot(self, n_imgs=9, n_cols=3, norm_lims=False, title_prefix="scenario", title=None):
+    def quick_plot(self, n_imgs=9, n_cols=3, norm_lims=False, title_prefix="scenario", title=None,
+                   theme='alges', cmap=None):
         """
         Quickly plots a preview of the ESS scenarios as a grid of colormap images.
 
@@ -74,17 +75,23 @@ class ESSResult:
         :param norm_lims: Whether to normalize the values of the scenarios based on the reference map. Defaults to False.
         :param title_prefix: The prefix to use in the subplot titles (e.g., "scenario 1", "scenario 2"). Defaults to "scenario".
         :param title: The title for the entire plot. Defaults to None, which uses the `desc` attribute.
+        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Defaults to 'alges'.
+        :param cmap: Colormap for the plot. If None, uses theme default.
 
         :return: A Matplotlib figure containing the grid of ESS scenario plots.
         """
         if title is None:
             title = self.desc
-        return plot_colormap_array(self.scenarios, n_imgs=n_imgs,
-                                   n_cols=n_cols, norm_lims=norm_lims,
-                                   xi_locations=self.esi_result._xi,
-                                   reference_map=self.esi_result.estimation(),
-                                   title_prefix=title_prefix,
-                                   title=title)
+
+        with PlotStyle(theme=theme, cmap=cmap) as style:
+            return plot_colormap_array(self.scenarios, n_imgs=n_imgs,
+                                       n_cols=n_cols, norm_lims=norm_lims,
+                                       xi_locations=self.esi_result._xi,
+                                       reference_map=self.esi_result.estimation(),
+                                       title_prefix=title_prefix,
+                                       title=title,
+                                       cmap=style.cmap)
 
 
 def ess_sample(esi_result,

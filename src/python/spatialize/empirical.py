@@ -16,10 +16,8 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # --- Ensemble widening (corrects (A)ESA/ESI ensembles that are under-dispersed because
 # each member is a partition-*average* and so only captures between-partition variance) ---
 
-_WIDENING_KNN = 12  # neighbours used to estimate the local target variance
-
 #todo: review unused funtions _local_target_variance, _loo_target_variance
-def _local_target_variance(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
+def _local_target_variance(obs_pts, obs_vals, query_pts, knn=12):
     """Target local variance at each query point = variance of its knn nearest OBSERVED
     neighbours (captures the local spread, including the nugget)."""
     obs_pts = np.asarray(obs_pts, float)
@@ -34,7 +32,7 @@ def _local_target_variance(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
     return np.var(obs_vals[idx], axis=1)
 
 
-def _loo_target_variance(obs_pts, obs_vals, knn=_WIDENING_KNN):
+def _loo_target_variance(obs_pts, obs_vals, knn=12):
     """Leave-one-out variant of `_local_target_variance` for when the query points ARE the
     observed points (e.g. cross-validation) -- excludes each point's match to itself, which
     would otherwise be a zero-distance neighbour deflating its own target variance. Excludes
@@ -55,7 +53,7 @@ def _loo_target_variance(obs_pts, obs_vals, knn=_WIDENING_KNN):
     return target_var
 
 
-def _local_target_skewness(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
+def _local_target_skewness(obs_pts, obs_vals, query_pts, knn=12):
     """Target local skewness at each query point = (Fisher-Pearson) skewness of its knn
     nearest OBSERVED neighbours. Calibrates `widening='skew_normal'` the same way
     `_local_target_variance` calibrates 'gamma'."""
@@ -68,7 +66,7 @@ def _local_target_skewness(obs_pts, obs_vals, query_pts, knn=_WIDENING_KNN):
     return _scipy_skew(obs_vals[idx], axis=1)
 
 
-def _loo_target_skewness(obs_pts, obs_vals, knn=_WIDENING_KNN):
+def _loo_target_skewness(obs_pts, obs_vals, knn=12):
     """Leave-one-out variant of `_local_target_skewness`, mirroring `_loo_target_variance`
     (see its docstring for why the self-match must be excluded by index)."""
     obs_pts = np.asarray(obs_pts, float)
@@ -204,7 +202,7 @@ class FittedModelFactory:
     def __init__(self, nan_model_name="replace", nan_replace_func_name="median",
                  point_model_name="kde", kernel="gaussian",
                  bgm_sample_size=1000, bgm_max_iter=100, n_components=3,
-                 widening=False):
+                 widening=False, widening_knn=12):
         """
         Factory for creating and fitting probabilistic models on sample data.
 
@@ -239,6 +237,10 @@ class FittedModelFactory:
             Widening is calibrated per-call against a target local variance (and, for
             "skew_normal", a target local skewness) estimated from observed data; it is a
             no-op when that target isn't available (see `create`).
+        :param widening_knn: Number of nearest observed neighbours used to estimate the
+            target local variance/skewness that widening is calibrated against (see
+            `_local_target_variance`/`_loo_target_variance`/`_local_target_skewness`/
+            `_loo_target_skewness`). Ignored when `widening` is False. Default is 12.
         :raises ValueError: If invalid parameters are provided.
         """
 
@@ -252,6 +254,7 @@ class FittedModelFactory:
         if widening not in (False, "gamma", "skew_normal", "auto"):
             raise ValueError("widening must be one of False, 'gamma', 'skew_normal', 'auto'")
         self.widening = widening
+        self.widening_knn = widening_knn
 
         if nan_replace_func_name == "median":
             nan_replace_func_def = np.nanmedian
@@ -349,7 +352,8 @@ class FittedModelFactory:
                 f"n_components={self.n_components}, "
                 f"bgm_sample_size={self.bgm_sample_size}, "
                 f"bgm_max_iter={self.bgm_max_iter}, "
-                f"widening={self.widening}")
+                f"widening={self.widening}, "
+                f"widening_knn={self.widening_knn}")
 
 # --- Base Class for Probabilistic Models ---
 

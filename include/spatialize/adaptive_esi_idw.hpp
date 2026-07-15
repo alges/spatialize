@@ -33,7 +33,7 @@ namespace sptlz{
       }
 
       float eval(std::vector<float> X){
-        int n = values->size();
+        int n = static_cast<int>(values->size());
         float r = 0.0;
         std::vector<float> params = {X.at(1), X.at(2)};
 
@@ -85,7 +85,7 @@ namespace sptlz{
       }
 
       float eval(std::vector<float> X){
-        int n = values->size();
+        int n = static_cast<int>(values->size());
         float r = 0.0;
         std::vector<float> params = {X.at(1), X.at(2), X.at(3), X.at(4), X.at(5)};
 
@@ -258,7 +258,6 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_folds = slice(folds, samples_id);
-        float w, w_sum, w_v_sum;
 
         if((samples_id->size()==0) || (samples_id->size()==1)){
           for([[maybe_unused]] auto l: *samples_id){
@@ -292,7 +291,7 @@ namespace sptlz{
               #ifdef _OPENMP
               #pragma omp parallel for schedule(static)
               #endif
-              for(size_t idx=0; idx<test_indices.size(); idx++){
+              for(int idx=0; idx<test_indices.size(); idx++){
                 int j = test_indices[idx];
                 float w_sum = 0.0;
                 float w_v_sum = 0.0;
@@ -319,7 +318,7 @@ namespace sptlz{
 
         logger->info("computing optimal parameters");
 
-        progress->init(mondrian_forest.size(), 1);
+        progress->init(static_cast<int>(mondrian_forest.size()), 1);
 
         bool interrupted = false;
 
@@ -397,9 +396,9 @@ namespace sptlz{
 
         LOOND *fn;
         if(this->d==2){
-          fn = new LOO_2D(coords, values, 0.01);
+          fn = new LOO_2D(coords, values, 0.01f);
         }else{
-          fn = new LOO_3D(coords, values, 0.01);
+          fn = new LOO_3D(coords, values, 0.01f);
         }
         GradDesc *opt = new GridNBRndDesc(fn, this->param_ranges, this->steps, this->ns, this->k, std::rand());
         std::vector<float> m = get_minimum(opt, &(this->param_ranges), 100);
@@ -443,12 +442,12 @@ namespace sptlz{
         std::vector<float> min_coords;
         if(coords->at(0).size()==2){
           std::vector<float> starting_point, candidate;
-          float min_value=1e20, aux;
+          float min_value=1e20f, aux;
           LOO2D *func = new LOO2D(coords, values, this->metric);
           std::vector<std::vector<float>> ranges = {
-            {0.1, 8.0, 0.2},    // exponent p
-            {0.0, 180.0, 1.0},  // azimuth φ
-            {0.1, 5.0, 0.2}    // anisotropy factor a_f
+            {0.1f, 8.0f, 0.2f},    // exponent p
+            {0.0f, 180.0f, 1.0f},  // azimuth φ
+            {0.1f, 5.0f, 0.2f}    // anisotropy factor a_f
           };
           for(int i=0; i<best_of; i++){
             starting_point = {};
@@ -465,15 +464,15 @@ namespace sptlz{
           delete func;
         }else if(coords->at(0).size()==3){
           std::vector<float> starting_point, candidate;
-          float min_value=1e20, aux;
+          float min_value=1e20f, aux;
           LOO3D *func = new LOO3D(coords, values, this->metric);
           std::vector<std::vector<float>> ranges = {
-            {0.1, 8.0, 0.2},    // exponent p
-            {0.0, 180.0, 1.0},  // azimuth
-            {0.0, 180.0, 1.0},  // dip
-            {0.0, 180.0, 1.0},  // plunge
-            {0.1, 5.0, 0.2},   // anisotropy ratio 1
-            {0.1, 5.0, 0.2}    // anisotropy ratio 2
+            {0.1f, 8.0f, 0.2f},    // exponent p
+            {0.0f, 180.0f, 1.0f},  // azimuth
+            {0.0f, 180.0f, 1.0f},  // dip
+            {0.0f, 180.0f, 1.0f},  // plunge
+            {0.1f, 5.0f, 0.2f},   // anisotropy ratio 1
+            {0.1f, 5.0f, 0.2f}    // anisotropy ratio 2
           };
           for(int i=0; i<best_of; i++){
             starting_point = {};
@@ -520,23 +519,23 @@ namespace sptlz{
         if(_coords.at(0).size()==2){
           this->d = 2;
           this->param_ranges = {
-            {  0.5, 10.0},  // exponent p
-            {-90.0, 90.0},  // azimuth φ
-            {  0.1, 5.0}   // anisotropy factor a_f
+            {  0.5f, 10.0f},  // exponent p
+            {-90.0f, 90.0f},  // azimuth φ
+            {  0.1f, 5.0f}   // anisotropy factor a_f
           };
-          this->steps = {0.5, 10.0, 0.2};
+          this->steps = {0.5f, 10.0f, 0.2f};
           this->ns = {19, 18, 25};
         }else if(_coords.at(0).size()==3){
           this->d = 3;
           this->param_ranges = {
-            {  0.5, 10.0},  // exponent p
-            {-90.0, 90.0},  // azimuth
-            {-90.0, 90.0},  // dip
-            {-90.0, 90.0},  // plunge
-            {  0.1, 5.0},  // anisotropy ratio 1
-            {  0.1, 5.0}   // anisotropy ratio 2
+            {  0.5f, 10.0f},  // exponent p
+            {-90.0f, 90.0f},  // azimuth
+            {-90.0f, 90.0f},  // dip
+            {-90.0f, 90.0f},  // plunge
+            {  0.1f, 5.0f},  // anisotropy ratio 1
+            {  0.1f, 5.0f}   // anisotropy ratio 2
           };
-          this->steps = {0.5, 10.0, 10.0, 10.0, 0.2, 0.2};
+          this->steps = {0.5f, 10.0f, 10.0f, 10.0f, 0.2f, 0.2f};
           this->ns = {19, 18, 18, 18, 25, 25};
         }else{
           throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");

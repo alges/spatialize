@@ -44,12 +44,12 @@ namespace sptlz{
       int j;
       std::vector<float> result;
       float r;
-      
+
       for(j=0; j<ranges->size(); j++){
-        r = 1.0*std::rand()/RAND_MAX;
+        r = static_cast<float>(1.0*std::rand()/RAND_MAX);
         result.push_back(ranges->at(j).at(0)+r*(ranges->at(j).at(1)-ranges->at(j).at(0)));
       }
-      
+
       return(result);
   }
 
@@ -60,8 +60,8 @@ namespace sptlz{
 
 
       for(j=0; j<ranges->size(); j++){
-          aux = 0.5*ranges->at(j).at(0) + 0.5*ranges->at(j).at(1);
-          r = 1.0*std::rand()/RAND_MAX;
+          aux = static_cast<float>(0.5*ranges->at(j).at(0) + 0.5*ranges->at(j).at(1));
+          r = static_cast<float>(1.0*std::rand()/RAND_MAX);
           if(orthant->at(j)==0){ //first half
             aux = ranges->at(j).at(0)+r*(aux-ranges->at(j).at(0));
           }else{ // second half
@@ -76,7 +76,7 @@ namespace sptlz{
   std::vector<std::vector<float>> get_random_tuples(std::vector<std::vector<float>> *ranges, int n){
     std::vector<std::vector<float>> starts;
     std::vector<float> start;
-    int i,j;
+    int i;
 
     for(i=0; i<n; i++){
       starts.push_back(get_random_tuple(ranges));
@@ -87,7 +87,7 @@ namespace sptlz{
 
   std::vector<std::vector<float>> get_random_tuples_by_orthant(std::vector<std::vector<float>> *ranges, int n){
       int i;
-      auto orths = neighbors({0,1}, ranges->size());
+      auto orths = neighbors({0,1}, static_cast<int>(ranges->size()));
       std::vector<std::vector<float>> results;
       std::vector<float> result;
 
@@ -151,7 +151,7 @@ namespace sptlz{
           v = this->eval(&aux);
           aux.at(i) = aux.at(i)-2*h;
           v = v-this->eval(&aux);
-          gr.push_back(0.5*v/h);
+          gr.push_back(static_cast<float>(0.5*v/h));
         }
 
         return(gr);
@@ -163,7 +163,7 @@ namespace sptlz{
       LOO_2D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, float _h): LOOND(_coords, _values, _h){}
 
       float eval(std::vector<float> *X){
-          int n = values->size();
+          int n = static_cast<int>(values->size());
 
           float r = 0.0;
           std::vector<float> params = {X->at(1), X->at(2)};
@@ -197,7 +197,7 @@ namespace sptlz{
       LOO_3D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, float _h): LOOND(_coords, _values, _h){}
 
       float eval(std::vector<float> *X){
-          int n = values->size();
+          int n = static_cast<int>(values->size());
 
           float r = 0.0;
           std::vector<float> params = {X->at(1), X->at(2), X->at(3), X->at(4), X->at(5)};
@@ -236,10 +236,10 @@ namespace sptlz{
           for(int i=0; i<c->size(); i++){
             if(i==1){
               if(c->at(i) < this->rs.at(i).at(0)){
-                c->at(i) = fmod(90.0-c->at(i), 180.0)-90.0;
+                c->at(i) = static_cast<float>(fmod(90.0-c->at(i), 180.0)-90.0);
               }
               if(this->rs.at(i).at(1) < c->at(i)){
-                c->at(i) = fmod(90.0+c->at(i), 180.0)-90.0;
+                c->at(i) = static_cast<float>(fmod(90.0+c->at(i), 180.0)-90.0);
               }
             }else{
               if(c->at(i) < this->rs.at(i).at(0)){
@@ -254,10 +254,10 @@ namespace sptlz{
           for(int i=0; i<c->size(); i++){
             if((i==1) || (i==2) || (i==3)){
               if(c->at(i) < this->rs.at(i).at(0)){
-                c->at(i) = fmod(90.0-c->at(i), 180.0)-90.0;
+                c->at(i) = static_cast<float>(fmod(90.0-c->at(i), 180.0)-90.0);
               }
               if(this->rs.at(i).at(1) < c->at(i)){
-                c->at(i) = fmod(90.0+c->at(i), 180.0)-90.0;
+                c->at(i) = static_cast<float>(fmod(90.0+c->at(i), 180.0)-90.0);
               }
             }else{
               if(c->at(i) < this->rs.at(i).at(0)){
@@ -503,8 +503,8 @@ namespace sptlz{
       std::vector<int> min_coord;
       std::vector<float> result;
       for(int i=0; i<start.size(); i++){
-        curr.push_back(0.5+(start.at(i)-this->rs.at(i).at(0))/this->st.at(i));
-      } 
+        curr.push_back(static_cast<int>(0.5+(start.at(i)-this->rs.at(i).at(0))/this->st.at(i)));
+      }
 
       prev = this->eval(curr);
       for(int j=0; j<curr.size(); j++){
@@ -547,7 +547,7 @@ namespace sptlz{
         result.push_back(this->rs.at(j).at(0) + curr.at(j)*this->st.at(j));
       }
 
-      return(std::make_pair(result, i));    
+      return(std::make_pair(result, i));
     }
 
     public:
@@ -592,8 +592,8 @@ namespace sptlz{
       std::vector<int> curr, new_curr, min_coord, nb;
       std::vector<float> result;
       for(int i=0; i<start.size(); i++){
-        curr.push_back(0.5+(start.at(i)-this->rs.at(i).at(0))/this->st.at(i));
-      } 
+        curr.push_back(static_cast<int>(0.5+(start.at(i)-this->rs.at(i).at(0))/this->st.at(i)));
+      }
 
       prev = this->eval(&curr);
       for(int j=0; j<curr.size(); j++){
@@ -642,7 +642,7 @@ namespace sptlz{
         result.push_back(this->rs.at(j).at(0) + curr.at(j)*this->st.at(j));
       }
 
-      return(std::make_pair(result, i));    
+      return(std::make_pair(result, i));
     }
 
     public:
@@ -661,7 +661,7 @@ namespace sptlz{
 
   std::vector<float> get_minimum(GradDesc *opt, std::vector<std::vector<float>> *ranges, int max_it){
     std::vector<std::vector<float>> starting_points = get_random_tuples_by_orthant(ranges, 1);
-    int nreps = starting_points.size();
+    int nreps = static_cast<int>(starting_points.size());
     int i_min;
     float v_min = std::numeric_limits<float>::max();
     std::vector<float> c_min;

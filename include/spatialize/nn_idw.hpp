@@ -17,7 +17,7 @@ namespace sptlz{
 
         for(size_t j=0; j<nbs->first.size(); j++){
           // calculate weight
-          w = 1.0/(1.0+std::pow(nbs->first.at(j), this->exponent));
+          w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
           // keep sum of weighted values and sum of weights
           w_sum += w;
           w_v_sum += w*values.at(nbs->second.at(j));
@@ -33,7 +33,7 @@ namespace sptlz{
             // do not use the same point
             if(i!=j){
             // calculate weight
-            w = 1.0/(1.0+std::pow(nbs->first.at(j), this->exponent));
+            w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
             // keep sum of weighted values and sum of weights
             w_sum += w;
             w_v_sum += w*values.at(nbs->second.at(j));
@@ -50,7 +50,7 @@ namespace sptlz{
         for(size_t j=0; j<nbs->first.size(); j++){
             if(this_class!=folds->at(j)){
             // calculate weight
-            w = 1.0/(1.0+std::pow(nbs->first.at(j), this->exponent));
+            w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
             // keep sum of weighted values and sum of weights
             w_sum += w;
             w_v_sum += w*values.at(nbs->second.at(j));

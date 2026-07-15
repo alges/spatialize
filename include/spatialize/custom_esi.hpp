@@ -43,7 +43,7 @@ namespace sptlz{
         if(post_creation == NULL){
             return;
         }
-        
+
         std::vector<std::vector<float>> leaf_coords;
         std::vector<float> leaf_values;
         sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
@@ -51,7 +51,7 @@ namespace sptlz{
 
         logger->info("computing cell parameters");
 
-        progress->init(mondrian_forest.size(), 1);
+        progress->init(static_cast<int>(mondrian_forest.size()), 1);
 
         for(int i=0; i<mondrian_forest.size(); i++){
           auto mt = mondrian_forest.at(i);
@@ -78,11 +78,11 @@ namespace sptlz{
       }
 
     public:
-      CUSTOM_ESI( std::vector<std::vector<float>> _coords, 
-                  std::vector<float> _values, 
-                  float lambda, 
-                  int forest_size, 
-                  std::vector<std::vector<float>> bbox, 
+      CUSTOM_ESI( std::vector<std::vector<float>> _coords,
+                  std::vector<float> _values,
+                  float lambda,
+                  int forest_size,
+                  std::vector<std::vector<float>> bbox,
                   std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
                   std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
                   std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
@@ -98,8 +98,8 @@ namespace sptlz{
         post_process();
       }
 
-      CUSTOM_ESI( std::vector<sptlz::MondrianTree*> _mondrian_forest, 
-                  std::vector<std::vector<float>> _coords, 
+      CUSTOM_ESI( std::vector<sptlz::MondrianTree*> _mondrian_forest,
+                  std::vector<std::vector<float>> _coords,
                   std::vector<float> _values,
                   std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
                   std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
@@ -119,4 +119,3 @@ namespace sptlz{
 }
 
 #endif
-

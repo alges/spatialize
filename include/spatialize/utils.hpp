@@ -1,5 +1,5 @@
 #ifndef _SPTLZ_UTILS_
-#define _SPTLZ_UTILS_ 
+#define _SPTLZ_UTILS_
 
 #include <vector>
 #include <string>
@@ -36,7 +36,7 @@ namespace sptlz{
     for(i=0; i<n; i++){
       values = {};
       for(j=0; j<ranges->size(); j++){
-        float r = 1.0*std::rand()/RAND_MAX;
+        float r = static_cast<float>(1.0*std::rand()/RAND_MAX);
         values.push_back(ranges->at(j).at(0)+r*(ranges->at(j).at(1)-ranges->at(j).at(0)));
       }
       result.push_back(values);
@@ -53,8 +53,8 @@ namespace sptlz{
     }else{
       std::vector<std::vector<int>> result = get_full_neighboorhood(d-1);
       std::vector<int> aux;
-      int n = result.size();
-      for(int i=0; i<n; i++){
+      size_t n = result.size();
+      for(size_t i=0; i<n; i++){
         aux = result.at(i);
         aux.push_back(-1);
         result.push_back(aux);
@@ -75,7 +75,7 @@ namespace sptlz{
 
   template <class T>
   std::vector<float> grid_search(T *func, std::vector<std::vector<float>> *ranges, std::vector<float> cur, float tol=1e-5){
-    int n = ranges->size();
+    int n = static_cast<int>(ranges->size());
     for(int i=0; i<n; i++){
       if((cur.at(i)<ranges->at(i).at(0))||(ranges->at(i).at(1)<cur.at(i))){
         throw std::runtime_error("starting point outside the bounds");
@@ -171,7 +171,7 @@ namespace sptlz{
     // Pre-allocate index vector
     idxs.reserve(arr->at(0).size());
 
-    for(size_t i=0;i<arr->at(0).size();i++){
+    for(int i=0;i<arr->at(0).size();i++){
       idxs.push_back(i);
     }
 
@@ -181,9 +181,9 @@ namespace sptlz{
   float distance(std::vector<float> *p1, std::vector<float> *p2){
     float c = 0.0;
     for(size_t i=0; i<p1->size(); i++){
-      c += std::pow(p1->at(i)-p2->at(i), 2.0);
+      c += static_cast<float>(std::pow(p1->at(i)-p2->at(i), 2.0));
     }
-    return(std::pow(c, 0.5));
+    return(static_cast<float>(std::pow(c, 0.5)));
   }
 
   std::vector<float> distances(std::vector<std::vector<float>> *coords, size_t j){
@@ -262,7 +262,7 @@ namespace sptlz{
   std::vector<std::vector<float>> transform(std::vector<std::vector<float>> *coords, std::vector<float> *params, std::vector<float> *centroid){
     auto coords_1d = as_1d_array(coords);
 
-    return(transform(coords_1d.data(), params->data(), centroid->data(), coords->size(), centroid->size()));
+    return(transform(coords_1d.data(), params->data(), centroid->data(), static_cast<int>(coords->size()), static_cast<int>(centroid->size())));
   }
 
   template <class T>
@@ -334,7 +334,7 @@ namespace sptlz{
 
   std::vector<int> get_folds(int n, int k, float seed){
     std::vector<int> result(n);
-    std::mt19937 my_rand(seed);
+    std::mt19937 my_rand((unsigned int)seed);
     std::uniform_real_distribution<float> uni_float(0, 1);
     std::vector<std::pair<int, float>> permutation;
 
@@ -369,7 +369,7 @@ namespace sptlz{
     std::vector<int> result1;
     std::vector<int> result2;
 
-    for(size_t i=0; i<arr->size(); i++){
+    for(int i=0; i<arr->size(); i++){
       if(pred(&(arr->at(i)))){
         result1.push_back(i);
       }else{
@@ -453,7 +453,7 @@ namespace sptlz{
     if (arr->size()==0){
       py::ssize_t ndim = 2;
       std::vector<py::ssize_t> shape = {(py::ssize_t) 0, (py::ssize_t) n};
-      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1), sizeof(T)};
+      std::vector<py::ssize_t> strides = {(py::ssize_t)sizeof(T)*shape.at(1), (py::ssize_t)sizeof(T)};
       std::vector<T> arr1d;
 
       // return 2-D NumPy array
@@ -468,7 +468,7 @@ namespace sptlz{
     }else{
       py::ssize_t ndim = 2;
       std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size(), (py::ssize_t)arr->at(0).size()};
-      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1), sizeof(T)};
+      std::vector<py::ssize_t> strides = {(py::ssize_t)sizeof(T)*shape.at(1), (py::ssize_t)sizeof(T)};
       std::vector<T> arr1d = as_1d_array(arr);
 
       // return 2-D NumPy array
@@ -488,7 +488,7 @@ namespace sptlz{
     if (arr->size()==0){
       py::ssize_t ndim = 3;
       std::vector<py::ssize_t> shape = {(py::ssize_t) 0, (py::ssize_t) n, (py::ssize_t) m};
-      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<py::ssize_t> strides = {(py::ssize_t)sizeof(T)*shape.at(1)*shape.at(2), (py::ssize_t)sizeof(T)*shape.at(2), (py::ssize_t)sizeof(T)};
       std::vector<T> arr1d;
 
       // return 2-D NumPy array
@@ -503,7 +503,7 @@ namespace sptlz{
     }else{
       py::ssize_t ndim = 3;
       std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size(), (py::ssize_t)arr->at(0).size(), (py::ssize_t)arr->at(0).at(0).size()};
-      std::vector<py::ssize_t> strides = {sizeof(T)*shape.at(1)*shape.at(2), sizeof(T)*shape.at(2), sizeof(T)};
+      std::vector<py::ssize_t> strides = {(py::ssize_t)sizeof(T)*shape.at(1)*shape.at(2), (py::ssize_t)sizeof(T)*shape.at(2), (py::ssize_t)sizeof(T)};
       std::vector<std::vector<T>> arr2d = as_1d_array(arr);
       std::vector<T> arr1d = as_1d_array(&arr2d);
 

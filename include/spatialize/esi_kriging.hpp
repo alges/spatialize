@@ -29,7 +29,7 @@ namespace sptlz{
   }
 
   std::vector<float> distances(std::vector<std::vector<float>> *coords){
-    int n = coords->size();
+    int n = static_cast<int>(coords->size());
     std::vector<float> result;
 
     for(int i=0; i<n; i++){
@@ -44,7 +44,7 @@ namespace sptlz{
   }
 
   std::vector<float> kriging_right_matrix(std::vector<std::vector<float>> *coords, std::vector<std::vector<float>> *locations, std::function<float(float)> gamma){
-    int n = coords->size(), m = locations->size();
+    int n = static_cast<int>(coords->size()), m = static_cast<int>(locations->size());
     std::vector<float> result;
 
     for(int i=0; i<m; i++){
@@ -57,7 +57,7 @@ namespace sptlz{
   }
 
   std::vector<float> kriging_left_matrix(std::vector<std::vector<float>> *coords, std::function<float(float)> gamma){
-    int n = coords->size();
+    int n = static_cast<int>(coords->size());
     std::vector<float> result;
 
     for(int i=0; i<n; i++){
@@ -82,7 +82,7 @@ namespace sptlz{
       float nugget, range, sill;
 
       std::function<float(float)> variogram(int m, float n, float r, float s){
-        float c = (1.0-nugget);
+        float c = static_cast<float>(1.0-nugget);
 
         if(m==1){ // Spherical
           return([n,c,r,s](float d){return(s*std::min(1.0, std::max(0.0, 1.0 - n - c*(1.5*d/r - 0.5*pow(d/r, 3.0)))));});
@@ -99,8 +99,8 @@ namespace sptlz{
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
-        int n = samples_id->size();
-        int m = locations_id->size();
+        int n = static_cast<int>(samples_id->size());
+        int m = static_cast<int>(locations_id->size());
 
         if(n==0){
           for(auto l: *locations_id){
@@ -148,7 +148,7 @@ namespace sptlz{
           }
           return(result);
         }
-        int n = samples_id->size();
+        int n = static_cast<int>(samples_id->size());
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         sl_values.push_back(0.0); // to anulate the mu coeffcicient
@@ -196,7 +196,7 @@ namespace sptlz{
                 result.at(j) = NAN;
               }
             }else{
-              int m = test_train.first.size(), n = test_train.second.size();
+              int m = static_cast<int>(test_train.first.size()), n = static_cast<int>(test_train.second.size());
               auto sl_coords_train = slice(&sl_coords, &(test_train.second));
               auto sl_coords_test = slice(&sl_coords, &(test_train.first));
               auto sl_values_train = slice(&sl_values, &(test_train.second));

@@ -283,7 +283,7 @@ namespace sptlz{
 				int aux;
 				for(size_t i=0; i<coords->size(); i++){
 					aux = search_leaf(coords->at(i));
-					this->samples_by_leaf.at(aux).push_back(i);
+					this->samples_by_leaf.at(aux).push_back(static_cast<int>(i));
 					this->leaf_for_sample.push_back(aux);
 				}
   			}
@@ -310,7 +310,7 @@ namespace sptlz{
   			return(root->search_leaf(point));
   		}
 
-  		std::string to_json(){ 
+  		std::string to_json(){
   			return(root->to_json(""));
   		}
 	};
@@ -385,7 +385,7 @@ namespace sptlz{
 		    }
 
 			int forest_size(){
-				return(this->mondrian_forest.size());
+				return(static_cast<int>(this->mondrian_forest.size()));
 			}
 
 			MondrianTree *get_tree(int i){
@@ -402,21 +402,21 @@ namespace sptlz{
 
 			std::vector<std::vector<std::vector<float>>> get_partitions(){
 				std::vector<std::vector<std::vector<float>>> partitions;
-				int n = mondrian_forest.size();
+				size_t n = mondrian_forest.size();
 
 				long count = 0;
-				for(int i=0; i<n; i++){
+				for(size_t i=0; i<n; i++){
 
 					std::vector<std::vector<float>> this_partition;
 					// get leaves for i-th tree
 					for(auto leaf: mondrian_forest.at(i)->leaves){
 						std::vector<float> this_leaf;
-						this_leaf.push_back(leaf->leaf_id);
+						this_leaf.push_back(static_cast<float>(leaf->leaf_id));
 						for(auto ax_lims: leaf->bbox){
 							this_leaf.push_back(ax_lims[0]);
 							this_leaf.push_back(ax_lims[1]);
 						}
-						count += this_leaf.size();
+						count += static_cast<long>(this_leaf.size());
 						this_partition.push_back(this_leaf);
 					}
 					partitions.push_back(this_partition);
@@ -425,7 +425,7 @@ namespace sptlz{
 			}
 
 			std::vector<std::vector<int>> get_leaf_for_samples(){
-				int n = mondrian_forest.size();
+				int n = static_cast<int>(mondrian_forest.size());
 				std::vector<std::vector<int>> results(this->coords.size());
 
 				for(int i=0; i<n; i++){
@@ -442,7 +442,7 @@ namespace sptlz{
 				std::stringstream json;
 				std::vector<std::vector<float>> results(locations->size());
 				std::vector<std::vector<int>> locations_by_leaf;
-				int aux, n = mondrian_forest.size();
+				int aux, n = static_cast<int>(mondrian_forest.size());
                 sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 
@@ -458,7 +458,7 @@ namespace sptlz{
 					// join all locations for same leaf
 					for(size_t j=0; j<locations->size(); j++){
 						aux = mt->search_leaf(locations->at(j));
-						locations_by_leaf.at(aux).push_back(j);
+						locations_by_leaf.at(aux).push_back(static_cast<int>(j));
 					}
 
 					// make estimation by leaf
@@ -479,7 +479,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       throw pybind11::error_already_set();
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();
@@ -492,7 +492,7 @@ namespace sptlz{
 			std::vector<std::vector<float>> leave_one_out(){
 				std::stringstream json;
 				std::vector<std::vector<float>> results(coords.size());
-				int n = mondrian_forest.size();
+				int n = static_cast<int>(mondrian_forest.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -517,7 +517,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       throw pybind11::error_already_set();
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();
@@ -531,9 +531,9 @@ namespace sptlz{
 				std::stringstream json;
 				auto fold_rand = std::mt19937(seed);
 				std::uniform_real_distribution<float> uni_float;
-				auto folds = get_folds(values.size(), k, uni_float(fold_rand));
+				auto folds = get_folds(static_cast<int>(values.size()), k, uni_float(fold_rand));
 				std::vector<std::vector<float>> results(coords.size());
-				int n = mondrian_forest.size();
+				int n = static_cast<int>(mondrian_forest.size());
 
 				sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
@@ -558,7 +558,7 @@ namespace sptlz{
 
 					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
                       throw pybind11::error_already_set();
-					progress->inform(100.0*(i+1.0)/n);
+					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
 				}
 
 				progress->stop();

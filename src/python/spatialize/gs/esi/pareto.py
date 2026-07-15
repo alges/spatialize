@@ -101,6 +101,7 @@ class EmpiricalRobustnessBound:
         self._factory = FittedModelFactory(
             nan_model_name=nan_model_name,
             point_model_name=point_model_name,
+            seed=seed,
         )
 
         # Populated by estimate()
@@ -520,6 +521,7 @@ def _fitted_kl(
             n_components          = getattr(f, "n_components", 3),
             widening              = getattr(f, "widening", False),
             widening_knn          = getattr(f, "widening_knn", 12),
+            seed                  = getattr(f, "seed", None),
         )
 
     try:

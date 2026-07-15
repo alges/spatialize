@@ -170,14 +170,21 @@ def ess_sample(esi_result,
         for esi_sample_idx in range(esi_samples.shape[0]):
             target_var = target_var_arr[esi_sample_idx] if target_var_arr is not None else None
             target_skew = target_skew_arr[esi_sample_idx] if target_skew_arr is not None else None
+            # derive a per-location seed so widening doesn't draw identical noise at every
+            # sample (mirrors the `self.seed + i` pattern used elsewhere, e.g. gs/esmi/_main.py)
+            location_seed = (fitted_model_factory.seed + esi_sample_idx
+                              if fitted_model_factory.seed is not None else None)
             model, _ = fitted_model_factory.create(esi_samples[esi_sample_idx, :],
-                                                    target_var=target_var, target_skew=target_skew)
+                                                    target_var=target_var, target_skew=target_skew,
+                                                    seed=location_seed)
 
             # sampling from the fitted model
             if fitted_model_factory.point_model_name in {"vim", "emm"}:
                 s = model.sample(n_sims)[0].reshape(1, n_sims)[0]
             elif fitted_model_factory.point_model_name == "kde":
-                s = model.sample(n_sims).reshape(1, n_sims)[0]
+                # KernelDensity has no constructor-level random_state (unlike GMM/BGM), so
+                # its draw is only reproducible if seeded per call.
+                s = model.sample(n_sims, random_state=location_seed).reshape(1, n_sims)[0]
             else:
                 raise ValueError(f"Unsupported model type: {fitted_model_factory.point_model_name}")
 
@@ -187,15 +194,16 @@ def ess_sample(esi_result,
         return scenarios
 
     # to run in parallel ------------------------------------------------------------------------
-    def sample_single_scenario(idx, sample_row, n_sims, model_factory, target_var, target_skew, progress_q):
+    def sample_single_scenario(idx, sample_row, n_sims, model_factory, target_var, target_skew, seed, progress_q):
         try:
-            model, _ = model_factory.create(sample_row, target_var=target_var, target_skew=target_skew)
+            model, _ = model_factory.create(sample_row, target_var=target_var, target_skew=target_skew,
+                                             seed=seed)
 
             # Sample based on model type
             if model_factory.point_model_name in {"vim", "emm"}:
                 sims = model.sample(n_sims)[0].reshape(n_sims)
             elif model_factory.point_model_name == "kde":
-                sims = model.sample(n_sims).reshape(n_sims)
+                sims = model.sample(n_sims, random_state=seed).reshape(n_sims)
             else:
                 raise ValueError(f"Unsupported model type: {model_factory.point_model_name}")
 
@@ -234,6 +242,7 @@ def ess_sample(esi_result,
                     i, esi_samples[i, :], n_sims, fitted_model_factory,
                     target_var_arr[i] if target_var_arr is not None else None,
                     target_skew_arr[i] if target_skew_arr is not None else None,
+                    fitted_model_factory.seed + i if fitted_model_factory.seed is not None else None,
                     progress_queue
                 )
                 for i in range(esi_samples.shape[0])

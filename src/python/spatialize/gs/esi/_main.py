@@ -509,7 +509,7 @@ class ESIResult(EstimationResult):
                 n_imgs=n_imgs,
                 n_cols=n_cols, 
                 norm_lims=True,
-                xi_locations=self._xi,
+                xi_locations=self._xi_flat,
                 reference_map=self.estimation(),
                 title_prefix=title_prefix,
                 title=title,

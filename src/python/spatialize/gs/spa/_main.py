@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import random as rd
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.lines import Line2D
@@ -321,7 +322,7 @@ class PosteriorSampleAnalyzer:
         plot_histogram_grid_with_pdf_cdf(r, hist_idx, self.emodels, n_rows, n_cols,
                                          bins=25, **figargs)
 
-    def plot_ranking(self, samples_ranking, figsize=(11, 6)):
+    def plot_ranking(self, samples_ranking, cmap='viridis', figsize=(11, 6)):
         """
         Plots the sample ranking results.
 
@@ -387,9 +388,9 @@ class PosteriorSampleAnalyzer:
         # cmap = ListedColormap(plt.cm.plasma(np.linspace(0, 1, len(unique_cats))))
         # Use a robust colormap if plt.cm.plasma is not always available or for better distinction
         try:
-            cmap_colors = plt.cm.get_cmap('viridis', len(unique_cats))
+            cmap_colors = matplotlib.colormaps[cmap].resampled(len(unique_cats))
         except ValueError:  # Fallback if len(unique_cats) is 0 or 1
-            cmap_colors = plt.cm.get_cmap('viridis', 2)  # Default to at least 2 colors
+            cmap_colors = matplotlib.colormaps[cmap].resampled(2)  # Default to at least 2 colors
 
         cmap = ListedColormap(cmap_colors(np.linspace(0, 1, len(unique_cats))))
 

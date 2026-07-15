@@ -157,10 +157,12 @@ def ess_sample(esi_result,
                 "of spatialize)."
             )
         target_var_arr = _local_target_variance(esi_result.points, esi_result.values,
-                                                 esi_result._xi_flat)
+                                                 esi_result._xi_flat,
+                                                 knn=fitted_model_factory.widening_knn)
         if fitted_model_factory.widening == "skew_normal":
             target_skew_arr = _local_target_skewness(esi_result.points, esi_result.values,
-                                                      esi_result._xi_flat)
+                                                      esi_result._xi_flat,
+                                                      knn=fitted_model_factory.widening_knn)
 
     def run_serial():
         scenarios = np.empty([esi_samples.shape[0], n_sims])

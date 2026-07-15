@@ -64,10 +64,11 @@ class PosteriorSampleAnalyzer:
         # sample_values coincide -- use the self-excluding k-NN variant to avoid each point's
         # zero-distance match to itself deflating its target
         target_var_arr = (
-            _loo_target_variance(points, sample_values) if fitted_model_factory.widening else None
+            _loo_target_variance(points, sample_values, knn=fitted_model_factory.widening_knn)
+            if fitted_model_factory.widening else None
         )
         target_skew_arr = (
-            _loo_target_skewness(points, sample_values)
+            _loo_target_skewness(points, sample_values, knn=fitted_model_factory.widening_knn)
             if fitted_model_factory.widening == "skew_normal" else None
         )
 

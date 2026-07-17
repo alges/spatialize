@@ -247,6 +247,36 @@ def show_palettes(names=None, figsize=None, n_colors=256, title="Available Color
     return fig
 
 
+def _infer_data_type(values):
+    """
+    Infer whether *values* are categorical, sequential, or diverging.
+
+    Parameters
+    ----------
+    values : array-like
+        Raw data values (or labels) about to be plotted.
+
+    Returns
+    -------
+    str
+        ``'categorical'`` if *values* cannot be interpreted as numeric,
+        ``'diverging'`` if the numeric values cross zero (``min < 0 < max``),
+        ``'sequential'`` otherwise.
+    """
+    try:
+        arr = np.asarray(values, dtype=float)
+    except (ValueError, TypeError):
+        return 'categorical'
+
+    arr = arr[~np.isnan(arr)]
+    if arr.size == 0:
+        return 'sequential'
+
+    if arr.min() < 0 < arr.max():
+        return 'diverging'
+    return 'sequential'
+
+
 class PlotStyle:
     """
     Manage matplotlib plot styles with predefined themes.
@@ -265,6 +295,10 @@ class PlotStyle:
         - Colormap object: Matplotlib colormap instance
     precision_cmap : str, list, or colormap, optional
         Colormap for precision/uncertainty plots. Same format as cmap.
+    diverging_cmap : str, list, or colormap, optional
+        Colormap for diverging data (values that cross zero). Same format as
+        cmap. Independent of ``precision_cmap`` — this is a data-type default,
+        not a plot-role default; see :meth:`resolve_cmap`.
 
     Attributes
     ----------
@@ -273,9 +307,11 @@ class PlotStyle:
     color : str
         Primary plot color
     cmap : str or colormap
-        Plot colormap
+        Plot colormap (sequential data default)
     precision_cmap : str or colormap
         Precision/uncertainty colormap
+    diverging_cmap : str or colormap
+        Diverging data default colormap
 
     Examples
     --------
@@ -325,7 +361,8 @@ class PlotStyle:
             },
             'color': '#59a590',
             'cmap': get_palette_colormap('crest_r'),
-            'precision_cmap': get_palette_colormap('precision')
+            'precision_cmap': get_palette_colormap('precision'),
+            'diverging_cmap': get_palette_colormap('tofino')
         },
         'whitegrid': {
             'rcparams': {
@@ -344,7 +381,8 @@ class PlotStyle:
             },
             'color': '#7dba91',
             'cmap': get_palette_colormap('crest_r'),
-            'precision_cmap': get_palette_colormap('precision')
+            'precision_cmap': get_palette_colormap('precision'),
+            'diverging_cmap': get_palette_colormap('tofino')
         },
         'dark': {
             'rcparams': {
@@ -361,11 +399,12 @@ class PlotStyle:
                 'ytick.color': '#b3b9c1',
                 'patch.edgecolor': '#67c9cd',
                 'xtick.labelsize': 'small',
-                'ytick.labelsize': 'small', 
+                'ytick.labelsize': 'small',
             },
             'color': '#41bbc0',
             'cmap': SCM.batlowK,
-            'precision_cmap': get_palette_colormap('precision_dark')
+            'precision_cmap': get_palette_colormap('precision_dark'),
+            'diverging_cmap': get_palette_colormap('managua')
         },
         'white': {
             'rcparams': {
@@ -383,7 +422,8 @@ class PlotStyle:
             },
             'color': '#7dba91',
             'cmap': get_palette_colormap('crest_r'),
-            'precision_cmap': get_palette_colormap('precision')
+            'precision_cmap': get_palette_colormap('precision'),
+            'diverging_cmap': get_palette_colormap('tofino')
         },
         'alges': {
             'rcparams': {
@@ -394,6 +434,7 @@ class PlotStyle:
                 'axes.labelcolor': '#424e77',
                 'axes.labelweight': 'demibold',
                 'axes.titleweight': 'bold',
+                'axes.titlecolor': '#19384d',
                 'figure.titleweight': 'bold',
                 'xtick.labelsize': 'small',
                 'ytick.labelsize': 'small',
@@ -402,11 +443,17 @@ class PlotStyle:
                 'patch.edgecolor': '#496070',
                 'text.color': "#424e77",
                 'xtick.bottom': True,
-                'ytick.left': True
+                'ytick.left': True,
+                'font.family': 'sans-serif',
+                'font.sans-serif': ['Helvetica Neue', 'Helvetica', 'Arial', 'DejaVu Sans'],
+                'font.size': 10,
+                'axes.titlesize': 13,
+                'axes.labelsize': 11,
             },
             'color': "#8fb4cd",
-            'cmap': get_palette_colormap('alges'),
-            'precision_cmap': get_palette_colormap('precision')
+            'cmap': get_palette_colormap('oslo'),
+            'precision_cmap': get_palette_colormap('precision'),
+            'diverging_cmap': get_palette_colormap('cork')
         },
         'alges_muted': {
             'rcparams': {
@@ -429,7 +476,8 @@ class PlotStyle:
             },
             'color': "#84a6be",
             'cmap': get_palette_colormap('alges_muted'),
-            'precision_cmap': get_palette_colormap('precision_muted')
+            'precision_cmap': get_palette_colormap('precision_muted'),
+            'diverging_cmap': get_palette_colormap('cork')
         },
         'minimal': {
             'rcparams': {
@@ -440,6 +488,7 @@ class PlotStyle:
             'color': '#333333',
             'cmap': 'binary_r',
             'precision_cmap': 'binary_r',
+            'diverging_cmap': 'coolwarm'
         },
         'publication': {
             'rcparams': {
@@ -454,29 +503,33 @@ class PlotStyle:
             },
             'color': 'black',
             'cmap': 'viridis',
-            'precision_cmap': 'cividis'
+            'precision_cmap': 'cividis',
+            'diverging_cmap': get_palette_colormap('roma')
         }
     }
 
     DEFAULT_COLOR = 'skyblue'
     DEFAULT_CMAP = 'coolwarm'
     DEFAULT_PRECISION_CMAP = 'bwr'
+    DEFAULT_DIVERGING_CMAP = 'coolwarm'
 
     def __init__(self,
                  theme = None,
                  color = None,
                  cmap = None,
-                 precision_cmap = None):
-        
+                 precision_cmap = None,
+                 diverging_cmap = None):
+
         if theme and theme not in self.THEMES:
             raise ValueError(f"Theme '{theme}' not found. Available: {list(self.THEMES.keys())}")
-        
+
         self._original_rcparams = plt.rcParams.copy()
 
         self.theme = theme
         self.color = self._set_color(color)
         self.cmap = self._set_cmap(cmap)
         self.precision_cmap = self._set_precision_cmap(precision_cmap)
+        self.diverging_cmap = self._set_diverging_cmap(diverging_cmap)
 
         if self.theme:
             self._apply_theme()
@@ -532,6 +585,66 @@ class PlotStyle:
             return self.THEMES[self.theme]['precision_cmap']
         else:
             return self.DEFAULT_PRECISION_CMAP
+
+    def _set_diverging_cmap(self, cmap):
+        if cmap:
+            # Handle string input - check PALETTES first, then SCM, then matplotlib
+            if isinstance(cmap, str):
+                if cmap in PALETTES:
+                    return get_palette_colormap(cmap)
+                scm_cmap = _get_scm_colormap(cmap)
+                if scm_cmap is not None:
+                    return scm_cmap
+                # Return as-is, assuming it's a matplotlib colormap name
+                return cmap
+            # Handle list input - create colormap from color list
+            elif isinstance(cmap, list):
+                return Colormap.from_list('custom_diverging_cmap', cmap)
+            # Otherwise return as-is (already a colormap object)
+            else:
+                return cmap
+        elif self.theme:
+            return self.THEMES[self.theme]['diverging_cmap']
+        else:
+            return self.DEFAULT_DIVERGING_CMAP
+
+    def resolve_cmap(self, data_type='sequential', n_categories=None):
+        """
+        Resolve the colormap appropriate for a given data type.
+
+        Parameters
+        ----------
+        data_type : {'sequential', 'diverging', 'categorical'}, optional
+            Kind of data being plotted. ``'sequential'`` returns ``self.cmap``,
+            ``'diverging'`` returns ``self.diverging_cmap``, and ``'categorical'``
+            returns a discrete colormap with *n_categories* swatches sampled
+            from the active theme's own continuous ``cmap`` (so categorical
+            panels stay visually consistent with the rest of the theme),
+            nudged away from washed-out near-white/near-black extremes — see
+            ``_resolve_categorical_cmap`` / ``_safe_cmap_sample_ts``. When no
+            theme is active, falls back to the theme-agnostic default
+            (Accent/tab20/plasma/turbo by category count).
+        n_categories : int, optional
+            Number of categories, used only when ``data_type='categorical'``.
+            Defaults to 10 if not given.
+
+        Returns
+        -------
+        matplotlib colormap
+        """
+        if data_type == 'sequential':
+            return self.cmap
+        elif data_type == 'diverging':
+            return self.diverging_cmap
+        elif data_type == 'categorical':
+            n = n_categories or 10
+            source = self.cmap if self.theme else 'auto'
+            colors = _resolve_categorical_cmap(source, n)
+            return ListedColormap(colors)
+        else:
+            raise ValueError(
+                f"Unknown data_type '{data_type}'. Expected 'sequential', 'diverging', or 'categorical'."
+            )
 
     def _apply_theme(self):
         if self.theme and self.theme in self.THEMES:
@@ -656,7 +769,9 @@ def plot_histogram(data, ax, color='skyblue', alpha=0.9, rwidth=0.92, hide_empty
 
 def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddata=False,
                        title=None, xlabel='', ylabel='', show_colorbar=True, cbar_label='Value',
-                       figsize=None, dpi=120, **imshow_args):
+                       figsize=None, dpi=120, theme=None, data_type='auto',
+                       nonnum_order=None, legend_title='Category', show_legend=True,
+                       **imshow_args):
     """
     Plot a colormap (heatmap) visualization of spatial data.
 
@@ -700,6 +815,30 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
     dpi : int, optional
         Figure resolution in dots-per-inch (only used when *ax* is ``None``).
         Default is ``120``.
+    theme : str, optional
+        :class:`PlotStyle` theme name used to resolve a default colormap when
+        ``cmap`` is not given in ``**imshow_args``. Default is ``None``.
+    data_type : {'auto', 'sequential', 'diverging', 'categorical'}, optional
+        Kind of data being plotted, used to pick the theme's default colormap
+        when ``cmap`` is not given in ``**imshow_args``. ``'auto'`` (default)
+        inspects *data*: non-numeric values resolve to ``'categorical'``,
+        numeric values that cross zero resolve to ``'diverging'``, otherwise
+        ``'sequential'``. For ``'diverging'`` data, ``vmin``/``vmax`` are
+        automatically centred on zero unless explicitly provided. Ignored
+        when ``cmap`` is given explicitly.
+
+        When resolved to ``'categorical'``, this function delegates entirely
+        to :func:`plot_categorical_colormap` (discrete swatches + legend
+        instead of a continuous colorbar) — ``nonnum_order``, ``legend_title``
+        and ``show_legend`` below are only used in that case.
+    nonnum_order : list, optional
+        Custom sort order for non-numeric categories. Only used for
+        categorical data.
+    legend_title : str, optional
+        Legend title. Only used for categorical data. Default ``'Category'``.
+    show_legend : bool, optional
+        Whether to show the legend. Only used for categorical data. Default
+        ``True``.
     **imshow_args
         Additional keyword arguments forwarded to :func:`matplotlib.pyplot.imshow`,
         e.g. ``cmap``, ``vmin``, ``vmax``.
@@ -727,6 +866,20 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
     >>> plot_colormap_data(values, xi_locations=xi, cmap='batlow',
     ...                   title='ESI Estimation')
     """
+    resolved_type = _infer_data_type(data) if data_type == 'auto' else data_type
+    if resolved_type == 'categorical':
+        with PlotStyle(theme=theme) as style:
+            cmap = imshow_args.pop('cmap', None)
+            if cmap is None:
+                n_categories = len(np.unique(np.asarray(data, dtype=object)))
+                cmap = style.resolve_cmap('categorical', n_categories=n_categories)
+            return plot_categorical_colormap(
+                data, cmap=cmap, ax=ax, w=w, h=h, xi_locations=xi_locations,
+                griddata=griddata, nonnum_order=nonnum_order, title=title,
+                legend_title=legend_title, show_legend=show_legend,
+                figsize=figsize, dpi=dpi, **imshow_args,
+            )
+
     if griddata:
         im = data if _is_xy_indexed(xi_locations) else data.T
     elif w is not None and h is not None:
@@ -753,6 +906,19 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
         plotter = gs.subplots()
     _ax_format(plotter, xlabel, ylabel, title)
 
+    if 'cmap' not in imshow_args:
+        with PlotStyle(theme=theme) as style:
+            imshow_args['cmap'] = style.resolve_cmap(resolved_type)
+
+            if (resolved_type == 'diverging' and 'vmin' not in imshow_args
+                    and 'vmax' not in imshow_args and 'clim' not in imshow_args):
+                finite_values = np.asarray(im, dtype=float)
+                finite_values = finite_values[~np.isnan(finite_values)]
+                if finite_values.size:
+                    m = max(abs(finite_values.min()), abs(finite_values.max()))
+                    imshow_args['vmin'] = -m
+                    imshow_args['vmax'] = m
+
     img = plotter.imshow(im, origin='lower', **imshow_args)
 
     # Optional colorbar
@@ -762,7 +928,7 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
         cax.grid(False)
         cbar = plt.colorbar(img, orientation='vertical', cax=cax)
         cbar.set_label(cbar_label)
-    
+
 def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=None,
                         reference_map=None, title=None, title_prefix="scenario", seed=None,
                         figsize=(10, 10), dpi=120, **imshow_args):
@@ -1000,13 +1166,14 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
         return fig
     
 
-def plot_scatter(points, values, cmap=None,
+def plot_scatter(points, values, cmap=None, data_type='auto',
                  xlabel='X', ylabel='Y', title=None,
                  theme='publication',
                  figsize=None, dpi=100,
                  fig=None, ax=None,
                  extent=None,
                  show_colorbar=True, cbar_label='Value',
+                 nonnum_order=None, legend_title='Category', show_legend=True,
                  **scatter_args):
     """
     Create a 2D scatter plot of spatial data coloured by value.
@@ -1024,7 +1191,29 @@ def plot_scatter(points, values, cmap=None,
     cmap : str, list, or colormap, optional
         Colormap override. Accepts the same formats as :class:`PlotStyle`
         ``cmap`` parameter (palette name, hex list, or matplotlib colormap).
-        If ``None``, the theme default is used.
+        If ``None``, the colormap is chosen from the theme according to
+        *data_type*.
+    data_type : {'auto', 'sequential', 'diverging', 'categorical'}, optional
+        Kind of data being plotted, used to pick the theme's default colormap
+        when *cmap* is ``None``. ``'auto'`` (default) inspects *values*:
+        non-numeric values resolve to ``'categorical'``, numeric values that
+        cross zero resolve to ``'diverging'``, otherwise ``'sequential'``.
+        For ``'diverging'`` data, ``vmin``/``vmax`` are automatically centred
+        on zero unless explicitly provided in ``**scatter_args``. Ignored
+        when *cmap* is given explicitly.
+
+        When resolved to ``'categorical'``, this function delegates entirely
+        to :func:`plot_categorical_scatter` (discrete swatches + legend
+        instead of a continuous colorbar) — ``nonnum_order``, ``legend_title``
+        and ``show_legend`` below are only used in that case.
+    nonnum_order : list, optional
+        Custom sort order for non-numeric categories. Only used for
+        categorical data.
+    legend_title : str, optional
+        Legend title. Only used for categorical data. Default ``'Category'``.
+    show_legend : bool, optional
+        Whether to show the legend. Only used for categorical data. Default
+        ``True``.
     xlabel : str, optional
         X-axis label. Default is ``'X'``.
     ylabel : str, optional
@@ -1067,6 +1256,20 @@ def plot_scatter(points, values, cmap=None,
     >>> fig, ax = plt.subplots()
     >>> plot_scatter(points, values, ax=ax, fig=fig, show_colorbar=False)
     """
+    resolved_type = _infer_data_type(values) if data_type == 'auto' else data_type
+    if resolved_type == 'categorical':
+        with PlotStyle(theme=theme) as style:
+            plot_cmap = cmap
+            if plot_cmap is None:
+                n_categories = len(np.unique(values))
+                plot_cmap = style.resolve_cmap('categorical', n_categories=n_categories)
+            return plot_categorical_scatter(
+                points, values, cmap=plot_cmap, theme=None,
+                nonnum_order=nonnum_order, xlabel=xlabel, ylabel=ylabel, title=title,
+                figsize=figsize, dpi=dpi, fig=fig, ax=ax, extent=extent,
+                legend_title=legend_title, show_legend=show_legend, **scatter_args,
+            )
+
     X = points[:, 0]
     Y = points[:, 1]
 
@@ -1080,7 +1283,20 @@ def plot_scatter(points, values, cmap=None,
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
-        plot = ax.scatter(X, Y, c=values, cmap=style.cmap, **plot_scatter_args)
+        if cmap is None:
+            plot_cmap = style.resolve_cmap(resolved_type)
+
+            if resolved_type == 'diverging' and 'vmin' not in plot_scatter_args and 'vmax' not in plot_scatter_args:
+                finite_values = np.asarray(values, dtype=float)
+                finite_values = finite_values[~np.isnan(finite_values)]
+                if finite_values.size:
+                    m = max(abs(finite_values.min()), abs(finite_values.max()))
+                    plot_scatter_args['vmin'] = -m
+                    plot_scatter_args['vmax'] = m
+        else:
+            plot_cmap = style.cmap
+
+        plot = ax.scatter(X, Y, c=values, cmap=plot_cmap, **plot_scatter_args)
         _ax_format(ax, xlabel, ylabel, title, extent)
 
         # Optional colorbar
@@ -1146,6 +1362,43 @@ def _sort_categories(categories, custom_order=None):
     return sorted(list(categories), key=key)
 
 
+def _relative_luminance(rgba):
+    """Perceptual (Rec. 709) luminance of an RGB(A) colour in [0, 1]."""
+    r, g, b = rgba[:3]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _safe_cmap_sample_ts(cm, n, lum_min=0.10, lum_max=0.88, search_step=0.01):
+    """
+    Choose *n* evenly-spread sample positions along a continuous colormap,
+    nudging any position whose colour is washed-out (too close to white or
+    black) inward until it lands in an acceptable luminance band.
+
+    Continuous colormaps sampled at their extremes (e.g. many Scientific
+    Colour Maps run all the way to white/black) otherwise produce
+    near-invisible swatches when used as discrete categorical colours.
+    """
+    ts = np.linspace(0, 1, n) if n > 1 else np.array([0.5])
+    safe_ts = []
+    for t in ts:
+        lum = _relative_luminance(cm(t))
+        if lum_min <= lum <= lum_max:
+            safe_ts.append(t)
+            continue
+        found = None
+        delta = search_step
+        while delta <= 0.5 + search_step:
+            for cand in (t - delta, t + delta):
+                if 0 <= cand <= 1 and lum_min <= _relative_luminance(cm(cand)) <= lum_max:
+                    found = cand
+                    break
+            if found is not None:
+                break
+            delta += search_step
+        safe_ts.append(found if found is not None else t)
+    return safe_ts
+
+
 def _resolve_categorical_cmap(cmap, n):
     """
     Resolve a colormap for categorical data and return *n* hex colour strings.
@@ -1157,7 +1410,9 @@ def _resolve_categorical_cmap(cmap, n):
                                 plasma (≤40), turbo (>40).
     - ``str``                 – name of a spatialize PALETTE, an SCM colormap,
                                 or any matplotlib colormap.
-    - matplotlib Colormap     – used directly (sampled at *n* evenly-spaced points).
+    - matplotlib Colormap     – used directly (sampled at *n* points, nudged
+                                away from washed-out near-white/near-black
+                                extremes — see ``_safe_cmap_sample_ts``).
     - list of str (hex/names) – used as-is, cycling if ``len(list) < n``.
     """
     import matplotlib.colors as mcolors
@@ -1171,7 +1426,7 @@ def _resolve_categorical_cmap(cmap, n):
     if isinstance(cmap, mcolors.Colormap):
         cm = cmap
         return ['#%02x%02x%02x' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
-                for c in (cm(t) for t in np.linspace(0, 1, n))]
+                for c in (cm(t) for t in _safe_cmap_sample_ts(cm, n))]
 
     # --- None / 'auto' → legacy automatic fallback ---
     if cmap is None or cmap == 'auto':
@@ -1197,7 +1452,7 @@ def _resolve_categorical_cmap(cmap, n):
             else:
                 cm = plt.colormaps.get_cmap(cmap)   # raises ValueError for unknown names
         return ['#%02x%02x%02x' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
-                for c in (cm(t) for t in np.linspace(0, 1, n))]
+                for c in (cm(t) for t in _safe_cmap_sample_ts(cm, n))]
 
     raise ValueError(
         f"Unsupported cmap type {type(cmap).__name__!r}. "
@@ -1214,10 +1469,10 @@ def _category_colors(n, cmap='Accent'):
 #  Categorical scatter plot
 # ─────────────────────────────────────────────────────────────
 
-def plot_categorical_scatter(points, values, cmap='Accent',
+def plot_categorical_scatter(points, values, cmap='auto', data_type='categorical',
                               nonnum_order=None,
                               xlabel='X', ylabel='Y', title=None,
-                              theme='publication',
+                              theme=None,
                               figsize=None, dpi=100,
                               fig=None, ax=None,
                               extent=None,
@@ -1237,16 +1492,21 @@ def plot_categorical_scatter(points, values, cmap='Accent',
     cmap : str | matplotlib Colormap | list of colours | None
         Colour source for the discrete category palette.  Accepts:
 
-        - ``None`` (default ``'Accent'`` for ≤10 categories, with automatic
-          fallback to ``tab20`` / ``plasma`` / ``turbo`` for larger sets).
+        - ``None`` / ``'auto'`` (default) – automatic fallback: ``Accent``
+          (≤10 categories), ``tab20`` (≤20), ``plasma`` (≤40), ``turbo`` (>40).
         - A **spatialize palette** name (e.g. ``'alges'``, ``'crest_r'``).
         - A **Scientific Colour Map** name (e.g. ``'batlow'``, ``'roma'``).
         - Any **matplotlib** colourmap name (e.g. ``'viridis'``, ``'tab20'``).
         - A matplotlib **Colormap object** (sampled at *n* evenly-spaced points).
         - A **list of hex/named colours** cycled to cover all categories.
+    data_type : str, always ``'categorical'`` for this function. Present for
+        API consistency with :func:`plot_scatter`/:func:`plot_colormap_data`,
+        which accept ``'auto'``/``'sequential'``/``'diverging'`` — categorical
+        data has no per-theme palette, so colour resolution always goes
+        through *cmap* above rather than the active theme.
     nonnum_order : list, optional custom sort order for non-numeric categories
     xlabel, ylabel, title : str, axis labels and title
-    theme : str, PlotStyle theme name (default 'publication')
+    theme : str, PlotStyle theme name (default None — no theme applied unless given)
     figsize, dpi : figure size and resolution
     fig, ax : existing matplotlib Figure/Axes to plot into
     show_legend : bool, whether to show the legend (default True)
@@ -1291,7 +1551,7 @@ def plot_categorical_scatter(points, values, cmap='Accent',
 #  Categorical colormap (image) plot
 # ─────────────────────────────────────────────────────────────
 
-def plot_categorical_colormap(data, categories=None, cmap='Accent',
+def plot_categorical_colormap(data, categories=None, cmap='auto', data_type='categorical',
                                ax=None, w=None, h=None, xi_locations=None,
                                griddata=False, nonnum_order=None,
                                extent=None, title=None, legend_title='Category',
@@ -1313,13 +1573,17 @@ def plot_categorical_colormap(data, categories=None, cmap='Accent',
     cmap : str | matplotlib Colormap | list of colours | None
         Colour source for the discrete category palette.  Accepts:
 
-        - ``None`` (default ``'Accent'`` for ≤10 categories, with automatic
-          fallback to ``tab20`` / ``plasma`` / ``turbo`` for larger sets).
+        - ``None`` / ``'auto'`` (default) – automatic fallback: ``Accent``
+          (≤10 categories), ``tab20`` (≤20), ``plasma`` (≤40), ``turbo`` (>40).
         - A **spatialize palette** name (e.g. ``'alges'``, ``'crest_r'``).
         - A **Scientific Colour Map** name (e.g. ``'batlow'``, ``'roma'``).
         - Any **matplotlib** colourmap name (e.g. ``'viridis'``, ``'tab20'``).
         - A matplotlib **Colormap object** (sampled at *n* evenly-spaced points).
         - A **list of hex/named colours** cycled to cover all categories.
+    data_type : str, always ``'categorical'`` for this function. Present for
+        API consistency with :func:`plot_scatter`/:func:`plot_colormap_data` —
+        categorical data has no per-theme palette, so colour resolution always
+        goes through *cmap* above rather than the active theme.
     ax : matplotlib Axes, optional. Created if None.
     w, h : int, grid width/height for reshaping (1D input only).
     xi_locations : (N, 2) array, used to infer grid shape when ``griddata=False``

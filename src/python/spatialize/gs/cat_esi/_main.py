@@ -314,8 +314,10 @@ class CatESIResult(EstimationResult):
             Colour source for the discrete category palette.  Accepts the
             same options as ``plot_colormap_data``:
 
-            - ``None`` – automatic (``'Accent'`` for ≤10 categories, with
-              fallback to ``tab20`` / ``plasma`` / ``turbo`` for larger sets).
+            - ``None`` (default) – discrete swatches sampled from the active
+              *theme*'s own colormap (see ``PlotStyle.resolve_cmap``), falling
+              back to ``'Accent'``/``tab20``/``plasma``/``turbo`` by category
+              count when ``theme`` is ``None``.
             - A **spatialize palette** name (e.g. ``'alges'``, ``'crest_r'``).
             - A **Scientific Colour Map** name (e.g. ``'batlow'``, ``'roma'``).
             - Any **matplotlib** colourmap name (e.g. ``'tab20'``, ``'viridis'``).
@@ -335,9 +337,13 @@ class CatESIResult(EstimationResult):
         if not self.griddata and xi.shape[1] != 2:
             raise SpatializeError("plot_estimation only supports 2D data.")
 
-        with PlotStyle(theme=theme):
+        with PlotStyle(theme=theme) as style:
+            resolved_cmap = cmap
+            if resolved_cmap is None:
+                n_categories = len(np.unique(np.asarray(est, dtype=object)))
+                resolved_cmap = style.resolve_cmap('categorical', n_categories=n_categories)
             plot_categorical_colormap(
-                est, cmap=cmap, nonnum_order=nonnum_order,
+                est, cmap=resolved_cmap, nonnum_order=nonnum_order,
                 ax=ax, w=w, h=h, griddata=self.griddata,
                 xi_locations=xi,
                 extent=self._get_extent(),
@@ -395,7 +401,8 @@ class CatESIResult(EstimationResult):
         theme : str
             PlotStyle theme. Default ``'alges'``.
         estimation_cmap : str or Colormap, optional
-            Discrete colormap for the estimation panel. Default ``'Accent'``.
+            Discrete colormap for the estimation panel. Defaults to swatches
+            sampled from the theme's own colormap (see ``plot_estimation``).
         precision_cmap : str or Colormap, optional
             Colormap for the precision panel. Defaults to the theme's colormap.
         show : bool, optional
@@ -426,8 +433,13 @@ class CatESIResult(EstimationResult):
             gs = fig.add_gridspec(1, 2, wspace=0.5)
             ax1, ax2 = gs.subplots()
 
+            resolved_estimation_cmap = estimation_cmap
+            if resolved_estimation_cmap is None:
+                n_categories = len(np.unique(np.asarray(self.estimation(), dtype=object)))
+                resolved_estimation_cmap = style.resolve_cmap('categorical', n_categories=n_categories)
+
             ax1.set_title('Estimation')
-            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=estimation_cmap)
+            self.plot_estimation(ax1, w=w, h=h, theme=None, cmap=resolved_estimation_cmap)
             ax1.set_aspect('equal')
 
             ax2.set_title('Precision')

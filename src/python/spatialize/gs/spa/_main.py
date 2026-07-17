@@ -261,17 +261,17 @@ class PosteriorSampleAnalyzer:
         with PlotStyle(theme=theme, color=color) as style:
             fig, ax = plt.subplots(1, 3, **figargs)
             fig.suptitle("Posterior Sample Analysis")
-            fig.subplots_adjust(wspace=0.5)
+            fig.subplots_adjust(wspace=0.3)
 
-            ax[0].hist(self.sample_values, 25, density=True, histtype='stepfilled', alpha=0.3, color=style.color)
+            ax[0].hist(self.sample_values, 25, density=True, histtype='stepfilled', alpha=0.8, color=style.color, zorder=3)
             ax[0].set_title("Value")
 
             ax[1].hist(list(self.sample_quantiles.values()), 25, density=True, histtype='stepfilled',
-                       alpha=0.3, color=style.color)  # Ensure it's a list for hist
+                       alpha=0.8, color=style.color, zorder=3)  # Ensure it's a list for hist
             ax[1].set_title("Percentiles")
 
             ax[2].hist(list(self.sample_entropy.values()), 25, density=True, histtype='stepfilled',
-                       alpha=0.3, color=style.color)  # Ensure it's a list for hist
+                       alpha=0.8, color=style.color, zorder=3)  # Ensure it's a list for hist
             ax[2].set_title("Entropy")
 
         # Consider plt.show() or returning fig if used in non-interactive environments
@@ -355,7 +355,7 @@ class PosteriorSampleAnalyzer:
             # For bar plot, count occurrences of each category
             category_counts = categories_series.value_counts().sort_index()
 
-            ax[0].bar(category_counts.index.astype(str), category_counts.values, color=style.color)
+            ax[0].bar(category_counts.index.astype(str), category_counts.values, color=style.color, zorder=3)
             ax[0].set_title("Categories")
             ax[0].tick_params(axis='x', rotation=45)  # Rotate labels if they overlap
 
@@ -406,7 +406,7 @@ class PosteriorSampleAnalyzer:
             # Plot
             if points_to_plot.shape[0] > 0:  # Check if there's anything to plot
                 sc = ax[1].scatter(points_to_plot[:, 0], points_to_plot[:, 1],
-                                   c=category_nums_to_plot, cmap=cat_cmap, s=30, edgecolor='none')
+                                   c=category_nums_to_plot, cmap=cat_cmap, s=30, edgecolor='white', linewidth=0.5, zorder=3)
                 # Add colorbar
                 cbar = plt.colorbar(sc, ax=ax[1], ticks=list(range(len(unique_cats))), orientation='vertical')
                 cbar.set_ticklabels(unique_cats)  # Set colorbar labels to category names
@@ -618,11 +618,11 @@ def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, b
                 color = panel_colors[i % len(panel_colors)]
 
                 # Plot histogram
-                ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.3, color=color, edgecolor='black')
+                ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.8, color=color, edgecolor='black', zorder=2)
 
                 # Plot PDF
                 if hasattr(emodel, 'x_') and hasattr(emodel, 'pdf_'):
-                    ax.plot(emodel.x_, emodel.pdf_, '-', color=pdf_color, label="PDF")
+                    ax.plot(emodel.x_, emodel.pdf_, '-', color=pdf_color, label="PDF", zorder=3)
                 else:
                     log_message(logging.logger.warning(f"Emodel for index {idx} missing x_ or pdf_ attributes."))
 
@@ -635,7 +635,7 @@ def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, b
                     # If PDF wasn't plotted, ylim might not be representative
                     current_ymin, current_ymax = ax.get_ylim()
                     scaled_cdf = emodel.cdf_ * (current_ymax - current_ymin) + current_ymin
-                    ax.plot(emodel.x_, scaled_cdf, '-b', label="CDF (scaled)")
+                    ax.plot(emodel.x_, scaled_cdf, '-b', label="CDF (scaled)", zorder=3)
                 else:
                     log_message(
                         logging.logger.warning(f"Emodel for index {idx} missing x_ or cdf_ attributes for CDF plotting."))

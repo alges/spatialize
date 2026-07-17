@@ -734,7 +734,21 @@ def _find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     """
     n = len(pdf)
 
-    total_entropy = _compute_entropy_numba(pdf, 0, n, dx, log_base, epsilon)
+    # Precompute per-point entropy contributions as prefix sums so that the
+    # entropy of any candidate interval [i, j] below is an O(1) lookup
+    # (`(prefix[j+1] - prefix[i]) * scale`) instead of an O(j - i) rescan.
+    # Without this, the double loop below is effectively O(n^3) since it
+    # recomputes each candidate interval's entropy from scratch.
+    prefix = np.empty(n + 1, dtype=np.float64)
+    prefix[0] = 0.0
+    for k in range(n):
+        p = pdf[k]
+        if p < epsilon:
+            p = epsilon
+        prefix[k + 1] = prefix[k] - p * np.log(p)
+    scale = dx / log_base
+
+    total_entropy = prefix[n] * scale
     target_entropy = alpha * total_entropy
 
     best_i_nonzero_width = -1 # Stores the best non-zero width interval
@@ -750,8 +764,8 @@ def _find_central_entropy_interval_numba(pdf, x, dx, alpha, log_base, epsilon):
     # Iterate through all possible intervals
     for i in range(n):
         for j in range(i, n):
-            current_ent = _compute_entropy_numba(pdf, i, j + 1, dx, log_base, epsilon)
-            
+            current_ent = (prefix[j + 1] - prefix[i]) * scale
+
             if current_ent >= target_entropy:
                 found_any_valid_interval = True
                 current_width = x[j] - x[i]

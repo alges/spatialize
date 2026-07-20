@@ -444,7 +444,7 @@ def kriging_prediction(points, values, xi, seed=42, griddata=False, **kwargs):
     else:
         return est
 
-def auto_krige(points, values, xi, griddata=False, seed=42, metric='mae'):
+def auto_krige(points, values, xi, griddata=False, seed=42, metric='mae', return_params=False):
     """Perform automated Kriging parameter grid search + Kriging estimation."""
     from sklearn.model_selection import GridSearchCV
     from pykrige.rk import Krige
@@ -484,8 +484,10 @@ def auto_krige(points, values, xi, griddata=False, seed=42, metric='mae'):
         grid_search.fit(X = points, y = values)
     log_message(logging.logger.debug(f"best_params = {grid_search.best_params_}"))
 
-    # pending, does kriging prediction work for both griddata and nongriddata or must we reshape griddata and then return back to original shape (as currently impldmented)?
-    return kriging_prediction(points, values, xi, seed, griddata, **grid_search.best_params_)
+    if return_params:
+        return kriging_prediction(points, values, xi, seed, griddata, **grid_search.best_params_), grid_search.best_params_
+    else:
+        return kriging_prediction(points, values, xi, seed, griddata, **grid_search.best_params_)
 
 # --- Scipy ---
 def scipy_prediction(points, values, xi, method='nearest', griddata=False):

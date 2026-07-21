@@ -1510,7 +1510,7 @@ PYBIND11_MODULE(libspatialize, m) {
     // Fix: at module load, set blocktime=0 so threads sleep immediately (not spin-wait).
     // At atexit, call omp_pause_resource_all(omp_pause_hard) which terminates all worker
     // threads (OpenMP 5.0), leaving nothing to join when libomp's own destructor runs.
-    #ifdef _OPENMP
+    #if defined(_OPENMP) && defined(__APPLE__)
     kmp_set_blocktime(0);
     #endif
     py::module_::import("atexit").attr("register")(

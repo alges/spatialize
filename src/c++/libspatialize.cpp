@@ -1516,7 +1516,11 @@ PYBIND11_MODULE(libspatialize, m) {
     py::module_::import("atexit").attr("register")(
         py::cpp_function([]() {
             #ifdef _OPENMP
-            omp_pause_resource_all(omp_pause_hard);
+            #ifdef _MSC_VER
+                // MSVC does not support OpenMP 5.0 pause resources
+            #else
+                omp_pause_resource_all(omp_pause_hard);
+            #endif
             omp_set_num_threads(1);
             #endif
         }, py::name("_spatialize_omp_cleanup"))

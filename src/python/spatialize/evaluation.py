@@ -24,37 +24,163 @@ def _mask_valid_points(true, pred):
     return ~np.isnan(np.asarray(true, dtype=float)) & ~np.isnan(np.asarray(pred, dtype=float))
 
 def error(true, pred):
-    """Calculates point-wise signed error (pred - true)."""
+    """
+    Calculate point-wise signed error (pred - true).
+
+    Unlike the other metrics in this module, `error` does not apply
+    `_mask_valid_points` itself — NaNs in `true` or `pred` propagate through
+    to the corresponding output positions unchanged.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    ndarray
+        Point-wise signed error, same shape as the inputs. Positive values
+        indicate over-prediction, negative values indicate under-prediction.
+    """
     return np.asarray(pred) - np.asarray(true)
 
 def absolute_error(true, pred):
-    """Calculates point-wise absolute error for a prediction."""
+    """
+    Calculate point-wise absolute error for a prediction.
+
+    Like `error`, this does not mask NaNs itself; NaNs in `true` or `pred`
+    propagate to the corresponding output positions.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    ndarray
+        Point-wise absolute error, same shape as the inputs.
+    """
     return np.abs(error(true, pred))
 
 def bias(true, pred):
-    """Calculates the mean signed error (bias). Positive = systematic over-prediction."""
+    """
+    Calculate the mean signed error (bias).
+
+    Positive values indicate systematic over-prediction, negative values
+    indicate systematic under-prediction. Positions where either `true` or
+    `pred` is NaN are excluded via `_mask_valid_points` before averaging.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Mean signed error over the valid (non-NaN) positions.
+    """
     true, pred = np.asarray(true, dtype=float), np.asarray(pred, dtype=float)
     valid_mask = _mask_valid_points(true, pred)
     return np.mean(error(true[valid_mask], pred[valid_mask]))
 
 def MAE(true, pred):
-    """Calculates the Mean Absolute Error (MAE) metric for a prediction."""
+    """
+    Calculate the Mean Absolute Error (MAE) metric for a prediction.
+
+    Positions where either `true` or `pred` is NaN are excluded via
+    `_mask_valid_points` before averaging.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Mean absolute error over the valid (non-NaN) positions.
+    """
     true, pred = np.asarray(true, dtype=float), np.asarray(pred, dtype=float)
     valid_mask = _mask_valid_points(true, pred)
     return np.mean(absolute_error(true[valid_mask], pred[valid_mask]))
 
 def MSE(true, pred):
-    """Calculates the Mean Squared Error (MSE) metric for a prediction."""
+    """
+    Calculate the Mean Squared Error (MSE) metric for a prediction.
+
+    Positions where either `true` or `pred` is NaN are excluded via
+    `_mask_valid_points` before averaging.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Mean squared error over the valid (non-NaN) positions.
+    """
     true, pred = np.asarray(true, dtype=float), np.asarray(pred, dtype=float)
     valid_mask = _mask_valid_points(true, pred)
     return np.mean(error(true[valid_mask], pred[valid_mask]) ** 2)
 
 def RMSE(true, pred):
-    """Calculates the Root Mean Squared Error (RMSE) metric for a prediction."""
+    """
+    Calculate the Root Mean Squared Error (RMSE) metric for a prediction.
+
+    Computed as ``sqrt(MSE(true, pred))``, so it inherits `MSE`'s NaN
+    handling: positions where either `true` or `pred` is NaN are excluded
+    before averaging.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Root mean squared error over the valid (non-NaN) positions.
+    """
     return np.sqrt(MSE(true, pred))
 
 def R2(true, pred):
-    """Calculates the coefficient of determination (R²). Returns 0 if true is constant."""
+    """
+    Calculate the coefficient of determination (R²).
+
+    Positions where either `true` or `pred` is NaN are excluded via
+    `_mask_valid_points` before computing. Returns 0 if `true` is constant
+    over the valid positions (total sum of squares is zero), rather than
+    dividing by zero.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Coefficient of determination over the valid (non-NaN) positions,
+        or 0.0 if `true` is constant there.
+    """
     true, pred = np.asarray(true, dtype=float), np.asarray(pred, dtype=float)
     valid_mask = _mask_valid_points(true, pred)
     t, p = true[valid_mask], pred[valid_mask]
@@ -64,7 +190,29 @@ def R2(true, pred):
     return 1.0 - np.sum((t - p) ** 2) / ss_tot
 
 def operational(metric):
-    """Decorator to turn an error metric into its operational version (divided by dynamic range)."""
+    """
+    Wrap an error metric to produce its "operational" version.
+
+    The operational version of a metric divides the metric's value by the
+    dynamic range of `true` (``nanmax(true) - nanmin(true)``), normalizing
+    the error relative to the spread of the observed data so that scores
+    are comparable across datasets with different magnitudes. This is used
+    as a decorator to define the ``op_*`` functions (`op_error`, `op_mae`,
+    `op_rmse`, `op_mse`) from their unnormalized counterparts.
+
+    Parameters
+    ----------
+    metric : callable
+        Metric function with signature ``metric(true, pred) -> float`` (or
+        array, for element-wise metrics).
+
+    Returns
+    -------
+    callable
+        Wrapped function with the same signature as `metric`, returning
+        ``metric(true, pred) / dyn_range``, or NaN if the dynamic range of
+        `true` is zero.
+    """
     @functools.wraps(metric)
     def inner_function(true, pred):
         true = np.asarray(true, dtype=float)
@@ -76,22 +224,94 @@ def operational(metric):
 
 @operational
 def op_error(true, pred):
-    """Calculates point-wise operational error (normalized by dynamic range)."""
+    """
+    Calculate point-wise operational error (`error` normalized by dynamic range).
+
+    Equivalent to ``error(true, pred) / (nanmax(true) - nanmin(true))``, via
+    the `operational` decorator. Returns NaN (for every position) if the
+    dynamic range of `true` is zero.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    ndarray
+        Point-wise operational error, same shape as the inputs.
+    """
     return error(true, pred)
 
 @operational
 def op_mae(true, pred):
-    """Calculates the Operational Mean Absolute Error (OpMAE)."""
+    """
+    Calculate the Operational Mean Absolute Error (OpMAE).
+
+    Equivalent to ``MAE(true, pred) / (nanmax(true) - nanmin(true))``, via
+    the `operational` decorator; inherits `MAE`'s NaN masking of `true`/`pred`
+    pairs. Returns NaN if the dynamic range of `true` is zero.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Operational mean absolute error.
+    """
     return MAE(true, pred)
 
 @operational
 def op_rmse(true, pred):
-    """Calculates the Operational Root Mean Squared Error (OpRMSE)."""
+    """
+    Calculate the Operational Root Mean Squared Error (OpRMSE).
+
+    Equivalent to ``RMSE(true, pred) / (nanmax(true) - nanmin(true))``, via
+    the `operational` decorator; inherits `RMSE`'s NaN masking of `true`/`pred`
+    pairs. Returns NaN if the dynamic range of `true` is zero.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Operational root mean squared error.
+    """
     return RMSE(true, pred)
 
 @operational
 def op_mse(true, pred):
-    """Calculates the Operational Mean Squared Error (OpMSE)."""
+    """
+    Calculate the Operational Mean Squared Error (OpMSE).
+
+    Equivalent to ``MSE(true, pred) / (nanmax(true) - nanmin(true))``, via
+    the `operational` decorator; inherits `MSE`'s NaN masking of `true`/`pred`
+    pairs. Returns NaN if the dynamic range of `true` is zero.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth values.
+    pred : array_like
+        Predicted values.
+
+    Returns
+    -------
+    float
+        Operational mean squared error.
+    """
     return MSE(true, pred)
 
 
@@ -123,9 +343,23 @@ def _validate_average(average):
 
 def accuracy(true, pred):
     """
-    Calculates the accuracy (fraction of correct predictions) for categorical predictions.
+    Calculate the accuracy (fraction of correct predictions) for categorical predictions.
 
-    Positions where either true or pred is missing (None / NaN) are ignored.
+    Positions where either `true` or `pred` is missing (None or float NaN)
+    are excluded before computing.
+
+    Parameters
+    ----------
+    true : array_like
+        Ground truth labels.
+    pred : array_like
+        Predicted labels.
+
+    Returns
+    -------
+    float
+        Fraction of positions where `pred` equals `true`, over the valid
+        (non-missing) positions. NaN if no valid positions remain.
     """
     true, pred = np.asarray(true, dtype=object), np.asarray(pred, dtype=object)
     mask = _mask_valid_categorical(true, pred)
@@ -428,6 +662,35 @@ def kfold_validation(points, values, interpolation_function,
 # ------------ Benchmark ------------
 # --- Kriging ---
 def kriging_prediction(points, values, xi, seed=42, griddata=False, **kwargs):
+    """
+    Fit a Kriging model with `pykrige` and predict at target locations.
+
+    Parameters
+    ----------
+    points : array_like, shape (n, d)
+        Spatial coordinates of the data.
+    values : array_like, shape (n,)
+        Observed values at `points`.
+    xi : array_like or tuple of ndarray
+        Locations where the estimate is desired. If `griddata` is True,
+        this is a meshgrid tuple (as produced by `numpy.mgrid`); otherwise
+        an array of shape (m, d).
+    seed : int, optional
+        Random seed passed to `numpy.random.seed` before fitting, for
+        reproducibility. Default is 42.
+    griddata : bool, optional
+        If True, `xi` is a meshgrid tuple and the output is reshaped back
+        to the grid's original shape. Default is False.
+    **kwargs
+        Additional keyword arguments forwarded to `pykrige.rk.Krige`
+        (e.g. ``variogram_model``, ``nlags``, ``n_closest_points``, ``method``).
+
+    Returns
+    -------
+    ndarray
+        Predicted values at `xi`. Reshaped to the grid shape if `griddata`
+        is True, otherwise a flat array of length ``len(xi)``.
+    """
     from pykrige.rk import Krige
     if griddata: 
         _xi, original_shape = flatten_grid_data(xi)
@@ -445,7 +708,53 @@ def kriging_prediction(points, values, xi, seed=42, griddata=False, **kwargs):
         return est
 
 def auto_krige(points, values, xi, griddata=False, seed=42, metric='mae', return_params=False):
-    """Perform automated Kriging parameter grid search + Kriging estimation."""
+    """
+    Perform automated Kriging parameter grid search, then predict with the best model.
+
+    Runs `sklearn.model_selection.GridSearchCV` over `pykrige.rk.Krige`
+    hyperparameters (variogram model, number of lags, number of closest
+    points, and — depending on dimensionality — the Kriging method), scored
+    by `metric`, then re-fits and predicts at `xi` using the best-scoring
+    combination via `kriging_prediction`.
+
+    Parameters
+    ----------
+    points : array_like, shape (n, d)
+        Spatial coordinates of the data. Only 2D or 3D data is supported.
+    values : array_like, shape (n,)
+        Observed values at `points`.
+    xi : array_like or tuple of ndarray
+        Locations where the estimate is desired. If `griddata` is True,
+        this is a meshgrid tuple; otherwise an array of shape (m, d).
+    griddata : bool, optional
+        If True, `xi` is a meshgrid tuple and the output is reshaped back
+        to the grid's original shape. Default is False.
+    seed : int, optional
+        Random seed forwarded to `kriging_prediction` for the final
+        prediction. Default is 42.
+    metric : str, optional
+        Scoring metric used by `GridSearchCV` to select the best Kriging
+        parameters. One of 'mae', 'mse', 'rmse', 'r2'. Default is 'mae'.
+    return_params : bool, optional
+        If True, also return the best parameter combination found by the
+        grid search. Default is False.
+
+    Returns
+    -------
+    ndarray
+        Predicted values at `xi` using the best-found Kriging parameters.
+    params : dict
+        Only returned when `return_params=True`. The best parameter
+        combination (``variogram_model``, ``nlags``, ``n_closest_points``,
+        and ``method``) found by the grid search.
+
+    Raises
+    ------
+    ValueError
+        If `metric` is not one of 'mae', 'mse', 'rmse', 'r2'.
+    SpatializeError
+        If `points` is neither 2D nor 3D.
+    """
     from sklearn.model_selection import GridSearchCV
     from pykrige.rk import Krige
 
@@ -491,7 +800,31 @@ def auto_krige(points, values, xi, griddata=False, seed=42, metric='mae', return
 
 # --- Scipy ---
 def scipy_prediction(points, values, xi, method='nearest', griddata=False):
-    """Returns scipy.griddata prediction."""
+    """
+    Interpolate using `scipy.interpolate.griddata`.
+
+    Parameters
+    ----------
+    points : array_like, shape (n, d)
+        Spatial coordinates of the data.
+    values : array_like, shape (n,)
+        Observed values at `points`.
+    xi : array_like or tuple of ndarray
+        Locations where the estimate is desired. If `griddata` is True,
+        this is a meshgrid tuple; otherwise an array of shape (m, d).
+    method : str, optional
+        Interpolation method forwarded to `scipy.interpolate.griddata`.
+        One of 'nearest', 'linear', 'cubic'. Default is 'nearest'.
+    griddata : bool, optional
+        If True, `xi` is a meshgrid tuple and the output is reshaped back
+        to the grid's original shape. Default is False.
+
+    Returns
+    -------
+    ndarray
+        Predicted values at `xi`. Reshaped to the grid shape if `griddata`
+        is True, otherwise a flat array of length ``len(xi)``.
+    """
     from scipy.interpolate import griddata as scipy_griddata
 
     if griddata:
@@ -685,6 +1018,39 @@ class SyntheticScenario:
                  griddata=False,
                  n_grid_points=None,
                  categorical=False):
+        """
+        Initialize a synthetic spatial interpolation scenario.
+
+        Parameters
+        ----------
+        n_dims : int, optional
+            Dimensionality of the scenario (2 or 3). Default is 2.
+        extent : list, optional
+            Spatial extent of the domain: ``[x_min, x_max, y_min, y_max]``
+            for 2D, or ``[x_min, x_max, y_min, y_max, z_min, z_max]`` for
+            3D. Must have length ``2 * n_dims``. Default is ``[0, 1, 0, 1]``.
+        griddata : bool, optional
+            If True, `create_regular_grid` and `simulate_scenario` produce
+            regular grid output compatible with ``esi_griddata()``. If
+            False, they produce scattered points compatible with
+            ``esi_nongriddata()``. Default is False.
+        n_grid_points : int or tuple, optional
+            Number of grid points per dimension. An int applies the same
+            count to every dimension; a tuple gives an explicit count per
+            dimension (length must match `n_dims`). If None, it is set to
+            ``extent_max - extent_min + 1`` per dimension. Default is None.
+        categorical : bool, optional
+            If True, the scenario produces categorical (class label)
+            outputs instead of continuous values, and `simulate_scenario`
+            defaults to ``kind='nominal'``. Only supported for 2D scenarios.
+            Default is False.
+
+        Raises
+        ------
+        AssertionError
+            If `extent` does not have length ``2 * n_dims``, if `n_dims` is
+            not 2 or 3, or if `categorical=True` with `n_dims != 2`.
+        """
         # Assertions
         assert len(extent)==2*n_dims, f"{2*n_dims} values expected for extent."
         assert n_dims in [2, 3], f"{n_dims} dimensions not supported. 2D and 3D available."
@@ -1255,6 +1621,27 @@ class PrecipitationCaseStudy:
     spatialize.gs.esi.esi_nongriddata : ESI for scattered points
     """
     def __init__(self, locs_cmap=None, data_cmap=None, precision_cmap=None):
+        """
+        Load the precipitation case study data and set up plotting defaults.
+
+        Parameters
+        ----------
+        locs_cmap : matplotlib.colors.Colormap, optional
+            Custom colormap for elevation. If None, uses a seaborn blend.
+            Default is None.
+        data_cmap : matplotlib.colors.Colormap, optional
+            Custom colormap for precipitation values. If None, uses a
+            seaborn blend. Default is None.
+        precision_cmap : matplotlib.colors.Colormap, optional
+            Custom colormap for precision/uncertainty values. If None, uses
+            a seaborn blend. Default is None.
+
+        Notes
+        -----
+        Requires `geopandas` (to load the study area shapefile) and
+        `seaborn` (for the default colormaps), neither of which is automatically
+        installed with spatialize.
+        """
         self._load_data()
         self._setup_environment(locs_cmap, data_cmap, precision_cmap)
 

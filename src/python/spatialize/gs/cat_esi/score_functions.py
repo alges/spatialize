@@ -34,48 +34,189 @@ def _to_str_array(arr):
 # ─────────────────────────────────────────────────────────────
 
 def accuracy(true_values, estimated_values):
-    """1 − accuracy.  Default scorer."""
+    """Compute one minus the classification accuracy.
+
+    This is the default scorer for :func:`~spatialize.gs.cat_esi.cat_esi_hparams_search`.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - accuracy``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.accuracy_score``: the fraction of matching
+    labels between `true_values` and `estimated_values`, with no per-class
+    averaging.
+    """
     return 1.0 - accuracy_score(_to_str_array(true_values),
                                 _to_str_array(estimated_values))
 
 
 def f1_macro(true_values, estimated_values):
-    """1 − macro-averaged F1.  Treats all classes equally regardless of size."""
+    """Compute one minus the macro-averaged F1 score.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - f1_macro``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.f1_score`` with ``average='macro'``: the F1
+    score is computed independently for each class and then unweighted-averaged,
+    so all classes count equally regardless of their support (size).
+    """
     return 1.0 - f1_score(_to_str_array(true_values),
                           _to_str_array(estimated_values),
                           average='macro', zero_division=0)
 
 
 def f1_weighted(true_values, estimated_values):
-    """1 − weighted F1.  Weights each class by its support (class frequency)."""
+    """Compute one minus the support-weighted F1 score.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - f1_weighted``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.f1_score`` with ``average='weighted'``: the F1
+    score is computed independently for each class and then averaged, weighted
+    by each class's support (number of true instances), so frequent classes
+    dominate the score.
+    """
     return 1.0 - f1_score(_to_str_array(true_values),
                           _to_str_array(estimated_values),
                           average='weighted', zero_division=0)
 
 
 def f1_micro(true_values, estimated_values):
-    """1 − micro-averaged F1.  Equivalent to accuracy for multi-class problems."""
+    """Compute one minus the micro-averaged F1 score.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - f1_micro``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.f1_score`` with ``average='micro'``: true
+    positives, false positives, and false negatives are pooled globally
+    across classes before computing F1, which makes it numerically
+    equivalent to accuracy for multi-class (single-label) problems.
+    """
     return 1.0 - f1_score(_to_str_array(true_values),
                           _to_str_array(estimated_values),
                           average='micro', zero_division=0)
 
 
 def precision_macro(true_values, estimated_values):
-    """1 − macro precision."""
+    """Compute one minus the macro-averaged precision.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - precision_macro``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.precision_score`` with ``average='macro'``:
+    precision is computed independently for each class and then
+    unweighted-averaged, so all classes count equally regardless of size.
+    """
     return 1.0 - precision_score(_to_str_array(true_values),
                                  _to_str_array(estimated_values),
                                  average='macro', zero_division=0)
 
 
 def recall_macro(true_values, estimated_values):
-    """1 − macro recall (= 1 − balanced accuracy for uniform priors)."""
+    """Compute one minus the macro-averaged recall.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - recall_macro``, in ``[0, 1]``; lower is better.
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.recall_score`` with ``average='macro'``:
+    recall is computed independently for each class and then
+    unweighted-averaged, which is equivalent to ``1 - balanced_accuracy``
+    when classes have uniform priors.
+    """
     return 1.0 - recall_score(_to_str_array(true_values),
                               _to_str_array(estimated_values),
                               average='macro', zero_division=0)
 
 
 def cohen_kappa(true_values, estimated_values):
-    """1 − Cohen's κ.  Accounts for chance agreement; good for ordinal data."""
+    """Compute one minus Cohen's kappa agreement coefficient.
+
+    Parameters
+    ----------
+    true_values : array_like
+        Ground-truth categorical labels, 1-D.
+    estimated_values : array_like
+        Predicted categorical labels, 1-D, same length as `true_values`.
+
+    Returns
+    -------
+    float
+        ``1 - kappa``, in ``[0, 2]``; lower is better. If only one class is
+        present in the combined data, kappa is undefined and this returns
+        ``2.0`` (treated as the worst case).
+
+    Notes
+    -----
+    Backed by ``sklearn.metrics.cohen_kappa_score``, which corrects raw
+    agreement for the agreement expected by chance — useful when class
+    frequencies are imbalanced or for ordinal data where near-miss
+    disagreements matter.
+    """
     t = _to_str_array(true_values)
     e = _to_str_array(estimated_values)
     try:

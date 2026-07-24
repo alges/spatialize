@@ -48,11 +48,16 @@ class ESSResult:
 
     def __init__(self, ess_scenarios, esi_result, desc):
         """
-        Initializes an ESSResult instance.
+        Initialize an ESSResult instance.
 
-        :param ess_scenarios: The set of simulated ESS scenarios.
-        :param esi_result: The ESI result used for generating the ESS scenarios.
-        :param desc: A description of the ESS result.
+        Parameters
+        ----------
+        ess_scenarios : ndarray
+            The set of simulated ESS scenarios.
+        esi_result : ESIResult
+            The ESI result used for generating the ESS scenarios.
+        desc : str
+            A description of the ESS result.
         """
         self.esi_result = esi_result
         self.scenarios = ess_scenarios
@@ -64,22 +69,37 @@ class ESSResult:
     def quick_plot(self, n_imgs=9, n_cols=3, norm_lims=False, title_prefix="scenario", title=None,
                    theme='alges', cmap=None):
         """
-        Quickly plots a preview of the ESS scenarios as a grid of colormap images.
+        Quickly plot a preview of the ESS scenarios as a grid of colormap images.
 
-        This method utilizes the `plot_colormap_array` function to display the specified
-        number of simulated ESS scenarios. Each scenario is represented as an image in
-        the grid layout.
+        Uses the `plot_colormap_array` function to display the specified
+        number of simulated ESS scenarios. Each scenario is represented as an
+        image in the grid layout.
 
-        :param n_imgs: The number of ESS scenarios (images) to display. Defaults to 9.
-        :param n_cols: The number of columns in the grid layout. Defaults to 3.
-        :param norm_lims: Whether to normalize the values of the scenarios based on the reference map. Defaults to False.
-        :param title_prefix: The prefix to use in the subplot titles (e.g., "scenario 1", "scenario 2"). Defaults to "scenario".
-        :param title: The title for the entire plot. Defaults to None, which uses the `desc` attribute.
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Defaults to 'alges'.
-        :param cmap: Colormap for the plot. If None, uses theme default.
+        Parameters
+        ----------
+        n_imgs : int, optional
+            The number of ESS scenarios (images) to display, default: 9.
+        n_cols : int, optional
+            The number of columns in the grid layout, default: 3.
+        norm_lims : bool, optional
+            Whether to normalize the values of the scenarios based on the
+            reference map, default: False.
+        title_prefix : str, optional
+            The prefix to use in the subplot titles (e.g., "scenario 1",
+            "scenario 2"), default: "scenario".
+        title : str, optional
+            The title for the entire plot. Defaults to None, which uses the
+            `desc` attribute.
+        theme : str, optional
+            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Default: 'alges'.
+        cmap : str or Colormap, optional
+            Colormap for the plot. If None, uses theme default.
 
-        :return: A Matplotlib figure containing the grid of ESS scenario plots.
+        Returns
+        -------
+        matplotlib.figure.Figure
+            A figure containing the grid of ESS scenario plots.
         """
         if title is None:
             title = self.desc
@@ -101,53 +121,78 @@ def ess_sample(esi_result,
                n_jobs=-1,
                callback=default_singleton_callback):
     """
-        Generate simulated scenarios from Ensemble Spatial Interpolation (ESI) samples using probabilistic models.
+    Generate simulated scenarios from Ensemble Spatial Interpolation (ESI) samples using probabilistic models.
 
-        This function takes ESI (Ensemble Spatial Interpolation) samples from the provided ``esi_result``,
-        fits a probabilistic model to each sample using a specified model factory, and generates a specified
-        number of simulations per sample. Execution can be done serially or in parallel, with real-time progress
-        tracking via a callback.
+    This function takes ESI (Ensemble Spatial Interpolation) samples from the
+    provided ``esi_result``, fits a probabilistic model to each sample using a
+    specified model factory, and generates a specified number of simulations
+    per sample. Execution can be done serially or in parallel, with real-time
+    progress tracking via a callback.
 
-        :param esi_result:
-            An object containing ESI (Ensemble Spatial Interpolation) samples. Must implement
-            the method ``esi_samples(raw=True)`` which returns a NumPy array of shape
-            ``(n_samples, n_features)``.
-        :type esi_result: object
-        :param n_sims:
-            Number of simulations to generate per ESI sample.
-        :type n_sims: int, optional
-        :param fitted_model_factory:
-            A factory for creating fitted probabilistic models per sample. Must provide
-            a ``create(...)`` method and define ``point_model_name`` and other relevant attributes.
-        :type fitted_model_factory: FittedModelFactory, optional
-        :param desc:
-            Optional textual description for the result. If not provided, it will be generated
-            based on the model type and simulation parameters.
-        :type desc: str, optional
-        :param n_jobs:
-            Number of parallel jobs to use. Set to ``1`` for serial execution or ``-1`` to use all available CPUs.
-        :type n_jobs: int, optional
-        :param callback:
-            A callback function for progress reporting. Expected to support ``logging.progress.init``,
-            ``inform``, and ``stop`` methods.
-        :type callback: callable, optional
-        :returns:
-            An ``ESSResult`` object containing the simulated scenarios, the original ESI result,
-            and a textual description.
-        :rtype: ESSResult
-        :raises ValueError:
-            If the model type specified in ``fitted_model_factory.point_model_name`` is not one of
-            ``"vim"``, ``"emm"``, or ``"kde"``.
-        .. note::
-            - This function supports parallel execution using ``joblib.Parallel`` and includes a separate
-              thread for real-time progress monitoring.
-            - It is designed for large-scale scenario generation from spatial ensemble data.
-        .. warning::
-            - If model fitting or sampling fails for a given sample, its corresponding scenario row is
-              replaced with zeros.
-            - When using ``n_jobs != 1``, this function must be called within a
-              ``if __name__ == "__main__":`` block to avoid multiprocessing issues
-              (especially on Windows and macOS).
+    Parameters
+    ----------
+    esi_result : object
+        An object containing ESI (Ensemble Spatial Interpolation) samples.
+        Must implement the method ``esi_samples(raw=True)``, which returns an
+        array of shape ``(n_samples, n_features)``. When
+        `fitted_model_factory.widening` is set, it must also carry the
+        original `points`/`values` used to fit the ESI result.
+    n_sims : int, optional
+        Number of simulations to generate per ESI sample.
+    fitted_model_factory : FittedModelFactory, optional
+        A factory for creating fitted probabilistic models per sample. Must
+        provide a ``create(...)`` method and define ``point_model_name`` and
+        other relevant attributes.
+    desc : str, optional
+        Textual description for the result. If not provided, it is generated
+        based on the model type and simulation parameters.
+    n_jobs : int, optional
+        Number of parallel jobs to use. Set to ``1`` for serial execution or
+        ``-1`` to use all available CPUs.
+    callback : callable, optional
+        A callback function for progress reporting. Expected to support
+        ``logging.progress.init``, ``inform``, and ``stop`` methods.
+
+    Returns
+    -------
+    ESSResult
+        An object containing the simulated scenarios, the original ESI
+        result, and a textual description.
+
+    Raises
+    ------
+    ValueError
+        If the model type specified in
+        ``fitted_model_factory.point_model_name`` is not one of ``"vim"``,
+        ``"emm"``, or ``"kde"``.
+    ValueError
+        If `fitted_model_factory.widening` is set but `esi_result` does not
+        carry the original points/values.
+
+    Notes
+    -----
+    This function supports parallel execution using ``joblib.Parallel`` and
+    includes a separate thread for real-time progress monitoring. It is
+    designed for large-scale scenario generation from spatial ensemble data.
+
+    If model fitting or sampling fails for a given sample, its corresponding
+    scenario row is replaced with zeros.
+
+    When using ``n_jobs != 1``, this function must be called within an
+    ``if __name__ == "__main__":`` block to avoid multiprocessing issues
+    (especially on Windows and macOS).
+
+    Examples
+    --------
+    >>> from spatialize.gs.esi import esi_nongriddata
+    >>> from spatialize.gs.ess import ess_sample
+    >>>
+    >>> result = esi_nongriddata(points, values, xi,
+    ...                          local_interpolator="idw", alpha=0.9, exponent=2.0)
+    >>> ess_result = ess_sample(result, n_sims=100)
+    >>> ess_result.scenarios.shape
+    (n_xi, 100)
+    >>> ess_result.quick_plot()
     """
     # work always with the flattened array just to support arbitrary dimensions
     esi_samples = np.array(esi_result.esi_samples(raw=True))

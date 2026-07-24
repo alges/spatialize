@@ -199,56 +199,91 @@ def _widen_sample(sample, widening, target_var, target_skew, rng, eps=1e-9):
 
 
 class FittedModelFactory:
+    """
+    Factory for creating and fitting probabilistic models on sample data.
+
+    Supports handling missing values (NaNs) and fitting various types of density
+    estimation models, such as Kernel Density Estimation (KDE), Gaussian Mixture
+    Models (GMM), and Variational Inference-based models. Also optionally widens
+    a fitted sample to correct for ensembles (such as (A)ESI ensembles) that
+    under-represent local spread because each member is a partition-average.
+
+    See Also
+    --------
+    EmpiricalModel : Wraps a model produced by this factory to expose PDF/CDF,
+        entropy, credible intervals, and other distributional summaries.
+    """
+
     def __init__(self, nan_model_name="replace", nan_replace_func_name="median",
                  point_model_name="kde", kernel="gaussian",
                  bgm_sample_size=1000, bgm_max_iter=100, n_components=3,
                  widening=False, widening_knn=12, seed=None):
         """
-        Factory for creating and fitting probabilistic models on sample data.
+        Configure the NaN-handling, density-model, and widening strategy.
 
-        This class supports handling missing values (NaNs) and fitting various types of
-        density estimation models, such as Kernel Density Estimation (KDE), Gaussian
-        Mixture Models (GMM), and Variational Inference-based models.
+        Parameters
+        ----------
+        nan_model_name : str, optional
+            Strategy for handling NaN values. Use ``"replace"`` to replace NaNs
+            using a statistical function, or ``"ignore"`` to discard them.
+            Default: ``"replace"``.
+        nan_replace_func_name : str, optional
+            Function used to replace NaNs when ``nan_model_name="replace"``.
+            Valid values are ``"mean"`` and ``"median"``. Default: ``"median"``.
+        point_model_name : str, optional
+            Type of model used to estimate the probability density. Options:
 
-        :param nan_model_name: Strategy for handling NaN values. Use "replace" to replace NaNs
-            using a statistical function, or "ignore" to discard them. Default is "replace".
-        :param nan_replace_func_name: Function used to replace NaNs when nan_model_name="replace".
-            Valid values are "mean" and "median". Default is "median".
-        :param point_model_name: Type of model used to estimate the probability density.
-            Options include:
-                - "kde": Kernel Density Estimation (fastest)
-                - "emm": Expectation-Maximization for GMM
-                - "vim": Variational Inference for GMM (slowest)
-            Default is "kde".
-        :param kernel: Kernel type for KDE. Ignored if model is not "kde". Default is "gaussian".
-        :param bgm_sample_size: Sample size used for fitting the Bayesian Gaussian Mixture model.
-            Default is 1000.
-        :param bgm_max_iter: Maximum number of iterations for GMM fitting. Default is 100.
-        :param n_components: Number of mixture components for GMM models. Default is 3.
-        :param widening: Corrects ensembles that under-represent local (nugget) spread
-            because each member is a partition-average. Options:
-                - False: no widening (default).
-                - "gamma": widen with mean-preserving Gamma components (requires
-                  non-negative values).
-                - "skew_normal": widen with mean-preserving SkewNormal components, shaped to
-                  match a target local skewness (safe for negative values; falls back to a
-                  symmetric Normal-mixture shape when no target skewness is available).
-                - "auto": "gamma" if the sample is non-negative, otherwise "skew_normal".
-            Widening is calibrated per-call against a target local variance (and, for
-            "skew_normal", a target local skewness) estimated from observed data; it is a
-            no-op when that target isn't available (see `create`).
-        :param widening_knn: Number of nearest observed neighbours used to estimate the
-            target local variance/skewness that widening is calibrated against (see
-            `_local_target_variance`/`_loo_target_variance`/`_local_target_skewness`/
-            `_loo_target_skewness`). Ignored when `widening` is False. Default is 12.
-        :param seed: Random seed for reproducibility. Seeds the "emm"/"vim" model fits
-            (passed as `random_state` to `GaussianMixture`/`BayesianGaussianMixture`,
-            since their EM initialization is stochastic; "kde" fitting has no randomness
-            and ignores this). Also used as the default seed for widening (see `create`),
-            since resampling/Gamma/SkewNormal draws there are stochastic too. If None
-            (default), all of the above remain unseeded/non-deterministic, matching prior
-            behaviour.
-        :raises ValueError: If invalid parameters are provided.
+            - ``"kde"``: Kernel Density Estimation (fastest).
+            - ``"emm"``: Expectation-Maximization for GMM.
+            - ``"vim"``: Variational Inference for GMM (slowest).
+
+            Default: ``"kde"``.
+        kernel : str, optional
+            Kernel type for KDE. Ignored if model is not ``"kde"``.
+            Default: ``"gaussian"``.
+        bgm_sample_size : int, optional
+            Sample size used for fitting the Bayesian Gaussian Mixture model.
+            Default: 1000.
+        bgm_max_iter : int, optional
+            Maximum number of iterations for GMM fitting. Default: 100.
+        n_components : int, optional
+            Number of mixture components for GMM models. Default: 3.
+        widening : {False, "gamma", "skew_normal", "auto"}, optional
+            Corrects ensembles that under-represent local (nugget) spread
+            because each member is a partition-average.
+
+            - ``False``: no widening (default).
+            - ``"gamma"``: widen with mean-preserving Gamma components (requires
+              non-negative values).
+            - ``"skew_normal"``: widen with mean-preserving SkewNormal components,
+              shaped to match a target local skewness (safe for negative values;
+              falls back to a symmetric Normal-mixture shape when no target
+              skewness is available).
+            - ``"auto"``: ``"gamma"`` if the sample is non-negative, otherwise
+              ``"skew_normal"``.
+
+            Widening is calibrated per-call against a target local variance (and,
+            for ``"skew_normal"``, a target local skewness) estimated from
+            observed data; it is a no-op when that target isn't available (see
+            `create`).
+        widening_knn : int, optional
+            Number of nearest observed neighbours used to estimate the target
+            local variance/skewness that widening is calibrated against.
+            Ignored when `widening` is False. Default: 12.
+        seed : int, optional
+            Random seed for reproducibility. Seeds the ``"emm"``/``"vim"`` model
+            fits (passed as ``random_state`` to `GaussianMixture`/
+            `BayesianGaussianMixture`, since their EM initialization is
+            stochastic; ``"kde"`` fitting has no randomness and ignores this).
+            Also used as the default seed for widening (see `create`), since
+            resampling/Gamma/SkewNormal draws there are stochastic too. If None
+            (default), all of the above remain unseeded/non-deterministic,
+            matching prior behaviour.
+
+        Raises
+        ------
+        ValueError
+            If invalid parameters are provided.
         """
 
         self.nan_model_name = nan_model_name
@@ -304,29 +339,50 @@ class FittedModelFactory:
         """
         Fit the configured model to the given sample data.
 
-        This method processes the input sample according to the specified
-        NaN-handling strategy, optionally widens it (see `widening`), and then fits the
+        Processes the input sample according to the specified NaN-handling
+        strategy, optionally widens it (see `widening`), and then fits the
         selected model to the result.
 
-        :param sample: NumPy array of data points to fit the model to.
-        :param target_var: Target local variance to calibrate widening against (typically a
-            k-NN estimate from observed data at this sample's location). Only used when
-            `widening` is not False; if None, widening is skipped even if configured, since
-            there is nothing to calibrate against.
-        :param target_skew: Target local skewness to calibrate `widening="skew_normal"`
-            against (typically a k-NN estimate from observed data, e.g.
-            `_local_target_skewness`/`_loo_target_skewness`). Ignored by "gamma"; if None
-            while `widening="skew_normal"`, falls back to the symmetric shape (delta=0).
-        :param seed: Random seed for this call's widening draws, overriding the factory's
-            `seed` for this sample only. Callers that invoke `create()` once per spatial
-            location (e.g. `ess_sample`, `PosteriorSampleAnalyzer`) should derive a distinct
-            per-location seed from a shared base seed (e.g. `base_seed + location_index`) so
-            that widening doesn't draw identical noise at every location. Falls back to
-            `self.seed` when None.
-        :return: A tuple containing the fitted model and the processed (possibly widened)
-            sample data.
-        :raises ValueError: If the sample is not a NumPy array or becomes empty after
-            NaN processing.
+        Parameters
+        ----------
+        sample : ndarray
+            NumPy array of data points to fit the model to.
+        target_var : float, optional
+            Target local variance to calibrate widening against (typically a
+            k-NN estimate from observed data at this sample's location). Only
+            used when `widening` is not False; if None, widening is skipped
+            even if configured, since there is nothing to calibrate against.
+        target_skew : float, optional
+            Target local skewness to calibrate ``widening="skew_normal"``
+            against (typically a k-NN estimate from observed data). Ignored by
+            ``"gamma"``; if None while ``widening="skew_normal"``, falls back
+            to the symmetric shape (``delta=0``).
+        seed : int, optional
+            Random seed for this call's widening draws, overriding the
+            factory's `widening_knn`-independent ``seed`` for this sample
+            only. Callers that invoke `create` once per spatial location
+            (e.g. ``ess_sample``, ``PosteriorSampleAnalyzer``) should derive a
+            distinct per-location seed from a shared base seed (e.g.
+            ``base_seed + location_index``) so that widening doesn't draw
+            identical noise at every location. Falls back to the factory's
+            ``seed`` when None.
+
+        Returns
+        -------
+        model : object
+            The fitted density model (e.g. `sklearn.neighbors.KernelDensity`,
+            `sklearn.mixture.GaussianMixture`, or
+            `sklearn.mixture.BayesianGaussianMixture`, depending on
+            ``point_model_name``).
+        data : ndarray
+            The processed (possibly widened) sample data actually used to fit
+            `model`.
+
+        Raises
+        ------
+        ValueError
+            If the sample is not a NumPy array or becomes empty after NaN
+            processing.
         """
         if not isinstance(sample, np.ndarray):
             raise ValueError("Sample must be a numpy array")
@@ -378,17 +434,35 @@ class FittedModelFactory:
 
 class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
     """
-    Abstract Base Class for 1D probabilistic models.
+    Abstract base class for 1D probabilistic models.
+
+    Defines the common interface shared by empirical distribution models:
+    PDF/CDF/inverse-CDF evaluation, distributional summaries (mean, mode,
+    median, percentiles, moments), differential entropy and entropy-based
+    intervals, credible intervals, sampling, and confidence measures derived
+    from those intervals. Concrete subclasses (e.g. `EmpiricalModel`) must
+    implement each method; `compute_confidence_measures` and `mc_estimator`
+    are provided here since they are expressed purely in terms of the other
+    abstract methods and the `d_min`/`d_max` attributes subclasses must set.
+
+    See Also
+    --------
+    EmpiricalModel : Concrete implementation backed by a fitted density model.
     """
 
     def cdf(self, x):
         """
         Compute the Cumulative Distribution Function (CDF) at given x values.
 
-        :param x: Points at which to evaluate the CDF.
-        :type x: float or np.ndarray
-        :returns: CDF values.
-        :rtype: float or np.ndarray
+        Parameters
+        ----------
+        x : float or ndarray
+            Points at which to evaluate the CDF.
+
+        Returns
+        -------
+        float or ndarray
+            CDF values.
         """
         raise NotImplementedError
 
@@ -396,10 +470,15 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute the inverse CDF (quantile function) at given probability values.
 
-        :param p: Probability values (between 0 and 1).
-        :type p: float or np.ndarray
-        :returns: Quantile values.
-        :rtype: float or np.ndarray
+        Parameters
+        ----------
+        p : float or ndarray
+            Probability values (between 0 and 1).
+
+        Returns
+        -------
+        float or ndarray
+            Quantile values.
         """
         raise NotImplementedError
 
@@ -411,66 +490,93 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
 
             H = - \\int_a^b p(x) \\log_b p(x) \\, dx
 
-        :param a: Lower limit of integration, defaults to model's min.
-        :type a: float, optional
-        :param b: Upper limit of integration, defaults to model's max.
-        :type b: float, optional
-        :param base: Log base (e.g., `np.e` or `2`), defaults to np.e.
-        :type base: float
-        :param epsilon: Small value to avoid log(0), defaults to 1e-10.
-        :type epsilon: float
-        :returns: Estimated entropy.
-        :rtype: float
+        Parameters
+        ----------
+        a : float, optional
+            Lower limit of integration, defaults to model's min.
+        b : float, optional
+            Upper limit of integration, defaults to model's max.
+        base : float, optional
+            Log base (e.g., `np.e` or `2`). Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        float
+            Estimated entropy.
         """
         raise NotImplementedError
 
     def central_entropy_interval(self, alpha=0.9, base=np.e, epsilon=1e-10):
         """
-        Finds the narrowest interval [a, b] that contains `alpha` percentage
+        Find the narrowest interval [a, b] that contains `alpha` percentage
         of the total entropy.
 
-        :param alpha: Desired percentage of total entropy (0 to 1), defaults to 0.9.
-        :type alpha: float
-        :param base: Log base for entropy calculation, defaults to np.e.
-        :type base: float
-        :param epsilon: Small value to avoid log(0), defaults to 1e-10.
-        :type epsilon: float
-        :returns: Dictionary containing the interval, its entropy, tail entropies, and total entropy.
-        :rtype: dict
+        Parameters
+        ----------
+        alpha : float, optional
+            Desired percentage of total entropy (0 to 1). Default: 0.9.
+        base : float, optional
+            Log base for entropy calculation. Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the interval, its entropy, tail entropies,
+            and total entropy.
         """
         raise NotImplementedError
 
     def entropy_informative_interval(self, x0, alpha=0.9, base=np.e, epsilon=1e-10):
         """
-        Finds an interval [a, b] around a given point x0 that contains `alpha`
-        percentage of the total entropy. The interval is expanded outwards
-        from x0 by adding points with the highest entropy contribution.
+        Find an interval [a, b] around a given point x0 that contains `alpha`
+        percentage of the total entropy.
 
-        :param x0: The central point around which to find the entropy interval.
-        :type x0: float
-        :param alpha: Desired percentage of total entropy (0 to 1), defaults to 0.9.
-        :type alpha: float
-        :param base: Log base for entropy calculation, defaults to np.e.
-        :type base: float
-        :param epsilon: Small value to avoid log(0), defaults to 1e-10.
-        :type epsilon: float
-        :returns: Dictionary containing the interval, its entropy, tail entropies, and total entropy.
-        :rtype: dict
+        The interval is expanded outwards from x0 by adding points with the
+        highest entropy contribution.
+
+        Parameters
+        ----------
+        x0 : float
+            The central point around which to find the entropy interval.
+        alpha : float, optional
+            Desired percentage of total entropy (0 to 1). Default: 0.9.
+        base : float, optional
+            Log base for entropy calculation. Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the interval, its entropy, tail entropies,
+            and total entropy.
         """
         raise NotImplementedError
 
     def credible_interval(self, estimator, alpha=0.95):
         """
-        Find the narrowest credible interval [a, b] around a given estimator
-        such that the total probability mass in [a, b] is at least alpha.
-        Also returns the left and right tails and their probability mass.
+        Find the narrowest credible interval [a, b] around a given estimator.
 
-        :param estimator: Central estimate (e.g., MAP, mean, median).
-        :type estimator: float
-        :param alpha: Desired probability mass to include in the central interval, defaults to 0.95.
-        :type alpha: float
-        :returns: Dictionary with interval information.
-        :rtype: dict
+        The interval is chosen such that the total probability mass in
+        [a, b] is at least alpha. Also returns the left and right tails and
+        their probability mass.
+
+        Parameters
+        ----------
+        estimator : float
+            Central estimate (e.g., MAP, mean, median).
+        alpha : float, optional
+            Desired probability mass to include in the central interval.
+            Default: 0.95.
+
+        Returns
+        -------
+        dict
+            Dictionary with interval information.
         """
         raise NotImplementedError
 
@@ -478,8 +584,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute the mean of the distribution.
 
-        :returns: Mean value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Mean value.
         """
         raise NotImplementedError
 
@@ -487,8 +595,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute the mode (peak) of the distribution.
 
-        :returns: Mode value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Mode value.
         """
         raise NotImplementedError
 
@@ -496,8 +606,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute the median (inverse CDF at 0.5) of the distribution.
 
-        :returns: Median value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Median value.
         """
         raise NotImplementedError
 
@@ -505,10 +617,15 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute p-th percentile of the distribution.
 
-        :param p: Value in [0, 1].
-        :type p: float
-        :returns: Percentile value.
-        :rtype: float
+        Parameters
+        ----------
+        p : float
+            Value in [0, 1].
+
+        Returns
+        -------
+        float
+            Percentile value.
         """
         raise NotImplementedError
 
@@ -516,8 +633,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute variance of the distribution.
 
-        :returns: Variance value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Variance value.
         """
         raise NotImplementedError
 
@@ -525,8 +644,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute standard deviation of the distribution.
 
-        :returns: Standard deviation value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Standard deviation value.
         """
         raise NotImplementedError
 
@@ -534,8 +655,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute skewness of the distribution.
 
-        :returns: Skewness value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Skewness value.
         """
         raise NotImplementedError
 
@@ -543,8 +666,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute excess kurtosis of the distribution.
 
-        :returns: Excess kurtosis value.
-        :rtype: float
+        Returns
+        -------
+        float
+            Excess kurtosis value.
         """
         raise NotImplementedError
 
@@ -552,10 +677,15 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute raw moment of order k.
 
-        :param k: Order of the moment.
-        :type k: int
-        :returns: Raw moment.
-        :rtype: float
+        Parameters
+        ----------
+        k : int
+            Order of the moment.
+
+        Returns
+        -------
+        float
+            Raw moment.
         """
         raise NotImplementedError
 
@@ -563,10 +693,15 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Compute central moment of order k.
 
-        :param k: Order of the central moment.
-        :type k: int
-        :returns: Central moment.
-        :rtype: float
+        Parameters
+        ----------
+        k : int
+            Order of the central moment.
+
+        Returns
+        -------
+        float
+            Central moment.
         """
         raise NotImplementedError
 
@@ -574,8 +709,10 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Return MAP estimate and its density.
 
-        :returns: Dictionary with 'value' and 'density'.
-        :rtype: dict
+        Returns
+        -------
+        dict
+            Dictionary with ``'value'`` and ``'density'``.
         """
         raise NotImplementedError
 
@@ -583,29 +720,42 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
         """
         Draw random samples from the distribution.
 
-        :param size: Number of samples to draw, defaults to 1.
-        :type size: int
-        :returns: Array of samples.
-        :rtype: np.ndarray
+        Parameters
+        ----------
+        size : int, optional
+            Number of samples to draw. Default: 1.
+
+        Returns
+        -------
+        ndarray
+            Array of samples.
         """
         raise NotImplementedError
 
     def compute_confidence_measures(self, x0, alpha_credible_target = 0.95, alpha_entropy_target = 0.05):
         """
-        Computes the three proposed confidence measures around a specific point x0.
+        Compute the three proposed confidence measures around a specific point x0.
 
         This method is implemented in the base class as it relies on abstract
-        methods (credible_interval, entropy_interval_around_point) and properties
-        (d_min, d_max) that concrete subclasses must implement.
+        methods (`credible_interval`, `entropy_informative_interval`) and
+        attributes (`d_min`, `d_max`) that concrete subclasses must implement.
 
-        :param x0: The central point around which to compute confidence.
-        :type x0: float
-        :param alpha_credible_target: The desired probability mass for the credible interval.
-        :type alpha_credible_target: float
-        :param alpha_entropy_target: The desired percentage of total entropy for the entropy interval.
-        :type alpha_entropy_target: float
-        :returns: A dictionary containing the computed confidence scores and the parameters used.
-        :rtype: dict
+        Parameters
+        ----------
+        x0 : float
+            The central point around which to compute confidence.
+        alpha_credible_target : float, optional
+            The desired probability mass for the credible interval.
+            Default: 0.95.
+        alpha_entropy_target : float, optional
+            The desired percentage of total entropy for the entropy interval.
+            Default: 0.05.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the computed confidence scores and the
+            parameters used.
         """
         _ensure_numba()
         # get Parameters from Credible Interval
@@ -658,23 +808,34 @@ class BaseEmpiricalModel: # Renamed from BaseProbabilisticModel
 
     def mc_estimator(self, confidence_measure_type, alpha_credible_target = 0.95, alpha_entropy_target = 0.05):
         """
-        Finds an estimator (x_e) that maximizes a specified confidence measure.
+        Find an estimator (x_e) that maximizes a specified confidence measure.
 
-        This method iterates through the model's x-grid, calculates the specified
+        Iterates through the model's x-grid, calculates the specified
         confidence measure for each point, and returns the point that yields
         the maximum confidence.
 
-        :param confidence_measure_type: The type of confidence measure to maximize.
-                                        Must be one of 'simple_relative',
-                                        'relative_harmonic', or 'log_ratio'.
-        :type confidence_measure_type: str
-        :param alpha_credible_target: The desired probability mass for the credible interval, defaults to 0.95.
-        :type alpha_credible_target: float
-        :param alpha_entropy_target: The desired percentage of total entropy for the entropy interval, defaults to 0.05.
-        :type alpha_entropy_target: float
-        :returns: A dictionary containing the optimal estimator (x_e) and its maximum confidence score.
-        :rtype: dict
-        :raises ValueError: If an unknown confidence_measure_type is provided.
+        Parameters
+        ----------
+        confidence_measure_type : str
+            The type of confidence measure to maximize. Must be one of
+            ``'simple_relative'``, ``'relative_harmonic'``, or ``'log_ratio'``.
+        alpha_credible_target : float, optional
+            The desired probability mass for the credible interval.
+            Default: 0.95.
+        alpha_entropy_target : float, optional
+            The desired percentage of total entropy for the entropy interval.
+            Default: 0.05.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the optimal estimator (x_e) and its
+            maximum confidence score.
+
+        Raises
+        ------
+        ValueError
+            If an unknown `confidence_measure_type` is provided.
         """
         valid_confidence_measures = [
             'simple_relative',
@@ -918,45 +1079,50 @@ class EmpiricalModel(BaseEmpiricalModel):
     a numerical PDF, CDF, and inverse CDF, and provides tools for entropy,
     credible intervals, and sampling.
 
-    :param skl_model: A pre-fitted scikit-learn density model. If provided, the model
-        is used directly and a large sample is drawn from it to determine support range.
-        If not provided, ``sample`` must be given.
-    :type skl_model: sklearn.base.BaseEstimator, optional
-    :param sample: A 1D NumPy array of data points used to fit a model if ``skl_model``
+    Parameters
+    ----------
+    skl_model : sklearn.base.BaseEstimator, optional
+        A pre-fitted scikit-learn density model. If provided, the model
+        is used directly and a large sample is drawn from it to determine
+        support range. If not provided, `sample` must be given.
+    sample : ndarray, optional
+        A 1D NumPy array of data points used to fit a model if `skl_model`
         is not provided.
-    :type sample: numpy.ndarray, optional
-    :param support_sample_size: Number of points in the uniform support grid used for
-        evaluating the PDF and CDF. Defaults to 1000.
-    :type support_sample_size: int, optional
-    :param fitted_model_factory: An instance of :class:`FittedModelFactory` used to create a
-        model when fitting from sample data. Defaults to a new factory instance.
-    :type fitted_model_factory: FittedModelFactory, optional
+    support_sample_size : int, optional
+        Number of points in the uniform support grid used for evaluating the
+        PDF and CDF. Default: 1000.
+    fitted_model_factory : FittedModelFactory, optional
+        Instance of `FittedModelFactory` used to create a model when fitting
+        from sample data. Default: a new factory instance.
+
+    See Also
+    --------
+    FittedModelFactory : Fits the underlying density model used here.
+    BaseEmpiricalModel : Abstract interface this class implements.
     """
 
     class F:
         """
         A wrapper for an Akima interpolation function.
 
-        :param x: Grid for interpolation.
-        :type x: array-like
-        :param y: Values to interpolate.
-        :type y: array-like
-
-        .. py:method:: __call__(x)
-            Evaluate the interpolant at x.
-
-            :param x: The point(s) at which to evaluate the interpolant.
-            :type x: float or array-like
-            :returns: Interpolated value(s).
-            :rtype: float or numpy.ndarray
-
-        .. py:method:: derivative()
-            Return derivative interpolant.
-
-            :returns: The derivative interpolant.
-            :rtype: Akima1DInterpolator
+        Parameters
+        ----------
+        x : array_like
+            Grid for interpolation.
+        y : array_like
+            Values to interpolate.
         """
         def __init__(self, x, y):
+            """
+            Build the Akima interpolant from a grid `x` and values `y`.
+
+            Parameters
+            ----------
+            x : array_like
+                Grid for interpolation.
+            y : array_like
+                Values to interpolate.
+            """
             # Ensure x is sorted for interpolation
             sort_indices = np.argsort(x)
             x_sorted = x[sort_indices]
@@ -970,9 +1136,30 @@ class EmpiricalModel(BaseEmpiricalModel):
             self.__f = Akima1DInterpolator(unique_x, unique_y)
 
         def __call__(self, x):
+            """
+            Evaluate the interpolant at x.
+
+            Parameters
+            ----------
+            x : float or array_like
+                The point(s) at which to evaluate the interpolant.
+
+            Returns
+            -------
+            float or ndarray
+                Interpolated value(s).
+            """
             return self.__f(x)
 
         def derivative(self):
+            """
+            Return the derivative interpolant.
+
+            Returns
+            -------
+            Akima1DInterpolator
+                The derivative interpolant.
+            """
             return self.__f.derivative()
 
     def __init__(self, skl_model=None, sample=None,
@@ -982,29 +1169,38 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Initialize the model wrapper and prepare PDF, CDF, and inverse CDF functions.
 
-        :param skl_model: A pre-fitted scikit-learn density model.
-        :type skl_model: sklearn.base.BaseEstimator, optional
-        :param sample: A 1D NumPy array of data points.
-        :type sample: numpy.ndarray, optional
-        :param support_sample_size: Number of points for the uniform support grid.
-        :type support_sample_size: int, optional
-        :param fitted_model_factory: Factory to create a model when fitting from sample data.
-        :type fitted_model_factory: FittedModelFactory, optional
-        :param target_var: Target local variance passed through to
-            ``fitted_model_factory.create`` for ensemble widening; ignored unless the
-            factory is configured with ``widening``.
-        :type target_var: float, optional
-        :param target_skew: Target local skewness passed through to
-            ``fitted_model_factory.create`` for ``widening="skew_normal"``; ignored by other
-            widening modes.
-        :type target_skew: float, optional
-        :param seed: Random seed passed through to ``fitted_model_factory.create`` for this
-            sample's widening draws, overriding the factory's own ``seed`` (see
-            ``FittedModelFactory.create``). Ignored when ``skl_model`` is given.
-        :type seed: int, optional
-        :raises ValueError: If neither ``skl_model`` nor ``sample`` is provided, or if ``sample``
+        Parameters
+        ----------
+        skl_model : sklearn.base.BaseEstimator, optional
+            A pre-fitted scikit-learn density model.
+        sample : ndarray, optional
+            A 1D NumPy array of data points.
+        support_sample_size : int, optional
+            Number of points for the uniform support grid. Default: 1000.
+        fitted_model_factory : FittedModelFactory, optional
+            Factory to create a model when fitting from sample data.
+        target_var : float, optional
+            Target local variance passed through to
+            ``fitted_model_factory.create`` for ensemble widening; ignored
+            unless the factory is configured with ``widening``.
+        target_skew : float, optional
+            Target local skewness passed through to
+            ``fitted_model_factory.create`` for ``widening="skew_normal"``;
+            ignored by other widening modes.
+        seed : int, optional
+            Random seed passed through to ``fitted_model_factory.create`` for
+            this sample's widening draws, overriding the factory's own
+            ``seed`` (see `FittedModelFactory.create`). Ignored when
+            `skl_model` is given.
+
+        Raises
+        ------
+        ValueError
+            If neither `skl_model` nor `sample` is provided, or if `sample`
             is not a NumPy array.
-        :raises Warning: If the estimated PDF integrates to zero (e.g., due to model or data issues).
+        Warning
+            If the estimated PDF integrates to zero (e.g., due to model or
+            data issues).
         """
         if skl_model is not None:
             self.model = skl_model
@@ -1063,16 +1259,24 @@ class EmpiricalModel(BaseEmpiricalModel):
 
             H = - \\int_a^b p(x) \\log_b p(x) \\, dx
 
-        :param a: Lower limit of integration.
-        :type a: float, optional
-        :param b: Upper limit of integration.
-        :type b: float, optional
-        :param base: Log base (e.g., ``np.e`` or ``2``).
-        :type base: float, optional
-        :param epsilon: Small value to avoid log(0).
-        :type epsilon: float, optional
-        :returns: Estimated entropy.
-        :rtype: float
+        Numerically integrates over the model's precomputed support grid
+        (`x_`), clamping [a, b] to the grid's range.
+
+        Parameters
+        ----------
+        a : float, optional
+            Lower limit of integration. Default: the model's min.
+        b : float, optional
+            Upper limit of integration. Default: the model's max.
+        base : float, optional
+            Log base (e.g., ``np.e`` or ``2``). Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        float
+            Estimated entropy.
         """
         _ensure_numba()
         if a is None:
@@ -1112,17 +1316,23 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     def central_entropy_interval(self, alpha=0.9, base=np.e, epsilon=1e-10):
         """
-        Finds the narrowest interval [a, b] that contains ``alpha`` percentage
+        Find the narrowest interval [a, b] that contains ``alpha`` percentage
         of the total entropy.
 
-        :param alpha: Desired percentage of total entropy (0 to 1).
-        :type alpha: float, optional
-        :param base: Log base for entropy calculation.
-        :type base: float, optional
-        :param epsilon: Small value to avoid log(0).
-        :type epsilon: float, optional
-        :returns: Contains the interval, its entropy, tail entropies, and total entropy.
-        :rtype: dict
+        Parameters
+        ----------
+        alpha : float, optional
+            Desired percentage of total entropy (0 to 1). Default: 0.9.
+        base : float, optional
+            Log base for entropy calculation. Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        dict
+            Contains the interval, its entropy, tail entropies, and total
+            entropy.
         """
         _ensure_numba()
         dx = self.x_[1] - self.x_[0]
@@ -1151,20 +1361,28 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     def entropy_informative_interval(self, x0, alpha=0.9, base=np.e, epsilon=1e-10):
         """
-        Finds an interval [a, b] around a given point x0 that contains ``alpha``
-        percentage of the total entropy. The interval is expanded outwards
-        from x0 by adding points with the highest entropy contribution.
+        Find an interval [a, b] around a given point x0 that contains ``alpha``
+        percentage of the total entropy.
 
-        :param x0: The central point around which to find the entropy interval.
-        :type x0: float
-        :param alpha: Desired percentage of total entropy (0 to 1).
-        :type alpha: float, optional
-        :param base: Log base for entropy calculation.
-        :type base: float, optional
-        :param epsilon: Small value to avoid log(0).
-        :type epsilon: float, optional
-        :returns: Contains the interval, its entropy, tail entropies, and total entropy.
-        :rtype: dict
+        The interval is expanded outwards from x0 by adding points with the
+        highest entropy contribution.
+
+        Parameters
+        ----------
+        x0 : float
+            The central point around which to find the entropy interval.
+        alpha : float, optional
+            Desired percentage of total entropy (0 to 1). Default: 0.9.
+        base : float, optional
+            Log base for entropy calculation. Default: `np.e`.
+        epsilon : float, optional
+            Small value to avoid log(0). Default: 1e-10.
+
+        Returns
+        -------
+        dict
+            Contains the interval, its entropy, tail entropies, and total
+            entropy.
         """
         _ensure_numba()
         dx = self.x_[1] - self.x_[0]
@@ -1205,25 +1423,40 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     def credible_interval(self, estimator, alpha=0.95):
         """
-        Find the narrowest credible interval [a, b] around a given estimator
-        such that the total probability mass in [a, b] is at least alpha.
-        Also returns the left and right tails and their probability mass.
+        Find the narrowest credible interval [a, b] around a given estimator.
 
-        :param estimator: Central estimate (e.g., MAP, mean, median).
-        :type estimator: float
-        :param alpha: Desired probability mass to include in the central interval.
-        :type alpha: float, optional
-        :returns: Contains the interval, its mass, tail masses, and total mass.
-        :rtype: dict
-        :returns: A dictionary with the following keys:
+        The interval is chosen such that the total probability mass in
+        [a, b] is at least alpha. Also returns the left and right tails and
+        their probability mass.
+
+        Parameters
+        ----------
+        estimator : float
+            Central estimate (e.g., MAP, mean, median).
+        alpha : float, optional
+            Desired probability mass to include in the central interval.
+            Default: 0.95.
+
+        Returns
+        -------
+        dict
+            A dictionary with the following keys:
+
             - ``center`` (float): The central estimator.
-            - ``interval`` (tuple): A tuple (a, b) representing the credible interval.
-            - ``mass`` (float): The probability mass within the credible interval.
-            - ``left_tail`` (tuple): A tuple (x_min, a) representing the left tail.
-            - ``left_tail_mass`` (float): The probability mass of the left tail.
-            - ``right_tail`` (tuple): A tuple (b, x_max) representing the right tail.
-            - ``right_tail_mass`` (float): The probability mass of the right tail.
-            - ``total_mass`` (float): The total probability mass (approximately 1.0).
+            - ``interval`` (tuple): A tuple (a, b) representing the credible
+              interval.
+            - ``mass`` (float): The probability mass within the credible
+              interval.
+            - ``left_tail`` (tuple): A tuple (x_min, a) representing the left
+              tail.
+            - ``left_tail_mass`` (float): The probability mass of the left
+              tail.
+            - ``right_tail`` (tuple): A tuple (b, x_max) representing the
+              right tail.
+            - ``right_tail_mass`` (float): The probability mass of the right
+              tail.
+            - ``total_mass`` (float): The total probability mass
+              (approximately 1.0).
         """
         _ensure_numba()
         dx = self.x_[1] - self.x_[0]
@@ -1255,8 +1488,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute the mean.
 
-        :returns: The mean of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The mean of the distribution.
         """
         dx = self.x_[1] - self.x_[0]
         return np.sum(self.x_ * self.pdf_) * dx
@@ -1265,8 +1500,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute the mode.
 
-        :returns: The mode of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The mode of the distribution.
         """
         return self.x_[np.argmax(self.pdf_)]
 
@@ -1274,8 +1511,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute the median (inverse CDF at 0.5).
 
-        :returns: The median of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The median of the distribution.
         """
         return self.inv_cdf(0.5)
 
@@ -1283,11 +1522,20 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute p-th percentile.
 
-        :param p: Value in [0, 1].
-        :type p: float
-        :raises ValueError: If percentile ``p`` is not in the range [0, 1].
-        :returns: The p-th percentile.
-        :rtype: float
+        Parameters
+        ----------
+        p : float
+            Value in [0, 1].
+
+        Returns
+        -------
+        float
+            The p-th percentile.
+
+        Raises
+        ------
+        ValueError
+            If percentile `p` is not in the range [0, 1].
         """
         if not (0 <= p <= 1):
             raise ValueError("Percentile must be in [0, 1]")
@@ -1297,8 +1545,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute variance.
 
-        :returns: The variance of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The variance of the distribution.
         """
         dx = self.x_[1] - self.x_[0]
         mu = self.mean()
@@ -1308,8 +1558,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute standard deviation.
 
-        :returns: The standard deviation of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The standard deviation of the distribution.
         """
         return np.sqrt(self.variance())
 
@@ -1317,8 +1569,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute skewness.
 
-        :returns: The skewness of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The skewness of the distribution.
         """
         return self.central_moment(3) / (self.std() ** 3)
 
@@ -1326,8 +1580,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute excess kurtosis.
 
-        :returns: The excess kurtosis of the distribution.
-        :rtype: float
+        Returns
+        -------
+        float
+            The excess kurtosis of the distribution.
         """
         return self.central_moment(4) / (self.std() ** 4) - 3
 
@@ -1335,10 +1591,15 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Log of PDF at x.
 
-        :param x: Point(s) at which to evaluate the log PDF.
-        :type x: float or array-like
-        :returns: Log PDF value(s).
-        :rtype: float or numpy.ndarray
+        Parameters
+        ----------
+        x : float or array_like
+            Point(s) at which to evaluate the log PDF.
+
+        Returns
+        -------
+        float or ndarray
+            Log PDF value(s).
         """
         return np.log(self.pdf(x))
 
@@ -1346,10 +1607,15 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute raw moment of order k.
 
-        :param k: The order of the moment.
-        :type k: int
-        :returns: The raw moment of order k.
-        :rtype: float
+        Parameters
+        ----------
+        k : int
+            The order of the moment.
+
+        Returns
+        -------
+        float
+            The raw moment of order k.
         """
         dx = self.x_[1] - self.x_[0]
         return np.sum((self.x_ ** k) * self.pdf_) * dx
@@ -1358,10 +1624,15 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Compute central moment of order k.
 
-        :param k: The order of the central moment.
-        :type k: int
-        :returns: The central moment of order k.
-        :rtype: float
+        Parameters
+        ----------
+        k : int
+            The order of the central moment.
+
+        Returns
+        -------
+        float
+            The central moment of order k.
         """
         dx = self.x_[1] - self.x_[0]
         mu = self.mean()
@@ -1371,11 +1642,14 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Return MAP estimate and its density.
 
-        :returns: A dictionary containing the MAP value and its density.
-        :rtype: dict
-        :returns: A dictionary with the following keys:
+        Returns
+        -------
+        dict
+            A dictionary with the following keys:
+
             - ``value`` (float): The Maximum A Posteriori (MAP) estimate.
-            - ``density`` (float): The probability density at the MAP estimate.
+            - ``density`` (float): The probability density at the MAP
+              estimate.
         """
         idx = np.argmax(self.pdf_)
         return {'value': self.x_[idx], 'density': self.pdf_[idx]}
@@ -1384,10 +1658,15 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Draw random samples.
 
-        :param size: The number of samples to draw.
-        :type size: int, optional
-        :returns: An array of random samples.
-        :rtype: numpy.ndarray
+        Parameters
+        ----------
+        size : int, optional
+            The number of samples to draw. Default: 1.
+
+        Returns
+        -------
+        ndarray
+            An array of random samples.
         """
         u = np.random.uniform(0, 1, size)
         return self.inv_cdf(u)

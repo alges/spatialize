@@ -2,9 +2,9 @@
 
 .. _reference:
 
-###########################
-Spatialize module reference
-###########################
+#############
+Documentation
+#############
 
 :Release: |version|
 :Date: |today|
@@ -19,8 +19,13 @@ Python API
    :maxdepth: 2
 
    esi
+   cat_esi
+   ess
+   spa
    idw
-   lossfunction
-
-
-
+   functions
+   empirical
+   evaluation
+   viz
+   data
+   result

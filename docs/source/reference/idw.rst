@@ -4,8 +4,7 @@
 IDW Functions
 ********************
 
-.. automodule:: spatialize.gs.idw
-   :exclude-members: IDWGridSearchResult, IDWResult, idw_hparams_search, idw_griddata, idw_nongriddata
+.. currentmodule:: spatialize.gs.idw
 
 .. autofunction:: idw_griddata
 
@@ -13,18 +12,14 @@ IDW Functions
 
 .. autofunction:: idw_hparams_search
 
-.. autoclass:: IDWGridSearchResult
-   :members: __init__
-   :exclude-members: __init__, load, save
-   :undoc-members:
-   :inherited-members: 
-
 .. autoclass:: IDWResult
-   :members: __init__
-   :exclude-members: __init__, load, save
+   :members:
+   :exclude-members: load, save
    :undoc-members:
-   :inherited-members: 
+   :inherited-members:
 
-.. toctree::
-   :maxdepth: 2
-   :hidden:
+.. autoclass:: IDWGridSearchResult
+   :members:
+   :exclude-members: load, save
+   :undoc-members:
+   :inherited-members:

@@ -519,7 +519,42 @@ class PlotStyle:
                  cmap = None,
                  precision_cmap = None,
                  diverging_cmap = None):
+        """
+        Construct a `PlotStyle` and, if a theme is given, apply it to ``rcParams``.
 
+        Any of `color`, `cmap`, `precision_cmap`, or `diverging_cmap` passed
+        explicitly overrides the corresponding default from `theme`; when a
+        given value is omitted, it falls back to the active theme's value,
+        and if no theme is set either, to the class-level `DEFAULT_COLOR`,
+        `DEFAULT_CMAP`, `DEFAULT_PRECISION_CMAP`, or
+        `DEFAULT_DIVERGING_CMAP`. The matplotlib ``rcParams`` in effect at
+        construction time are captured so they can be restored later via
+        `reset_to_original`.
+
+        Parameters
+        ----------
+        theme : str, optional
+            Theme name. Available: ``'darkgrid'``, ``'whitegrid'``,
+            ``'dark'``, ``'white'``, ``'alges'``, ``'alges_muted'``,
+            ``'minimal'``, ``'publication'``.
+        color : str, optional
+            Primary color for plots.
+        cmap : str, list, or colormap, optional
+            Colormap for plots. Can be a name from `PALETTES`, a Scientific
+            Colour Maps (SCM) name, a standard matplotlib colormap name, a
+            list of hex colors, or a colormap instance.
+        precision_cmap : str, list, or colormap, optional
+            Colormap for precision/uncertainty plots. Same accepted formats
+            as `cmap`.
+        diverging_cmap : str, list, or colormap, optional
+            Colormap for diverging data (values that cross zero). Same
+            accepted formats as `cmap`.
+
+        Raises
+        ------
+        ValueError
+            If `theme` is given but is not a recognised theme name.
+        """
         if theme and theme not in self.THEMES:
             raise ValueError(f"Theme '{theme}' not found. Available: {list(self.THEMES.keys())}")
 
@@ -984,7 +1019,7 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
 
     Notes
     -----
-    When called inside a Jupyter notebook (:func:`in_notebook` returns
+    When called inside a Jupyter notebook (``in_notebook()`` returns
     ``True``), only *seed* is returned (the figure is displayed inline).
 
     Examples
@@ -1237,7 +1272,7 @@ def plot_scatter(points, values, cmap=None, data_type='auto',
         Colorbar label. Default is ``'Value'``.
     **scatter_args
         Additional keyword arguments forwarded to
-        :func:`matplotlib.axes.Axes.scatter`.
+        :meth:`matplotlib.axes.Axes.scatter`.
 
     Returns
     -------

@@ -18,23 +18,65 @@ from spatialize.viz import plot_colormap_array, PlotStyle
 
 
 class ESIGridSearchResult(GridSearchResult):
-    """
-    A class to represent the result of a grid search for ESI.
+    """Result of a hyperparameter grid search for ESI.
 
-    :param search_result_data: The search result data.
-    :param agg_function_map: The aggregation function map.
-    :param p_process: The partitioning process.
+    Wraps the cross-validation error obtained for every combination of
+    parameters evaluated by :func:`esi_hparams_search`, and exposes the
+    combination with the lowest error as a dict ready to pass to
+    :func:`esi_griddata` / :func:`esi_nongriddata` via ``best_params_found``.
+
+    Parameters
+    ----------
+    search_result_data : pandas.DataFrame
+        One row per evaluated parameter combination, with a ``cv_error``
+        column plus one column per searched hyperparameter (e.g.
+        ``n_partitions``, ``alpha``, ``exponent``) and a
+        ``local_interpolator`` column.
+    p_process : str
+        Partitioning process used during the search, ``"mondrian"`` or
+        ``"voronoi"``.
+
+    Attributes
+    ----------
+    search_result_data : pandas.DataFrame
+        The raw per-combination results, as passed in.
+    cv_error : pandas.DataFrame
+        The ``cv_error`` column of `search_result_data`.
+    best_params : pandas.DataFrame
+        Subset of `search_result_data` whose ``cv_error`` equals the minimum
+        observed value (there may be more than one row in case of ties).
+    p_process : str
+        Partitioning process used during the search.
     """
     def __init__(self, search_result_data, p_process):
         super().__init__(search_result_data)
         self.p_process = p_process
 
     def best_result(self, **kwargs):
-        """
-        Get the best result from the grid search.
+        """Return the best-scoring parameter combination from the search.
 
-        :param kwargs: Additional keyword arguments.
-        :return: The best result.
+        Parameters
+        ----------
+        **kwargs
+            Unused; accepted for interface compatibility with
+            :meth:`~spatialize.result.GridSearchResult.best_result`.
+
+        Returns
+        -------
+        dict
+            The row of `best_params` with the lowest ``cv_error`` (ties are
+            broken by taking the first row), plus ``"result_data_index"``
+            (its index in `search_result_data`), ``"agg_function"``
+            (:func:`~spatialize.gs.esi.aggfunction.mean`), and ``"p_process"``.
+            Ready to pass as ``best_params_found`` to :func:`esi_griddata` or
+            :func:`esi_nongriddata`.
+
+            .. warning::
+                The returned dict always contains ``"agg_function"`` and
+                ``"p_process"``, even if the search itself never varied
+                them. Passing this dict as ``best_params_found`` therefore
+                silently overrides any ``agg_function`` or ``p_process``
+                given at the call site.
         """
         b_param = self.best_params.sort_values(by='cv_error', ascending=True)
         row = pd.DataFrame(b_param.iloc[0]).to_dict(index=True)
@@ -75,6 +117,22 @@ class ESIParetoResult:
         p_process: str,
         local_interpolator: str,
     ) -> None:
+        """Initialize the Pareto result and compute its frontier.
+
+        Parameters
+        ----------
+        all_results : list of dict
+            One entry per evaluated parameter configuration, each with keys
+            ``"params"`` (dict), ``"epsilon"`` (float), ``"decoder_error"``
+            (float). Typically produced by
+            :func:`esi_pareto_hparams_search`.
+        p_process : str
+            Partitioning process used during optimisation, ``"mondrian"``
+            or ``"voronoi"``.
+        local_interpolator : str
+            Local interpolator used during optimisation, ``"idw"``,
+            ``"kriging"``, or ``"adaptiveidw"``.
+        """
         self.all_results = all_results
         self.p_process = p_process
         self.local_interpolator = local_interpolator
@@ -115,6 +173,15 @@ class ESIParetoResult:
             ``best_params_found`` argument.  Contains all parameter keys from
             ``"params"`` plus ``"epsilon"``, ``"decoder_error"``,
             ``"agg_function"``, ``"p_process"``, and ``"local_interpolator"``.
+
+            .. warning::
+                All five extra keys are always injected, regardless of
+                whether the search varied them. Passing this dict as
+                ``best_params_found`` therefore silently overrides any
+                ``agg_function``, ``p_process``, or ``local_interpolator``
+                given at the call site (``epsilon`` and ``decoder_error``
+                are not accepted parameters of :func:`esi_griddata` /
+                :func:`esi_nongriddata` and are simply ignored there).
 
         Raises
         ------
@@ -306,18 +373,55 @@ class ESIParetoResult:
 
 
 class ESIResult(EstimationResult):
-    """
-    A class to represent the result of an ESI estimation. 
+    """Result of an ESI estimation.
 
-    As a result, this function also returns an object, which is an instance
-    of the class :func:`ESIResult`, containing the preliminary estimate according to the provided
-    arguments. This class provides a set of methods to display aspects of the result, such as
-    the aggregate estimate, the scenarios of the different partitions, or a precision calculation
-    based on some loss function.
+    Returned by :func:`esi_griddata` and :func:`esi_nongriddata`, this class
+    holds the aggregated estimate together with the full ensemble of `ESI
+    samples` (one estimate per random partition) that produced it. It
+    provides methods to display the aggregate estimate, inspect individual
+    partition scenarios, recompute the estimate with a different aggregation
+    function, and calculate precision (error) based on a loss function.
 
+    Parameters
+    ----------
+    estimation : ndarray
+        Aggregated point estimate at each location in `xi`, flattened to
+        1D of length $N_{x^*}$.
+    esi_samples : ndarray
+        ESI samples, shape $(N_{x^*}, m)$ where $m$ is `n_partitions`. One
+        column per random partition.
+    griddata : bool, optional
+        Whether `xi` was originally grid-shaped. Default: ``False``.
+    original_shape : tuple, optional
+        Shape to reshape flattened results back into when `griddata` is
+        ``True``.
+    xi : array_like, optional
+        The interpolation locations passed to :func:`esi_griddata` or
+        :func:`esi_nongriddata` (grid-shaped tuple/array if `griddata` is
+        ``True``, otherwise an $N_{x^*} \\times D$ array).
+    points : array_like, optional
+        The original observed sample locations, used e.g. to calibrate
+        ensemble widening against a spatial target variance.
+    values : array_like, optional
+        The original observed sample values, used together with `points`.
+
+    Attributes
+    ----------
+    griddata : bool
+        Whether `xi` is grid-shaped.
+    original_shape : tuple or None
+        Shape used to reshape flattened results for grid data.
+    points : array_like or None
+        The original observed sample locations, if provided.
+    values : array_like or None
+        The original observed sample values, if provided.
     """
     def __init__(self, estimation, esi_samples, griddata=False, original_shape=None, xi=None,
                  points=None, values=None):
+        """Initialize the result with an aggregated estimate and its ESI samples.
+
+        See the class docstring for parameter descriptions.
+        """
         super().__init__(estimation, griddata, original_shape, xi=xi, points=points, values=values)
         self._esi_samples = esi_samples
         self._precision = None
@@ -331,12 +435,23 @@ class ESIResult(EstimationResult):
             self._xi_flat = xi
 
     def precision(self, loss_function=lf.mse_loss):
-        """
-        Calculates the precision (or error) between the estimate and the ESI samples using the 
-        specified loss function.
+        """Calculate the precision (error) between the estimate and the ESI samples.
 
-        :param loss_function: The loss function to use.
-        :return: The precision of the estimation.
+        Applies `loss_function` to the estimate and the ensemble of ESI
+        samples, then aggregates the result over the ensemble (see
+        :meth:`precision_cube` for the non-aggregated per-sample version).
+
+        Parameters
+        ----------
+        loss_function : callable, optional
+            Function ``(estimation, esi_samples) -> array`` used to compute
+            the error. Default: :func:`~spatialize.gs.esi.lossfunction.mse_loss`.
+
+        Returns
+        -------
+        ndarray
+            The precision of the estimation, of shape $N_{x^*}$ for
+            non-gridded data, or `original_shape` for gridded data.
         """
         log_message(logging.logger.debug(f'applying "{loss_function}" loss function'))
         prec = loss_function(self._estimation, self._esi_samples)
@@ -349,14 +464,24 @@ class ESIResult(EstimationResult):
         return self._precision
 
     def precision_cube(self, loss_function=lf.mse_cube):
-        """
-        It applies a loss (error) function to each ESI sample with respect to the current estimate. 
-        The difference with the :func:`precision` method is that it does not aggregate the result 
-        over the total calculated losses, returning the total data `cube` whose dimensions are the 
-        same as the ESI samples cube.
+        """Apply a loss function to each ESI sample against the current estimate.
 
-        :param loss_function: The loss function to use.
-        :return: The precision cube of the estimation.
+        Unlike :meth:`precision`, the result is not aggregated over the
+        ensemble: it returns the full data `cube` of per-sample losses, with
+        the same dimensions as the ESI samples cube.
+
+        Parameters
+        ----------
+        loss_function : callable, optional
+            Function ``(estimation, esi_samples) -> array`` used to compute
+            the per-sample error. Default:
+            :func:`~spatialize.gs.esi.lossfunction.mse_cube`.
+
+        Returns
+        -------
+        ndarray
+            The precision cube, shape $(N_{x^*}, m)$ for non-gridded data,
+            or $(d_1, d_2, m)$ for gridded data, where $m$ = `n_partitions`.
         """
         log_message(logging.logger.debug(f'applying "{loss_function}" loss function'))
         prec = loss_function(self._estimation, self._esi_samples)
@@ -392,30 +517,55 @@ class ESIResult(EstimationResult):
             return self._esi_samples
 
     def re_estimate(self, agg_function=af.mean):
-        """
-        Re-estimate the ESI samples using the given aggregation function.
-        It recalculates the final estimate based on the aggregation function provided 
-        (e.g. by taking the mean of the ESI samples). This method updates the internal
-        estimate and returns the new result. Then, the next time the :func:`estimation` 
-        method is called, this is the estimate it will return.
+        """Re-estimate the ESI samples using the given aggregation function.
 
-        :param agg_function: The aggregation function to use.
-        :return: The re-estimated ESI samples.
+        Recalculates the final estimate based on the aggregation function
+        provided (e.g. by taking the mean of the ESI samples). This method
+        updates the internal estimate in place; the next call to
+        :meth:`~spatialize.result.EstimationResult.estimation` returns this
+        new estimate.
+
+        Parameters
+        ----------
+        agg_function : callable, optional
+            Function ``(esi_samples) -> array`` used to aggregate the
+            ensemble into a point estimate. Default:
+            :func:`~spatialize.gs.esi.aggfunction.mean`.
+
+        Returns
+        -------
+        ndarray
+            The re-computed estimate (same as calling
+            :meth:`~spatialize.result.EstimationResult.estimation`
+            afterwards).
         """
         self._estimation = agg_function(self._esi_samples)
         return self.estimation()
 
     def plot_precision(self, ax=None, w=None, h=None, theme='alges', cmap=None, **imshow_args):
-        """
-        Plot the precision of the estimation.
+        """Plot the precision of the estimation.
 
-        :param ax: The axis to plot on.
-        :param w: The width of the plot.
-        :param h: The height of the plot.
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white',
-            'dark', 'alges', 'minimal', 'publication'.
-        :param cmap: Colormap for the plot. If None, uses theme default or 'bwr'.
-        :param imshow_args: Additional imshow arguments to pass to the `_plot_data` function.
+        Computes :meth:`precision` with the default loss function if it has
+        not been calculated yet, then renders it as a colormap image.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            The axes to plot on. If ``None``, a new one is created.
+        w : int, optional
+            Width of the image, used to reshape non-gridded data.
+        h : int, optional
+            Height of the image, used to reshape non-gridded data.
+        theme : str, optional
+            Theme name. Available: ``'whitegrid'``, ``'darkgrid'``,
+            ``'white'``, ``'dark'``, ``'alges'``, ``'minimal'``,
+            ``'publication'``. Default: ``'alges'``.
+        cmap : str, optional
+            Colormap for the plot. If ``None``, uses the theme default or
+            ``'bwr'``.
+        **imshow_args
+            Additional keyword arguments passed to ``matplotlib``'s
+            ``imshow`` via the internal plotting routine.
         """
         if self._precision is None:
             self._precision = self.precision()
@@ -437,18 +587,41 @@ class ESIResult(EstimationResult):
                    precision_cmap = None,
                    show = True,
                    **fig_args):
-        """
-        Quickly plot the estimation and precision.
+        """Plot the estimation and its precision side by side.
 
-        :param w: The width of the plot.
-        :param h: The height of the plot.
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white',
-            'dark', 'alges', 'minimal', 'publication'.
-        :param estimation_cmap: Colormap for the estimation plot. If None, uses theme default or 'coolwarm'.
-        :param precision_cmap: Colormap for the precision plot. If None, uses theme default or 'bwr'.
-        :param show: If True (default), call plt.show() and return None. If False, return the figure.
-        :param fig_args: Additional figure arguments.
-        :return: None if show=True, otherwise the figure.
+        Only supported for 2D data; raises for 3D+ data.
+
+        Parameters
+        ----------
+        w : int, optional
+            Width of the images, used to reshape non-gridded data.
+        h : int, optional
+            Height of the images, used to reshape non-gridded data.
+        theme : str, optional
+            Theme name. Available: ``'whitegrid'``, ``'darkgrid'``,
+            ``'white'``, ``'dark'``, ``'alges'``, ``'minimal'``,
+            ``'publication'``. Default: ``'alges'``.
+        estimation_cmap : str, optional
+            Colormap for the estimation plot. If ``None``, uses the theme
+            default or ``'coolwarm'``.
+        precision_cmap : str, optional
+            Colormap for the precision plot. If ``None``, uses the theme
+            default or ``'bwr'``.
+        show : bool, optional
+            If ``True`` (default), call ``plt.show()`` and return ``None``.
+            If ``False``, return the figure instead of displaying it.
+        **fig_args
+            Additional keyword arguments passed to ``plt.figure()``.
+
+        Returns
+        -------
+        matplotlib.figure.Figure or None
+            ``None`` if `show` is ``True``; otherwise the created figure.
+
+        Raises
+        ------
+        SpatializeError
+            If the data is 3D or higher-dimensional.
         """
         if self.griddata:
             if len(self._xi) > 2:
@@ -481,22 +654,43 @@ class ESIResult(EstimationResult):
 
     def preview_esi_samples(self, n_imgs=9, n_cols=3, title_prefix="ESI sample", title=None,
                             figsize=(10, 10), dpi=120, theme='alges', cmap=None, **imshow_args):
-        """
-        Visualizes a preview of the ESI samples as a grid of colormap images.
+        """Visualize a preview of the ESI samples as a grid of colormap images.
 
-        This method displays a subset of the ESI samples using the `plot_colormap_array` function.
-        The ESI samples are visualized in a grid layout, where each image corresponds to one ESI sample.
+        Displays a subset of the ESI samples using
+        :func:`~spatialize.viz.plot_colormap_array`, laid out in a grid where
+        each image corresponds to one ESI sample (i.e. one random
+        partition's estimate).
 
-        :param n_imgs: The number of ESI samples (images) to display. Defaults to 9.
-        :param n_cols: The number of columns in the grid layout. Defaults to 3.
-        :param title_prefix: A prefix to add to each subplot title (e.g., "ESI sample 1", "ESI sample 2").
-        :param title: The title for the entire plot.
-        :param figsize: Width, height of the figure in inches. Defaults to (10, 10).
-        :param dpi: The resolution of the figure in dots-per-inch. Defaults to 120.
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white',
-            'dark', 'alges', 'minimal', 'publication'.
-        :param cmap: Colormap for the plot. If None, uses theme default or 'coolwarm'.
-        :param imshow_args: Additional imshow arguments to pass to the `plot_colormap_array` function.
+        Parameters
+        ----------
+        n_imgs : int, optional
+            Number of ESI samples (images) to display. Default: ``9``.
+        n_cols : int, optional
+            Number of columns in the grid layout. Default: ``3``.
+        title_prefix : str, optional
+            Prefix added to each subplot title (e.g., "ESI sample 1", "ESI
+            sample 2"). Default: ``"ESI sample"``.
+        title : str, optional
+            Title for the entire plot.
+        figsize : tuple, optional
+            Width, height of the figure in inches. Default: ``(10, 10)``.
+        dpi : int, optional
+            Resolution of the figure in dots per inch. Default: ``120``.
+        theme : str, optional
+            Theme name. Available: ``'whitegrid'``, ``'darkgrid'``,
+            ``'white'``, ``'dark'``, ``'alges'``, ``'minimal'``,
+            ``'publication'``. Default: ``'alges'``.
+        cmap : str, optional
+            Colormap for the plot. If ``None``, uses the theme default or
+            ``'coolwarm'``.
+        **imshow_args
+            Additional keyword arguments passed to
+            :func:`~spatialize.viz.plot_colormap_array`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            The figure containing the grid of ESI sample images.
         """
         # Retrieve cmap if specified within imshow_args
         plot_imshow_args = imshow_args.copy()
@@ -542,14 +736,123 @@ class ESIResult(EstimationResult):
                         li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False}
                     })
 def esi_hparams_search(points, values, xi, **kwargs):
-    """
-    Perform a hyperparameter search for ESI.
+    """Perform a k-fold (or leave-one-out) cross-validation hyperparameter search for ESI.
 
-    :param points: The input points.
-    :param values: The input values.
-    :param xi: The interpolation points.
-    :param kwargs: Additional keyword arguments.
-    :return: The grid search result.
+    Evaluates ESI over the Cartesian product of the given hyperparameter
+    lists, scoring each combination by cross-validation error, and returns
+    an :class:`ESIGridSearchResult` from which the best combination can be
+    extracted and fed straight into :func:`esi_griddata` /
+    :func:`esi_nongriddata`.
+
+    Parameters
+    ----------
+    points : array_like
+        The input points. Contains the coordinates of known data points.
+        This is an $N_s \\times D$ array, where $N_s$ is the number of data
+        points, and $D$ is the number of dimensions.
+    values : array_like
+        The input values associated with each point in `points`. This must
+        be a 1D array of length $N_s$.
+    xi : array_like
+        The interpolation points used for cross-validation. If the data are
+        gridded (``griddata=True``), they correspond to an array of grids of
+        $D$ components, each with the dimensions of one of the grid faces,
+        $d_1 \\times d_2 = N_{x^*}$, as returned by ``numpy.mgrid`` in
+        Numpy, or ``meshgrid`` in Matlab or R. If the data are not gridded,
+        they are simply an $N_{x^*} \\times D$ array of locations. In both
+        cases, $D$ coincides with the dimensionality of `points`.
+
+    Other Parameters
+    ----------------
+    local_interpolator : str, optional
+        Local interpolator to search over: ``"idw"`` (default),
+        ``"kriging"``, or ``"adaptiveidw"``. Determines which of the
+        interpolator-specific parameters below are accepted.
+    k : int, optional
+        Number of cross-validation folds. If `k` equals the number of
+        points or is ``-1``, leave-one-out (LOO) cross-validation is used
+        instead of k-fold. Default: ``10``.
+    griddata : bool, optional
+        Whether `xi` is grid-shaped (see `xi` above). Default: ``False``.
+    p_process : str, optional
+        Partitioning process: ``"mondrian"`` (default) or ``"voronoi"``.
+    data_cond : list of bool, optional
+        Whether to condition the partitioning process on the data samples;
+        only used when `p_process` is ``"voronoi"``. Default: ``[True,
+        False]``.
+    n_partitions : list of int, optional
+        Candidate ensemble sizes (number of spatial partitions) to search.
+        Default: ``[100]``.
+    alpha : list of float, optional
+        Candidate partition-granularity values to search, each in ``[0,
+        1)``; higher values produce smaller partition cells. Default:
+        descending values from ``0.90`` to ``0.70``.
+    scoring : callable, optional
+        Cross-validation scoring function ``(true_values, esi_samples) ->
+        float`` used to rank parameter combinations, e.g.
+        :func:`~spatialize.gs.esi.scorefunction.mae`,
+        :func:`~spatialize.gs.esi.scorefunction.neg_log_likelihood`, or
+        :func:`~spatialize.gs.esi.scorefunction.crps`. Distribution-based
+        scorers (`neg_log_likelihood`, `crps`) are automatically replaced
+        with `mae` and a warning is issued if the smallest candidate in
+        `n_partitions` is below 30. Default:
+        :func:`~spatialize.gs.esi.scorefunction.mae`.
+    seed : int, optional
+        Random seed used for partitioning during estimation. Default: a
+        random integer in ``[1000, 10000)``.
+    folding_seed : int, optional
+        Random seed used to assign points to folds when `k`-fold (not LOO)
+        cross-validation is used. Default: a random integer in ``[1000,
+        10000)``.
+    callback : callable, optional
+        Progress-reporting callback invoked as the search runs. Default:
+        :func:`~spatialize.logging.default_singleton_callback`.
+    exponent : list of float, optional
+        *(IDW only)* Candidate IDW distance-decay exponents to search.
+        Default: ``[1.0, 2.0, ..., 14.0]``.
+    model : list of str, optional
+        *(Kriging only)* Candidate variogram models to search, from
+        ``"spherical"``, ``"exponential"``, ``"cubic"``, ``"gaussian"``.
+    nugget : list of float, optional
+        *(Kriging only)* Candidate variogram nugget values to search.
+    range : list of float, optional
+        *(Kriging only)* Candidate variogram range values to search.
+    sill : list of float, optional
+        *(Kriging only)* Candidate variogram sill values to search.
+    metric : list of str, optional
+        *(Adaptive IDW only)* Candidate local-optimization metrics to
+        search. Default: ``["mae"]``.
+    parallelize : bool, optional
+        *(Adaptive IDW only)* Whether to parallelize the per-cell parameter
+        optimization. Default: ``False``.
+
+    Returns
+    -------
+    ESIGridSearchResult
+        The grid search result, wrapping the cross-validation error for
+        every evaluated combination and exposing the best one via
+        :meth:`ESIGridSearchResult.best_result`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from spatialize.gs.esi import esi_hparams_search, esi_griddata
+
+        search_result = esi_hparams_search(
+            points, values, (grid_x, grid_y),
+            griddata=True,
+            local_interpolator="idw",
+            k=10,
+            exponent=[1.0, 2.0, 3.0, 4.0],
+            alpha=[0.7, 0.8, 0.9],
+            n_partitions=[100, 300, 500],
+        )
+
+        result = esi_griddata(points, values, (grid_x, grid_y),
+                              local_interpolator="idw",
+                              n_partitions=100      # overwritten at call
+                              best_params_found=search_result.best_result())
     """
     log_message(logging.logger.debug(f"searching best params ..."))
 
@@ -679,18 +982,100 @@ def esi_griddata(points, values, xi, **kwargs):
 
          In both cases, $D$ is the dimensionality of each location, which coincides with the
          dimensionality of the ``points``.
-    kwargs: dict
-         Additional keyword arguments.
-    
+
+    Other Parameters
+    ----------------
+    local_interpolator : {"idw", "kriging", "adaptiveidw"}, optional
+         Which local interpolator to use within each partition cell.
+         Determines which of the interpolator-specific parameters below are
+         accepted. Default: ``"idw"``.
+    n_partitions : int, optional
+         Number of spatial partitions in the ensemble. Default: ``500``.
+    p_process : {"mondrian", "voronoi"}, optional
+         Spatial partitioning process used to build the ensemble. Default:
+         ``"mondrian"``.
+    data_cond : bool, optional
+         Whether to condition the partitioning process on the sample
+         points. Valid only when ``p_process="voronoi"``. Default: ``True``.
+    alpha : float, optional
+         Controls partition size, in ``[0, 1]``; higher values produce
+         smaller partitions. Default: ``0.8``.
+    agg_function : callable, optional
+         Function used to aggregate the ensemble of local estimates into a
+         single value per location. Default:
+         :func:`~spatialize.gs.esi.aggfunction.mean`.
+    seed : int, optional
+         Random seed for the partitioning process. Default: a random
+         integer in ``[1000, 10000)``.
+    callback : callable, optional
+         Callback used to report estimation progress. Default:
+         :func:`~spatialize.logging.default_singleton_callback`.
+    best_params_found : dict or None, optional
+         Parameter dict typically obtained from
+         :meth:`ESIGridSearchResult.best_result` or
+         :meth:`ESIParetoResult.best_result`. When given, every key it
+         contains **overrides** the corresponding argument passed at the
+         call site, with one exception: ``n_partitions`` is ignored if
+         present -- the value passed at the call site (or its default of
+         ``500``) is used instead. This is intentional: it lets you run the
+         hyperparameter search cheaply with few partitions and then
+         estimate with many. Default: ``None``.
+
+         .. warning::
+             :meth:`ESIGridSearchResult.best_result` always injects
+             ``agg_function`` (:func:`~spatialize.gs.esi.aggfunction.mean`)
+             and ``p_process`` into the dict it returns, so passing it
+             silently overrides any ``agg_function`` or ``p_process`` given
+             at the call site. :meth:`ESIParetoResult.best_result` injects
+             those same two keys plus ``local_interpolator``, ``epsilon``,
+             and ``decoder_error``.
+    exponent : float, optional
+         IDW distance-decay exponent. Only used when
+         ``local_interpolator="idw"``. Default: ``2.0``.
+    model : {"spherical", "exponential", "cubic", "gaussian"}, optional
+         Variogram model. Only used when ``local_interpolator="kriging"``.
+         Default: ``"spherical"``.
+    nugget : float, optional
+         Variogram nugget. Only used when ``local_interpolator="kriging"``.
+         Default: ``0.1``.
+    range : float, optional
+         Variogram range. Only used when ``local_interpolator="kriging"``.
+         Default: ``5000.0``.
+    sill : float, optional
+         Variogram sill. Only used when ``local_interpolator="kriging"``.
+         Default: ``1.0``.
+    metric : str, optional
+         Error metric used for the per-cell LOO parameter optimization.
+         Only used when ``local_interpolator="adaptiveidw"``. Default:
+         ``"mae"``.
+    parallelize : bool, optional
+         Whether to parallelize the per-cell parameter optimization. Only
+         used when ``local_interpolator="adaptiveidw"``. Default: ``False``.
+
     Returns
     -------
-    The result as :func:`ESIResult`.
+    ESIResult
+         The estimation result.
+
+    Notes
+    -----
+    Not every local interpolator is available at every dimensionality:
+    2D data supports IDW, Kriging, Adaptive IDW, and Voronoi partitioning;
+    3D data supports IDW, Kriging, and Adaptive IDW (Mondrian partitioning
+    only); 4D and 5D data support IDW only.
+
+    See Also
+    --------
+    esi_hparams_search : Grid search that produces a ``best_params_found``
+        dict for this function.
+    esi_pareto_hparams_search : Pareto-frontier search that produces a
+        ``best_params_found`` dict for this function.
 
     Examples
     --------
     .. highlight:: python
     .. code-block:: python
-        
+
         esi_griddata(points, values, (grid_x, grid_y),
                  local_interpolator="idw",
                  p_process="mondrian",
@@ -734,13 +1119,94 @@ def esi_nongriddata(points, values, xi, **kwargs):
 
          In both cases, $D$ is the dimensionality of each location, which coincides with the
          dimensionality of the ``points``.
-    kwargs: dict
-         Additional keyword arguments.
-    
+
+    Other Parameters
+    ----------------
+    local_interpolator : {"idw", "kriging", "adaptiveidw"}, optional
+         Which local interpolator to use within each partition cell.
+         Determines which of the interpolator-specific parameters below are
+         accepted. Default: ``"idw"``.
+    n_partitions : int, optional
+         Number of spatial partitions in the ensemble. Default: ``500``.
+    p_process : {"mondrian", "voronoi"}, optional
+         Spatial partitioning process used to build the ensemble. Default:
+         ``"mondrian"``.
+    data_cond : bool, optional
+         Whether to condition the partitioning process on the sample
+         points. Valid only when ``p_process="voronoi"``. Default: ``True``.
+    alpha : float, optional
+         Controls partition size, in ``[0, 1]``; higher values produce
+         smaller partitions. Default: ``0.8``.
+    agg_function : callable, optional
+         Function used to aggregate the ensemble of local estimates into a
+         single value per location. Default:
+         :func:`~spatialize.gs.esi.aggfunction.mean`.
+    seed : int, optional
+         Random seed for the partitioning process. Default: a random
+         integer in ``[1000, 10000)``.
+    callback : callable, optional
+         Callback used to report estimation progress. Default:
+         :func:`~spatialize.logging.default_singleton_callback`.
+    best_params_found : dict or None, optional
+         Parameter dict typically obtained from
+         :meth:`ESIGridSearchResult.best_result` or
+         :meth:`ESIParetoResult.best_result`. When given, every key it
+         contains **overrides** the corresponding argument passed at the
+         call site, with one exception: ``n_partitions`` is ignored if
+         present -- the value passed at the call site (or its default of
+         ``500``) is used instead. This is intentional: it lets you run the
+         hyperparameter search cheaply with few partitions and then
+         estimate with many. Default: ``None``.
+
+         .. warning::
+             :meth:`ESIGridSearchResult.best_result` always injects
+             ``agg_function`` (:func:`~spatialize.gs.esi.aggfunction.mean`)
+             and ``p_process`` into the dict it returns, so passing it
+             silently overrides any ``agg_function`` or ``p_process`` given
+             at the call site. :meth:`ESIParetoResult.best_result` injects
+             those same two keys plus ``local_interpolator``, ``epsilon``,
+             and ``decoder_error``.
+    exponent : float, optional
+         IDW distance-decay exponent. Only used when
+         ``local_interpolator="idw"``. Default: ``2.0``.
+    model : {"spherical", "exponential", "cubic", "gaussian"}, optional
+         Variogram model. Only used when ``local_interpolator="kriging"``.
+         Default: ``"spherical"``.
+    nugget : float, optional
+         Variogram nugget. Only used when ``local_interpolator="kriging"``.
+         Default: ``0.1``.
+    range : float, optional
+         Variogram range. Only used when ``local_interpolator="kriging"``.
+         Default: ``5000.0``.
+    sill : float, optional
+         Variogram sill. Only used when ``local_interpolator="kriging"``.
+         Default: ``1.0``.
+    metric : str, optional
+         Error metric used for the per-cell LOO parameter optimization.
+         Only used when ``local_interpolator="adaptiveidw"``. Default:
+         ``"mae"``.
+    parallelize : bool, optional
+         Whether to parallelize the per-cell parameter optimization. Only
+         used when ``local_interpolator="adaptiveidw"``. Default: ``False``.
+
     Returns
     -------
     ESIResult
-        The result as :func:`ESIResult`.
+         The estimation result.
+
+    Notes
+    -----
+    Not every local interpolator is available at every dimensionality:
+    2D data supports IDW, Kriging, Adaptive IDW, and Voronoi partitioning;
+    3D data supports IDW, Kriging, and Adaptive IDW (Mondrian partitioning
+    only); 4D and 5D data support IDW only.
+
+    See Also
+    --------
+    esi_hparams_search : Grid search that produces a ``best_params_found``
+        dict for this function.
+    esi_pareto_hparams_search : Pareto-frontier search that produces a
+        ``best_params_found`` dict for this function.
     """
     estimation, esi_samples = _call_libspatialize(points, values, xi, **kwargs)
     return ESIResult(estimation, esi_samples, xi=xi, points=points, values=values)

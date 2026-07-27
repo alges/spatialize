@@ -38,6 +38,7 @@ elif sys.platform == 'linux':
     extra_link_args += ['-fopenmp']
 elif sys.platform == 'win32':
     # Windows with MSVC
+    extra_compile_args = ['/std:c++17', '/Ox']
     extra_compile_args += ['/openmp']
 
 libspatialize_extensions = [
@@ -54,7 +55,7 @@ libspatialize_extensions = [
 if __name__ == '__main__':
     setup(
         name='spatialize',
-        version='1.0.4',
+        version='1.2.0',
         author='ALGES Laboratory',
         author_email='dev@alges.cl',
         description='Python Library for Generative Geostatistics and Spatial Analysis',

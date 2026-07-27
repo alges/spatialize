@@ -111,14 +111,59 @@ def _decode_samples(esi_samples, code_to_cat):
 # ─────────────────────────────────────────────────────────────
 
 class CatESIResult(EstimationResult):
-    """
-    Result of a categorical ESI estimation.
+    """Result of a categorical ESI estimation.
 
-    Methods mirror spatialize's ``ESIResult``, adapted for categorical data.
+    Wraps the aggregated categorical estimation together with the raw
+    per-partition ESI samples, and exposes precision, re-aggregation, and
+    plotting methods. Methods mirror spatialize's :class:`~spatialize.result.EstimationResult`,
+    adapted for categorical data — in particular, :meth:`precision` here
+    returns a per-location agreement ratio in ``[0, 1]`` rather than an
+    error metric.
+
+    Parameters
+    ----------
+    estimation : ndarray
+        Aggregated categorical estimation, one label per query location
+        (or grid cell, for griddata).
+    esi_samples : ndarray
+        Raw per-partition category labels, shape ``(p, n_partitions)``
+        where ``p`` is the number of query locations.
+    griddata : bool, optional
+        Whether `estimation` and `esi_samples` correspond to a regular
+        grid. Default: ``False``.
+    original_shape : tuple, optional
+        Shape of the target grid before flattening, required when
+        `griddata` is ``True``.
+    xi : array_like, optional
+        Query locations (or grid arrays, for griddata) used to produce
+        the estimation.
+    ordinal_order : dict, optional
+        Mapping of category label to integer rank, e.g.
+        ``{'Low': 0, 'Medium': 1, 'High': 2}``. When set, :meth:`re_estimate`
+        uses ordinal median-vote aggregation instead of nominal majority
+        vote. Default: ``None`` (nominal categories).
     """
 
     def __init__(self, estimation, esi_samples, griddata=False,
                  original_shape=None, xi=None, ordinal_order=None):
+        """Store the estimation, raw samples, and griddata metadata.
+
+        Parameters
+        ----------
+        estimation : ndarray
+            Aggregated categorical estimation.
+        esi_samples : ndarray
+            Raw per-partition category labels, shape ``(p, n_partitions)``.
+        griddata : bool, optional
+            Whether the data corresponds to a regular grid. Default: ``False``.
+        original_shape : tuple, optional
+            Shape of the target grid before flattening, required when
+            `griddata` is ``True``.
+        xi : array_like, optional
+            Query locations (or grid arrays, for griddata).
+        ordinal_order : dict, optional
+            Mapping of category label to integer rank. Default: ``None``.
+        """
         super().__init__(estimation, griddata, original_shape, xi=xi)
         self._esi_samples = esi_samples   # shape (p, n_partitions), object dtype
         self._precision = None
@@ -127,8 +172,21 @@ class CatESIResult(EstimationResult):
     # ── samples ──────────────────────────────────────────────
 
     def esi_samples(self, raw=False):
-        """
-        Raw ESI samples, shape (p, n_partitions) or (d1, d2, n_partitions) for griddata.
+        """Return the raw, unaggregated per-partition ESI samples.
+
+        Parameters
+        ----------
+        raw : bool, optional
+            If ``True``, always return the flat ``(p, n_partitions)`` array,
+            even for griddata results. If ``False`` (default) and the result
+            is griddata, reshape to ``(d1, d2, ..., n_partitions)`` using
+            `original_shape`.
+
+        Returns
+        -------
+        ndarray
+            Category labels per partition, shape ``(p, n_partitions)`` or
+            ``(d1, d2, n_partitions)`` for griddata.
         """
         if self.griddata and not raw:
             n = self._esi_samples.shape[1]
@@ -351,16 +409,38 @@ class CatESIResult(EstimationResult):
             )
 
     def plot_precision(self, ax=None, w=None, h=None, theme='alges', cmap=None, **imshow_args):
-        """
-        Plot the precision of the estimation.
+        """Plot the per-location agreement ratio of the estimation.
 
-        :param ax: The axis to plot on.
-        :param w: The width of the plot.
-        :param h: The height of the plot.
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white',
-            'dark', 'alges', 'minimal', 'publication'.
-        :param cmap: Colormap for the plot. If None, uses theme default or 'bwr'.
-        :param imshow_args: Additional imshow arguments to pass to the `_plot_data` function.
+        Computes :meth:`precision` if it has not been computed yet, then
+        renders it as a colormap image via
+        :func:`~spatialize.viz.plot_colormap_data`. Values are in
+        ``[0, 1]``, the fraction of ESI partition samples that disagree
+        with the aggregated estimation at each location (not an error
+        metric).
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axis to plot on. If ``None``, a new figure/axis is created.
+        w : float, optional
+            Width scale factor for the plot.
+        h : float, optional
+            Height scale factor for the plot.
+        theme : str, optional
+            Theme name. Available: ``'whitegrid'``, ``'darkgrid'``,
+            ``'white'``, ``'dark'``, ``'alges'``, ``'minimal'``,
+            ``'publication'``. Default: ``'alges'``.
+        cmap : str, optional
+            Colormap for the plot. If ``None``, uses the theme default or
+            ``'bwr'``.
+        **imshow_args
+            Additional keyword arguments passed to
+            :func:`~spatialize.viz.plot_colormap_data`.
+
+        Raises
+        ------
+        SpatializeError
+            If the result is not 2D.
         """
         if self._precision is None:
             self._precision = self.precision()
@@ -462,11 +542,53 @@ class CatESIResult(EstimationResult):
 
 
 class CatESIGridSearchResult(GridSearchResult):
-    """
-    Result of a hyperparameter search for categorical ESI.
+    """Result of a hyperparameter search for categorical ESI.
+
+    Wraps the per-combination cross-validation scores produced by
+    :func:`cat_esi_hparams_search`, together with the classifier and
+    ordinal metadata needed to reconstruct a ready-to-use parameter
+    set via :meth:`best_result`.
+
+    Parameters
+    ----------
+    search_result_data : pandas.DataFrame
+        One row per parameter combination, with a ``cv_error`` column and
+        one column per searched hyperparameter.
+    classifier : str
+        Classifier used during the search, e.g. ``'knn_pca'`` or
+        ``'scikit-learn'``.
+    ordinal_order : dict, optional
+        Mapping of category label to integer rank, propagated to the
+        returned parameter dict so downstream calls reuse the same
+        ordinal aggregation. Default: ``None``.
+    sklearn_classifier : object, optional
+        Fitted or unfitted scikit-learn estimator instance, required when
+        `classifier` is ``'scikit-learn'``. Default: ``None``.
+    random_state : int, optional
+        Random state forwarded to scikit-learn classifiers that accept
+        one (e.g. ``'svm'``, ``'rf'``, ``'dt'``). Default: ``None``.
+    seed : int, optional
+        ESI partitioning seed used during the search. Default: ``None``.
     """
 
     def __init__(self, search_result_data, classifier, ordinal_order=None, sklearn_classifier=None, random_state=None, seed=None):
+        """Store the search results and classifier metadata.
+
+        Parameters
+        ----------
+        search_result_data : pandas.DataFrame
+            One row per parameter combination, with a ``cv_error`` column.
+        classifier : str
+            Classifier used during the search.
+        ordinal_order : dict, optional
+            Mapping of category label to integer rank. Default: ``None``.
+        sklearn_classifier : object, optional
+            scikit-learn estimator instance. Default: ``None``.
+        random_state : int, optional
+            Random state for scikit-learn classifiers. Default: ``None``.
+        seed : int, optional
+            ESI partitioning seed. Default: ``None``.
+        """
         super().__init__(search_result_data)
         self.classifier = classifier
         self.ordinal_order = ordinal_order
@@ -475,7 +597,28 @@ class CatESIGridSearchResult(GridSearchResult):
         self.seed = seed
 
     def best_result(self, **kwargs):
-        """Return a dict of best parameters suitable for passing to cat_esi_nongriddata."""
+        """Return the best-scoring parameter combination as a ready-to-use dict.
+
+        Selects the row of `search_result_data` with the lowest ``cv_error``,
+        restores correct Python types (pandas stores ``None`` as ``NaN`` and
+        integers as ``float64``), and augments it with the classifier and
+        ordinal metadata stored on this result.
+
+        Parameters
+        ----------
+        **kwargs
+            Accepted for API consistency; currently unused.
+
+        Returns
+        -------
+        dict
+            Best-performing hyperparameter combination, including
+            ``result_data_index``, ``classifier``, ``agg_function`` (always
+            ``'mv'``), ``ordinal_order``, and, when set, ``sklearn_classifier``,
+            ``random_state``, and ``seed``. Suitable for unpacking directly
+            into :func:`cat_esi_griddata` or :func:`cat_esi_nongriddata` via
+            ``best_params_found``.
+        """
         b_param = self.best_params.sort_values(by='cv_error', ascending=True)
         row = pd.DataFrame(b_param.iloc[0]).to_dict()
         index = list(row.keys())[0]
@@ -610,10 +753,43 @@ def cat_esi_griddata(points, values, xi, **kwargs) -> CatESIResult:
     max_points : int (knn_pca only) – subsampling cap per cell
     n_cv_splits : int (knn_pca only) – CV splits for parameter search
     sklearn_classifier : sklearn estimator (scikit-learn only)
+    best_params_found : dict or None, optional
+        Parameter dict typically obtained from
+        :meth:`CatESIGridSearchResult.best_result`. When given, every key it
+        contains **overrides** the corresponding argument passed at the call
+        site, with one exception: ``n_partitions`` is ignored if present --
+        the value passed at the call site (or its default of ``300``) is
+        used instead. This is intentional: it lets you run the
+        hyperparameter search cheaply with few partitions and then estimate
+        with many. Default: ``None``.
+
+        .. warning::
+            :meth:`CatESIGridSearchResult.best_result` always injects
+            ``result_data_index``, ``classifier``, ``agg_function``
+            (always the string ``'mv'``) and ``ordinal_order`` into the dict
+            it returns, plus ``sklearn_classifier``, ``random_state`` and
+            ``seed`` when those were set on the search result. Passing that
+            dict therefore silently overrides any of those arguments given
+            at the call site.
 
     Returns
     -------
     CatESIResult
+
+    Notes
+    -----
+    Unlike the continuous ESI path, `best_params_found` is **not** defensively
+    copied before use: the ``n_partitions`` key is deleted from the very
+    dictionary object you pass in. If you hold a reference to the dict
+    returned by :meth:`CatESIGridSearchResult.best_result` and pass it to
+    this function, ``n_partitions`` is removed from *your* dict as a side
+    effect, and is no longer available for later inspection or reuse. Pass a
+    copy (``dict(best)``) if you need the original to stay intact.
+
+    See Also
+    --------
+    cat_esi_hparams_search : Grid search that produces a
+        ``best_params_found`` dict for this function.
     """
     ng_xi, original_shape = flatten_grid_data(xi)
     estimation, esi_samples = _call_custom_esi(points, values, ng_xi, **kwargs)
@@ -641,10 +817,43 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
     max_points : int (knn_pca only)
     n_cv_splits : int (knn_pca only)
     sklearn_classifier : sklearn estimator (scikit-learn only)
+    best_params_found : dict or None, optional
+        Parameter dict typically obtained from
+        :meth:`CatESIGridSearchResult.best_result`. When given, every key it
+        contains **overrides** the corresponding argument passed at the call
+        site, with one exception: ``n_partitions`` is ignored if present --
+        the value passed at the call site (or its default of ``300``) is
+        used instead. This is intentional: it lets you run the
+        hyperparameter search cheaply with few partitions and then estimate
+        with many. Default: ``None``.
+
+        .. warning::
+            :meth:`CatESIGridSearchResult.best_result` always injects
+            ``result_data_index``, ``classifier``, ``agg_function``
+            (always the string ``'mv'``) and ``ordinal_order`` into the dict
+            it returns, plus ``sklearn_classifier``, ``random_state`` and
+            ``seed`` when those were set on the search result. Passing that
+            dict therefore silently overrides any of those arguments given
+            at the call site.
 
     Returns
     -------
     CatESIResult
+
+    Notes
+    -----
+    Unlike the continuous ESI path, `best_params_found` is **not** defensively
+    copied before use: the ``n_partitions`` key is deleted from the very
+    dictionary object you pass in. If you hold a reference to the dict
+    returned by :meth:`CatESIGridSearchResult.best_result` and pass it to
+    this function, ``n_partitions`` is removed from *your* dict as a side
+    effect, and is no longer available for later inspection or reuse. Pass a
+    copy (``dict(best)``) if you need the original to stay intact.
+
+    See Also
+    --------
+    cat_esi_hparams_search : Grid search that produces a
+        ``best_params_found`` dict for this function.
     """
     estimation, esi_samples = _call_custom_esi(points, values, xi, **kwargs)
     return CatESIResult(estimation, esi_samples, xi=xi,

@@ -30,6 +30,41 @@ class PosteriorSampleAnalyzer:
     the original sample points and values, to compute empirical models,
     quantiles, and entropy for each sample. It also provides methods for
     ranking samples based on entropy and for visualizing the results.
+
+    Parameters
+    ----------
+    cv_post_result : ndarray
+        The posterior results from a cross-validation process. Expected to be
+        a 2D array where rows correspond to samples and columns to posterior
+        draws.
+    points : ndarray
+        Coordinates of the sample points.
+    sample_values : ndarray
+        The true values at the sample points.
+    fitted_model_factory : empirical.FittedModelFactory
+        A factory object to create fitted empirical models.
+    callback : callable, optional
+        Callback function for logging or progress updates, default: `default_singleton_callback`.
+
+    Attributes
+    ----------
+    post_result : ndarray
+        The posterior results passed at construction time.
+    points : ndarray
+        Coordinates of the sample points.
+    sample_values : ndarray
+        The true values at the sample points.
+    fitted_model_factory : empirical.FittedModelFactory
+        The factory used to create fitted empirical models.
+    callback : callable
+        Callback used for logging or progress updates.
+    emodels : dict[int, empirical.EmpiricalModel]
+        Fitted empirical model for each sample, keyed by sample index.
+    sample_quantiles : dict[int, float]
+        CDF value of the true sample value under its fitted empirical model,
+        keyed by sample index.
+    sample_entropy : dict[int, float]
+        Entropy of the fitted empirical model, keyed by sample index.
     """
 
     def __init__(self, cv_post_result, points, sample_values, fitted_model_factory,
@@ -37,19 +72,21 @@ class PosteriorSampleAnalyzer:
         """
         Initialize the PosteriorSampleAnalyzer.
 
-        :param cv_post_result: The posterior results from a cross-validation process.
-                               Expected to be a 2D numpy array where rows correspond
-                               to samples and columns to posterior draws.
-        :type cv_post_result: numpy.ndarray
-        :param points: Coordinates of the sample points.
-        :type points: numpy.ndarray
-        :param sample_values: The true values at the sample points.
-        :type sample_values: numpy.ndarray
-        :param fitted_model_factory: A factory object to create fitted empirical models.
-        :type fitted_model_factory: empirical.FittedModelFactory
-        :param callback: Optional callback function for logging or progress updates.
-                         Defaults to `default_singleton_callback`.
-        :type callback: callable, optional
+        Parameters
+        ----------
+        cv_post_result : ndarray
+            The posterior results from a cross-validation process. Expected
+            to be a 2D array where rows correspond to samples and columns to
+            posterior draws.
+        points : ndarray
+            Coordinates of the sample points.
+        sample_values : ndarray
+            The true values at the sample points.
+        fitted_model_factory : empirical.FittedModelFactory
+            A factory object to create fitted empirical models.
+        callback : callable, optional
+            Callback function for logging or progress updates,
+            default: `default_singleton_callback`.
         """
         self.post_result = cv_post_result
         self.points = points
@@ -128,19 +165,23 @@ class PosteriorSampleAnalyzer:
         | level_4  | inside 50% interval                   | most **uncertain**       |
         +----------+---------------------------------------+--------------------------+
 
-        :param entropy_mass_alphas: List of alpha values (between 0 and 1)
-                                    defining the central entropy mass for intervals.
-                                    Defaults to `[0.5, 0.7, 0.9, 0.99]`.
-        :type entropy_mass_alphas: list[float], optional
-        :param n_jobs: Number of parallel jobs to run for categorization.
-                       -1 means using all available cores. 1 means serial execution.
-                       Defaults to -1. When using ``n_jobs != 1``, this function must be called within a
-                       ``if __name__ == "__main__":`` block to avoid multiprocessing issues
-                       (especially on Windows and macOS).
-        :type n_jobs: int, optional
-        :return: A DataFrame with 'value' (original sample value) and
-                 'category' (e.g., "level_0") columns.
-        :rtype: pandas.DataFrame
+        Parameters
+        ----------
+        entropy_mass_alphas : list[float], optional
+            List of alpha values (between 0 and 1) defining the central
+            entropy mass for intervals. Defaults to `[0.5, 0.7, 0.9, 0.99]`.
+        n_jobs : int, optional
+            Number of parallel jobs to run for categorization. -1 means
+            using all available cores. 1 means serial execution. Defaults
+            to -1. When using ``n_jobs != 1``, this function must be called
+            within a ``if __name__ == "__main__":`` block to avoid
+            multiprocessing issues (especially on Windows and macOS).
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame with 'value' (original sample value) and 'category'
+            (e.g., "level_0") columns.
         """
         alphas_ = sorted(entropy_mass_alphas)  # narrowest to widest intervals
         categories_results = []  # Using a temporary list to store results before assigning to self or returning
@@ -244,19 +285,22 @@ class PosteriorSampleAnalyzer:
 
     def plot_summary(self, theme='alges', color=None, **figargs):
         """
-        Plots a summary of the posterior sample analysis.
+        Plot a summary of the posterior sample analysis.
 
-        This creates a figure with three subplots:
-        1. Histogram of the original sample values.
-        2. Histogram of the calculated sample percentiles (CDFs).
-        3. Histogram of the calculated sample entropies.
+        Creates a figure with three subplots: a histogram of the original
+        sample values, a histogram of the calculated sample percentiles
+        (CDFs), and a histogram of the calculated sample entropies.
 
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Defaults to 'alges'.
-        :param color: Color for the histograms. If None, uses theme default.
-        :param figargs: Keyword arguments to be passed to `matplotlib.pyplot.subplots`.
-                        For example, `figsize=(12, 4)`.
-        :type figargs: dict, optional
+        Parameters
+        ----------
+        theme : str, optional
+            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Default: 'alges'.
+        color : str, optional
+            Color for the histograms. If None, uses theme default.
+        **figargs : dict, optional
+            Keyword arguments passed to `matplotlib.pyplot.subplots`, e.g.
+            `figsize=(12, 4)`.
         """
         with PlotStyle(theme=theme, color=color) as style:
             fig, ax = plt.subplots(1, 3, **figargs)
@@ -279,26 +323,31 @@ class PosteriorSampleAnalyzer:
 
     def quick_plot_models(self, n_imgs=6, n_cols=3, seed=42, theme='alges', cmap=None, **figargs):
         """
-        Plots a grid of individual empirical model fits for a random sample of data points.
+        Plot a grid of individual empirical model fits for a random sample of data points.
 
-        For each selected data point, it plots the histogram of its posterior samples,
-        the Probability Density Function (PDF), and the Cumulative Distribution
-        Function (CDF) derived from its empirical model.
+        For each selected data point, plots the histogram of its posterior
+        samples, the Probability Density Function (PDF), and the Cumulative
+        Distribution Function (CDF) derived from its empirical model.
 
-        :param n_imgs: Number of random samples/images to plot. Defaults to 6.
-                       If greater than the total number of samples, it will be capped.
-        :type n_imgs: int, optional
-        :param n_cols: Number of columns in the plot grid. Defaults to 3.
-        :type n_cols: int, optional
-        :param seed: Seed for the random number generator to ensure reproducibility
-                     of sample selection. Defaults to 42. If None, a random seed is used.
-        :type seed: int, optional
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Defaults to 'alges'.
-        :param cmap: Colormap used to color each subplot's histogram. If None, uses theme default.
-        :param figargs: Keyword arguments passed to `matplotlib.pyplot.subplots`
-                        when creating the figure.
-        :type figargs: dict, optional
+        Parameters
+        ----------
+        n_imgs : int, optional
+            Number of random samples/images to plot, default: 6. If greater
+            than the total number of samples, it is capped.
+        n_cols : int, optional
+            Number of columns in the plot grid, default: 3.
+        seed : int, optional
+            Seed for the random number generator to ensure reproducibility of
+            sample selection, default: 42. If None, a random seed is used.
+        theme : str, optional
+            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Default: 'alges'.
+        cmap : str or Colormap, optional
+            Colormap used to color each subplot's histogram. If None, uses
+            theme default.
+        **figargs : dict, optional
+            Keyword arguments passed to `matplotlib.pyplot.subplots` when
+            creating the figure.
         """
         r = self.post_result
         values = self.sample_values
@@ -332,21 +381,27 @@ class PosteriorSampleAnalyzer:
 
     def plot_ranking(self, samples_ranking, theme='alges', color=None, cmap=None, figsize=(11, 6)):
         """
-        Plots the sample ranking results.
+        Plot the sample ranking results.
 
-        This creates a figure with two subplots:
-        1. A bar chart showing the count of samples in each category.
-        2. A scatter plot of the sample points, colored by their assigned category.
+        Creates a figure with two subplots: a bar chart showing the count of
+        samples in each category, and a scatter plot of the sample points
+        colored by their assigned category.
 
-        :param samples_ranking: DataFrame containing 'value' and 'category' columns,
-                                as returned by `rank_samples`.
-        :type samples_ranking: pandas.DataFrame
-        :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Defaults to 'alges'.
-        :param color: Color for the bar chart. If None, uses theme default.
-        :param cmap: Colormap used for the categorized scatter plot. If None, uses theme default.
-        :param figsize: Size of the figure for plotting. Defaults to (11, 6).
-        :type figsize: tuple, optional
+        Parameters
+        ----------
+        samples_ranking : pandas.DataFrame
+            DataFrame containing 'value' and 'category' columns, as returned
+            by `rank_samples`.
+        theme : str, optional
+            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+            'alges', 'minimal', 'publication'. Default: 'alges'.
+        color : str, optional
+            Color for the bar chart. If None, uses theme default.
+        cmap : str or Colormap, optional
+            Colormap used for the categorized scatter plot. If None, uses
+            theme default.
+        figsize : tuple, optional
+            Size of the figure for plotting, default: (11, 6).
         """
         with PlotStyle(theme=theme, color=color, cmap=cmap) as style:
             fig, ax = plt.subplots(1, 2, figsize=figsize)
@@ -452,36 +507,54 @@ class PosteriorSampleAnalyzer:
                     })
 def cv_sample_pred_posterior(points, values, xi, **kwargs):
     """
-    Performs cross-validation for sample prediction and generates posterior distributions.
+    Perform cross-validation for sample prediction and generate posterior distributions.
 
-    This function utilizes a spatialization library (`lib_spatialize_facade`)
-    to perform cross-validation (either k-fold or leave-one-out) on the provided
-    sample points and values. It then uses the results to initialize and return
-    a `PosteriorSampleAnalizer` object.
+    This function uses the spatialization library (`lib_spatialize_facade`) to
+    perform cross-validation (either k-fold or leave-one-out) on the provided
+    sample points and values. It then uses the results to initialize and
+    return a `PosteriorSampleAnalyzer` object.
 
-    The specific behavior of the cross-validation, including the local interpolator
-    (e.g., IDW, Kriging), partitioning process, and aggregation functions,
-    is controlled by the `kwargs` and the `@signature_overload` decorator.
+    The specific behavior of the cross-validation, including the local
+    interpolator (e.g., IDW, Kriging), partitioning process, and aggregation
+    functions, is controlled by `kwargs` and the `@signature_overload`
+    decorator.
 
-    :param points: Coordinates of the sample points (e.g., [[x1,y1], [x2,y2], ...]).
-    :type points: numpy.ndarray
-    :param values: Observed values at each sample point.
-    :type values: numpy.ndarray
-    :param xi: Prediction locations or configuration for prediction.
-               If tuple, assumed to be deepcopied. Otherwise, copied.
-    :type xi: object or tuple
-    :param \\**kwargs: Keyword arguments that control the cross-validation and
-                      posterior analysis. These are largely defined by the
-                      `@signature_overload` decorator and can include:
-                      `local_interpolator`, `k` (for k-fold), `p_process`,
-                      `n_partitions`, `fitted_model_factory`, `callback`, etc.
-                      See the decorator for default values and specific options.
-    :type \\**kwargs: dict
-    :raises SpatializeError: If an error occurs during the underlying
-                             spatialization cross-validation process.
-    :return: An analyzer object containing the posterior distributions and
-             tools for their analysis.
-    :rtype: PosteriorSampleAnalizer
+    Parameters
+    ----------
+    points : ndarray
+        Coordinates of the sample points (e.g., [[x1,y1], [x2,y2], ...]).
+    values : ndarray
+        Observed values at each sample point.
+    xi : object or tuple
+        Prediction locations or configuration for prediction. If a tuple, it
+        is deep-copied; otherwise it is shallow-copied.
+    best_params_found : dict or None, optional
+        Parameter dict typically obtained from the ``best_result()`` method
+        of an ESI hyperparameter search. When given, every key it contains
+        **overrides** the corresponding argument otherwise in effect, with
+        one exception: ``n_partitions`` is ignored if present -- the value
+        passed at the call site (or its default) is used instead. This is
+        intentional: it lets you run the hyperparameter search cheaply with
+        few partitions and then run the posterior analysis with many. The
+        dict you pass is not mutated. Default: ``None``.
+    **kwargs : dict
+        Keyword arguments that control the cross-validation and posterior
+        analysis. Largely defined by the `@signature_overload` decorator and
+        can include `local_interpolator`, `k` (for k-fold), `p_process`,
+        `n_partitions`, `fitted_model_factory`, `callback`, etc. See the
+        decorator for default values and specific options.
+
+    Returns
+    -------
+    PosteriorSampleAnalyzer
+        An analyzer object containing the posterior distributions and tools
+        for their analysis.
+
+    Raises
+    ------
+    SpatializeError
+        If an error occurs during the underlying spatialization
+        cross-validation process.
     """
     method, k = "kfold", kwargs["k"]
     if k == points.shape[0] or k == -1:
@@ -541,38 +614,41 @@ def cv_sample_pred_posterior(points, values, xi, **kwargs):
 def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, bins=25, figsize=(15, 10),
                                      theme='alges', cmap=None):
     """
-    Plots a grid of histograms for specified data samples.
+    Plot a grid of histograms for specified data samples.
 
-    For each specified sample (by index), this function visualizes its
-    posterior distribution. Each subplot in the grid includes:
-    - A histogram of the posterior samples for that data point.
-    - The Probability Density Function (PDF) line derived from its empirical model.
-    - A scaled Cumulative Distribution Function (CDF) line from its empirical model,
-      overlaid for comparison.
+    For each specified sample (by index), visualizes its posterior
+    distribution. Each subplot in the grid includes a histogram of the
+    posterior samples for that data point, the Probability Density Function
+    (PDF) line derived from its empirical model, and a scaled Cumulative
+    Distribution Function (CDF) line from its empirical model, overlaid for
+    comparison.
 
-    :param r: The full 2D array of posterior samples, where rows correspond to
-              data points and columns to posterior draws.
-    :type r: numpy.ndarray
-    :param data_indices: A list of row indices from `r` (and corresponding keys in
-                         `emodels`) for which to plot the histograms.
-    :type data_indices: list[int]
-    :param emodels: A dictionary or list of empirical model objects. If a dict,
-                    it should be keyed by data_indices. Each emodel object must
-                    have attributes `x_` (for x-axis values), `pdf_` (for PDF values),
-                    and `cdf_` (for CDF values).
-    :type emodels: dict[int, empirical.EmpiricalModel] or list[empirical.EmpiricalModel]
-    :param n_rows: Number of rows in the subplot grid.
-    :type n_rows: int
-    :param n_cols: Number of columns in the subplot grid.
-    :type n_cols: int
-    :param bins: Number of bins to use for the histograms. Defaults to 25.
-    :type bins: int, optional
-    :param figsize: Overall figure size (width, height) in inches.
-                    Defaults to (15, 10).
-    :type figsize: tuple[float, float], optional
-    :param theme: Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-        'alges', 'minimal', 'publication'. Defaults to 'alges'.
-    :param cmap: Colormap used to color each subplot's histogram. If None, uses theme default.
+    Parameters
+    ----------
+    r : ndarray
+        The full 2D array of posterior samples, where rows correspond to data
+        points and columns to posterior draws.
+    data_indices : list of int
+        Row indices from `r` (and corresponding keys in `emodels`) for which
+        to plot the histograms.
+    emodels : dict[int, empirical.EmpiricalModel] or list of empirical.EmpiricalModel
+        Empirical model objects. If a dict, it should be keyed by
+        `data_indices`. Each emodel object must have attributes `x_` (x-axis
+        values), `pdf_` (PDF values), and `cdf_` (CDF values).
+    n_rows : int
+        Number of rows in the subplot grid.
+    n_cols : int
+        Number of columns in the subplot grid.
+    bins : int, optional
+        Number of bins to use for the histograms, default: 25.
+    figsize : tuple of float, optional
+        Overall figure size (width, height) in inches, default: (15, 10).
+    theme : str, optional
+        Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
+        'alges', 'minimal', 'publication'. Default: 'alges'.
+    cmap : str or Colormap, optional
+        Colormap used to color each subplot's histogram. If None, uses theme
+        default.
     """
     with PlotStyle(theme=theme, cmap=cmap) as style:
         base_cmap = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap

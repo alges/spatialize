@@ -42,13 +42,26 @@ pip install spatialize
 ## Core Concepts
 | Function | Description |
 |----------|-------------|
-| `esi_griddata()` | Spatial interpolation for points on a regular grid |
-| `esi_nongriddata()` | Spatial interpolation for scattered points |
+| `esi_griddata()` | Spatial interpolation of continuous variables for points on a regular grid |
+| `esi_nongriddata()` | Spatial interpolation of continuous variables for scattered points |
 | `esi_hparams_search()` | Automated hyperparameter optimization with cross-validation |
+| `esi_pareto_hparams_search()` | Balanced partitioning and interpolator parameter optimization via Pareto frontier |
+| `cat_esi_griddata()` | Spatial interpolation of categorical variables for points on a regular grid |
+| `cat_esi_nongriddata()` | Spatial interpolation of categorical variables for scattered points |
+| `cat_esi_hparams_search()` | Automated hyperparameter optimization with cross-validation for categorical ESI |
+| `ess_sample()` | Stochastic posterior simulation from an existing ESI ensemble |
+
 
 ### Local Interpolators
 - **IDW (Inverse Distance Weighting)**: Simple yet powerful with configurable distance exponent
 - **Kriging**: Geostatistical method with multiple variogram models (spherical, exponential, cubic and gaussian)
+- **Adaptive IDW**: Automatically optimizes IDW parameters (exponent, anisotropy) per partition cell via leave-one-out validation — no manual tuning required
+
+Note: Adaptive IDW is not a separate function — pass `local_interpolator="adaptiveidw"` to `esi_griddata()` / `esi_nongriddata()`.
+
+### Local Classifiers
+- **knn_pca**: Adaptive anisotropic k-NN, the default classifier for categorical ESI
+- **scikit-learn**: Wraps any fitted scikit-learn estimator (e.g. SVM, Random Forest, Decision Tree)
 
 ### Partition Methods
 - **Mondrian Forests**: Uses recursive, axis-aligned partitions (supports up to 5D)
@@ -56,6 +69,8 @@ pip install spatialize
 
 ## Quick Start
 Here are a few examples to get you started.
+**For further examples, please check the [spatialize examples repository](https://github.com/alges/spatialize-examples) or the [spatialize documentation](https://spatialize.readthedocs.io/)**.
+
 
 ### Basic Gridded Data Estimation
 ```python
@@ -130,11 +145,74 @@ best_result = esi_griddata(points, values, (grid_x, grid_y),
 search_result.plot_cv_error()
 ```
 
+### Adaptive ESI
+```python
+from spatialize.gs.esi import esi_griddata
+
+# Adaptive IDW optimizes exponent and anisotropy per partition cell automatically,
+# so no exponent/alpha-per-axis tuning is required
+result = esi_griddata(points, values, (grid_x, grid_y),
+		      local_interpolator="adaptiveidw",
+		      n_partitions=200,
+		      alpha=0.7
+		      )
+
+result.quick_plot()
+```
+
+### Categorical ESI
+```python
+import numpy as np
+from spatialize.gs.cat_esi import cat_esi_nongriddata
+
+cat_points = np.array([[0.1, 0.2], [0.5, 0.6], [0.8, 0.1]])
+cat_values = np.array(['A', 'B', 'A'])
+cat_targets = np.array([[0.3, 0.3], [0.7, 0.7]])
+
+result = cat_esi_nongriddata(cat_points, cat_values, cat_targets,
+			     classifier="knn_pca",
+			     n_partitions=300,
+			     alpha=0.8
+			     )
+
+print(result.estimation())  # predicted categories
+print(result.precision())   # per-location agreement ratio
+```
+
+### Ensemble Spatial Simulation (ESS)
+```python
+from spatialize.gs.ess import ess_sample
+from spatialize.empirical import FittedModelFactory
+
+# ess_sample draws posterior simulations from an existing ESI ensemble
+sim_result = ess_sample(esi_result=result,
+			n_sims=1000,
+			fitted_model_factory=FittedModelFactory(
+				point_model_name="kde",
+				kernel="tophat"
+			)
+			)
+```
+
+
 ## License
 [Apache-2.0](LICENSE)
 
 ## Citing Spatialize
 Please refer to the following articles when publishing work relating to this library or the ESI model:
+
+	@article{spatialize2026,
+		author  = {Navarro, Felipe and Ega{\~n}a, {\'A}lvaro F. and Ehrenfeld, Alejandro and Garrido, Felipe and Valenzuela, Mar{\'i}a Jes{\'u}s and S{\'a}nchez-P{\'e}rez, Juan F. },
+		title   = {Spatialize v1.0: a Python/C++ library for ensemble spatial interpolation},
+		journal = {Geoscientific Model Development},
+		year    = {2026},
+		volume  = {19},
+		number  = {10},
+		pages   = {4633--4660},
+		doi     = {https://doi.org/10.5194/gmd-19-4633-2026},
+		url     = {https://gmd.copernicus.org/articles/19/4633/2026/},
+		issn    = {}
+		}
 
 	@article{
 		title = {Spatial distributional estimation via ensemble spatial analysis},
@@ -148,19 +226,6 @@ Please refer to the following articles when publishing work relating to this lib
 		url = {https://www.aimspress.com/article/doi/10.3934/math.20251159},
 		author = {Alvaro F. Ega{\~n}a and Gonzalo D{\'i}az and Felipe Navarro and Mohammad Maleki and Juan F. S{\'a}nchez-P{\'e}rez},
 		keywords = {geostatistics, computational geostatistics, generative geostatistics, non-linear geostatistics, distributional geostatistics, geostatistical simulation, empirical copula, data-driven methods},
-		}
-
-	@article{spatialize2025,
-		author  = {Navarro, Felipe and Ega{\~n}a, {\'A}lvaro F. and Ehrenfeld, Alejandro and Garrido, Felipe and Valenzuela, Mar{\'i}a Jes{\'u}s and S{\'a}nchez-P{\'e}rez, Juan F. },
-		title   = {Spatialize v1.0: A Python/C++ Library for Ensemble Spatial Interpolation},
-		journal = {},
-		year    = {2025},
-		volume  = {},
-		number  = {},
-		pages   = {},
-		doi     = {https://doi.org/10.48550/arXiv.2507.17867},
-		url     = {https://arxiv.org/abs/2507.17867},
-		issn    = {}
 		}
 
 	@article{AdaptiveESI2025,

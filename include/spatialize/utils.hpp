@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <functional>
 #include <cmath>
+#include <cassert>
+#include <cstdint>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -45,48 +47,171 @@ namespace sptlz{
     return(result);
   }
 
-  std::vector<std::vector<int>> get_full_neighboorhood(int d){
-    if(d==0){
-      std::vector<std::vector<int>> r;
-      r.push_back({});
-      return(r);
-    }else{
-      std::vector<std::vector<int>> result = get_full_neighboorhood(d-1);
-      std::vector<int> aux;
-      size_t n = result.size();
-      for(size_t i=0; i<n; i++){
-        aux = result.at(i);
-        aux.push_back(-1);
-        result.push_back(aux);
-        aux = result.at(i);
-        aux.push_back(0);
-        result.push_back(aux);
-        aux = result.at(i);
-        aux.push_back(1);
-        result.push_back(aux);
+  // Maximum dimensionality the memoized neighborhood table covers.
+  constexpr int MAX_NEIGHBOORHOOD_DIM = 6;
+
+  // Full 3^d {0, +-1} offset neighborhood for d dims (the d==0 base yields the
+  // single empty offset). The result is a pure function of d, so it is built
+  // once per dimension in a thread-safe magic static and returned by const
+  // reference: identical vectors in the identical lexicographic order (the
+  // first element varies slowest, exactly as the original recursion produced),
+  // with zero per-call allocations. The original rebuilt the table on every
+  // call and erased from the front of the vector (O(n^2) shifting); grid_search
+  // calls it once per invocation, and grid_search runs thousands of times per
+  // leaf in the adaptive path.
+  const std::vector<std::vector<int>>& get_full_neighboorhood(int d){
+    static const std::vector<std::vector<std::vector<int>>> all = []{
+      std::vector<std::vector<std::vector<int>>> t(MAX_NEIGHBOORHOOD_DIM + 1);
+      t[0] = {std::vector<int>()};                   // d==0: one empty offset
+      for(int dd = 1; dd <= MAX_NEIGHBOORHOOD_DIM; dd++){
+        std::vector<std::vector<int>> r(1);
+        for(int dim = 0; dim < dd; dim++){
+          std::vector<std::vector<int>> next;
+          next.reserve(r.size() * 3);
+          for(const auto &v : r){
+            for(int o = -1; o <= 1; o++){
+              std::vector<int> w = v;
+              w.push_back(o);
+              next.push_back(std::move(w));
+            }
+          }
+          r = std::move(next);
+        }
+        t[dd] = std::move(r);
       }
-      auto cur = result.begin();
-      for(int i=0; i<n; i++){
-        cur = result.erase(cur);
-      }
-      return(result);
+      return t;
+    }();
+    if(d < 0 || d > MAX_NEIGHBOORHOOD_DIM){
+      throw std::runtime_error("get_full_neighboorhood: dimension out of range");
     }
+    return all[d];
   }
 
+  // Memoization cache for grid_search. Keys are the integer grid indices of an
+  // evaluated position packed into one uint64 (GRID_KEY_BITS per dimension).
+  // Flat open-addressing table with linear probing and a generation counter, so
+  // begin() clears it in O(1) and a slot is live iff its generation matches.
+  //
+  // This is PURE MEMOIZATION over a deterministic eval: any correct key->value
+  // map yields identical results. A hit returns the stored value, a miss
+  // evaluates and stores, and if the table ever filled the insert is skipped
+  // and the value still returned -- only speed is lost, never correctness.
+  struct GridCache {
+    static constexpr size_t CAP = 8192;               // power of two
+    static constexpr size_t MASK = CAP - 1;
+    static constexpr int GRID_KEY_BITS = 10;          // -> indices must be < 1024
+    static constexpr int GRID_KEY_LIMIT = 1 << GRID_KEY_BITS;
+    struct Slot { uint64_t key; uint32_t gen; float value; };
+    std::vector<Slot> slots;                          // sized lazily (CAP once)
+    uint32_t cur_gen = 1;
+    size_t count = 0;                                 // live entries this gen
+
+    // O(1) clear: bump the generation, invalidating every older slot. Called
+    // once per grid_search session to reproduce fresh-cache-per-call semantics.
+    void begin(){
+      if(slots.empty()) slots.resize(CAP);
+      ++cur_gen;
+      if(cur_gen == 0){  // wrapped after 2^32 sessions: full reset
+        for(auto &s : slots){ s = Slot{0, 0, 0.0f}; }
+        cur_gen = 1;
+      }
+      count = 0;
+    }
+
+    void reserve(size_t){ if(slots.empty()) slots.resize(CAP); }
+
+    bool find(uint64_t key, float &out) const {
+      if(slots.empty()) return false;
+      size_t i = (size_t)key & MASK;
+      for(size_t p = 0; p < CAP; p++){
+        const Slot &s = slots[i];
+        if(s.gen != cur_gen) return false;            // empty slot
+        if(s.key == key){ out = s.value; return true; }
+        i = (i + 1) & MASK;
+      }
+      return false;
+    }
+
+    // Insert if absent; skip when full (correctness-neutral: a later miss just
+    // re-evaluates the same deterministic value).
+    void insert(uint64_t key, float value){
+      if(slots.empty()) slots.resize(CAP);
+      if(count >= CAP) return;
+      size_t i = (size_t)key & MASK;
+      for(size_t p = 0; p < CAP; p++){
+        Slot &s = slots[i];
+        if(s.gen != cur_gen){
+          s.key = key; s.gen = cur_gen; s.value = value;
+          count++;
+          return;
+        }
+        if(s.key == key) return;                      // already present
+        i = (i + 1) & MASK;
+      }
+    }
+  };
+
   template <class T>
-  std::vector<float> grid_search(T *func, std::vector<std::vector<float>> *ranges, std::vector<float> cur, float tol=1e-5){
+  std::vector<float> grid_search(T *func, std::vector<std::vector<float>> *ranges, std::vector<float> cur, float tol=1e-5, GridCache *ext_cache=nullptr){
     int n = static_cast<int>(ranges->size());
     for(int i=0; i<n; i++){
       if((cur.at(i)<ranges->at(i).at(0))||(ranges->at(i).at(1)<cur.at(i))){
         throw std::runtime_error("starting point outside the bounds");
       }
     }
-    float minimum = func->eval(cur), value, diff;
+
+    // The cache MUST NOT be shared across grid_search calls that start from
+    // different points. Keys are round((pos - lo) / step), which is injective
+    // only for positions on ONE call's lattice (cur + k*step): two different
+    // off-lattice starting points can round to the same key, and a shared
+    // cache would then hand back a value computed for a different position.
+    // (Verified: sharing one cache across get_params2's best_of restarts
+    // changes the estimation checksum.) So the default is a per-call cache --
+    // thread_local with an O(1) generation reset, so it costs no allocation
+    // after the calling thread's first call.
+    static thread_local GridCache local_cache;
+    GridCache &cache = ext_cache ? *ext_cache : local_cache;
+    cache.begin();
+
+    // Pack the position's integer grid indices into the cache key. The packing
+    // only holds GRID_KEY_BITS per dimension: if a range step were ever refined
+    // far enough for an index to reach GRID_KEY_LIMIT the packed keys would
+    // collide and return another position's memoized value, so the bound is
+    // asserted in debug builds and enforced by falling back to an uncached
+    // evaluation in release builds.
+    bool key_ok = true;
+    auto to_grid_key = [&](const std::vector<float>& pos) -> uint64_t {
+      uint64_t key = 0;
+      key_ok = true;
+      for(int i = 0; i < n; i++){
+        int idx = (int)std::round((pos[i] - ranges->at(i).at(0)) / ranges->at(i).at(2));
+        assert(idx >= 0 && idx < GridCache::GRID_KEY_LIMIT
+               && "grid_search cache key overflow: range step too fine for GRID_KEY_BITS");
+        if(idx < 0 || idx >= GridCache::GRID_KEY_LIMIT){
+          key_ok = false;
+          return 0;
+        }
+        key |= ((uint64_t)(uint32_t)idx) << (GridCache::GRID_KEY_BITS * i);
+      }
+      return key;
+    };
+
+    auto cached_eval = [&](const std::vector<float>& pos) -> float {
+      uint64_t key = to_grid_key(pos);
+      if(!key_ok) return func->eval(pos);
+      float v;
+      if(cache.find(key, v)) return v;
+      v = func->eval(pos);
+      cache.insert(key, v);
+      return v;
+    };
+
+    float minimum = cached_eval(cur), value, diff;
     std::vector<float> new_pos(n), best_candidate;
-    auto neighbors = get_full_neighboorhood(n);
+    const auto& neighbors = get_full_neighboorhood(n);
 
     while(true){
-      for(auto nb: neighbors){
+      for(const auto& nb: neighbors){
         bool from_top=false, all_zero=true;
         // refresh new_pos
         for(int i=0; i<n; i++){
@@ -101,7 +226,7 @@ namespace sptlz{
         }
         // if new position is in place and not all zero (no movement, same point) calculate and refresh best candidate
         if(!from_top && !all_zero){
-          value = func->eval(new_pos);
+          value = cached_eval(new_pos);
           if(best_candidate.size()==0 || value<best_candidate.at(3)){
             best_candidate = {};
             for(int i=0; i<n; i++){
@@ -179,11 +304,16 @@ namespace sptlz{
   }
 
   float distance(std::vector<float> *p1, std::vector<float> *p2){
+    // pow(x, 2.0) == x*x and pow(c, 0.5) == sqrt(c) are bit-exact under
+    // IEEE-754 (both correctly rounded), so this drops two calls into the
+    // generic transcendental without changing a single result bit. p1 and p2
+    // are the same length by contract, so the bounds checks of at() go too.
     float c = 0.0;
     for(size_t i=0; i<p1->size(); i++){
-      c += static_cast<float>(std::pow(p1->at(i)-p2->at(i), 2.0));
+      float diff = (*p1)[i] - (*p2)[i];
+      c += diff * diff;
     }
-    return(static_cast<float>(std::pow(c, 0.5)));
+    return(std::sqrt(c));
   }
 
   std::vector<float> distances(std::vector<std::vector<float>> *coords, size_t j){
@@ -466,20 +596,22 @@ namespace sptlz{
         strides                                 /* strides for each axis     */
       ));
     }else{
-      py::ssize_t ndim = 2;
-      std::vector<py::ssize_t> shape = {(py::ssize_t)arr->size(), (py::ssize_t)arr->at(0).size()};
-      std::vector<py::ssize_t> strides = {(py::ssize_t)sizeof(T)*shape.at(1), (py::ssize_t)sizeof(T)};
-      std::vector<T> arr1d = as_1d_array(arr);
-
-      // return 2-D NumPy array
-      return py::array(py::buffer_info(
-        arr1d.data(),                          /* data as contiguous array  */
-        sizeof(T),                              /* size of one scalar        */
-        py::format_descriptor<T>::format(),     /* data type                 */
-        ndim,                                   /* number of dimensions      */
-        shape,                                  /* shape of the matrix       */
-        strides                                 /* strides for each axis     */
-      ));
+      // Allocate the numpy array FIRST and copy each row straight into its
+      // buffer. The previous path flattened the vector-of-vectors into an
+      // intermediate std::vector (as_1d_array) and then py::array copied that
+      // buffer AGAIN into freshly allocated numpy memory -- two full copies of
+      // the whole result matrix per estimation call. Same elements, same
+      // row-major order, so the numpy data is byte-identical.
+      py::ssize_t rows = (py::ssize_t)arr->size();
+      py::ssize_t cols = (py::ssize_t)arr->at(0).size();
+      py::array_t<T> out({rows, cols});
+      T* dst = out.mutable_data();
+      size_t k = 0;
+      for(const auto &row : *arr){
+        std::copy(row.begin(), row.end(), dst + k);
+        k += row.size();
+      }
+      return out;
     }
   }
 

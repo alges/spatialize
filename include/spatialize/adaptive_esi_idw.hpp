@@ -17,6 +17,13 @@ namespace sptlz{
   constexpr float DEFAULT_EXPONENT = 2.0f;
   constexpr float DEFAULT_ANISOTROPY = 1.0f;
 
+  // Upper bound on leaf size for which the pairwise weight matrix is
+  // materialised. The matrix costs leaf_size^2 floats per live LOO instance
+  // (one per worker thread), so it is only used where that stays small; larger
+  // leaves compute their distances inline instead. Both paths perform the same
+  // arithmetic in the same order, so the choice never affects results.
+  constexpr int MAX_DIST_POW_N = 1024;   // 1024^2 floats = 4 MB per thread
+
   class LOO2D{
     protected:
       std::vector<float> *values;
@@ -24,15 +31,15 @@ namespace sptlz{
       int n;
       // Per-instance working storage. grid_search calls eval() thousands of
       // times against one instance, and the coordinate differences from the
-      // centroid do NOT depend on the parameters eval() varies -- so they are
-      // computed once in the constructor instead of rebuilt (with a fresh
-      // vector-of-vectors allocation) by sptlz::transform on every call.
+      // centroid are invariant under the parameters eval() varies, so they are
+      // computed once in the constructor.
       std::vector<float> raw_dx, raw_dy;   // coords - centroid (invariant)
       std::vector<float> tr_x, tr_y;       // rotated coords (per eval)
-      // Pairwise pow(dist, exponent), n*n floats. Filled exploiting symmetry
-      // (dist(i,j) == dist(j,i) bit-for-bit, since only the sign of each diff
-      // flips and it is squared), halving the std::pow calls per eval.
+      // Pairwise pow(dist, exponent) for small leaves. Symmetric: dist(i,j)
+      // and dist(j,i) agree bit for bit because only the sign of each
+      // difference flips before it is squared, so one std::pow fills both.
       std::vector<float> dist_pow;
+      bool use_matrix;
 
     public:
       LOO2D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, std::string metric = "mae"){
@@ -48,16 +55,19 @@ namespace sptlz{
         }
         tr_x.resize(n);
         tr_y.resize(n);
-        dist_pow.resize((size_t)n * (size_t)n);
+        use_matrix = (n <= MAX_DIST_POW_N);
+        if(use_matrix){
+          dist_pow.resize((size_t)n * (size_t)n);
+        }
       }
 
       float eval(const std::vector<float>& X){
         float r = 0.0;
 
-        // 2D rotation inlined, coefficients computed in the IDENTICAL
-        // expression order as utils.hpp transform(): r1 = a_f*cos_phi,
-        // r2 = -a_f*sin_phi, r3 = sin_phi, r4 = cos_phi, applied to the same
-        // (coord - centroid) differences.
+        // 2D rotation with anisotropy factor a_f on the x component, applied
+        // to the centroid-relative coordinates. Coefficients follow
+        // utils.hpp transform() term for term; float addition is not
+        // associative, so that ordering is load-bearing.
         const float phi = sptlz::deg_to_rad(X[1]);
         const float cos_phi = std::cos(phi);
         const float sin_phi = std::sin(phi);
@@ -70,30 +80,38 @@ namespace sptlz{
           tr_y[i] = m10 * raw_dx[i] + m11 * raw_dy[i];
         }
 
-        // Same sum-of-squares + sqrt + std::pow chain the old
-        // distance()/std::pow pair produced, just computed once per unordered
-        // pair instead of twice.
         const float exponent = X[0];
-        for(int i=0; i<n; i++){
-          for(int j=i+1; j<n; j++){
-            float dx = tr_x[i] - tr_x[j];
-            float dy = tr_y[i] - tr_y[j];
-            float dist = std::sqrt(dx*dx + dy*dy);
-            float dp = std::pow(dist, exponent);
-            dist_pow[(size_t)i*n + j] = dp;
-            dist_pow[(size_t)j*n + i] = dp;
+        if(use_matrix){
+          for(int i=0; i<n; i++){
+            for(int j=i+1; j<n; j++){
+              const float dx = tr_x[i] - tr_x[j];
+              const float dy = tr_y[i] - tr_y[j];
+              const float dp = std::pow(std::sqrt(dx*dx + dy*dy), exponent);
+              dist_pow[(size_t)i*n + j] = dp;
+              dist_pow[(size_t)j*n + i] = dp;
+            }
           }
         }
 
-        #ifdef _OPENMP
-        #pragma omp parallel for reduction(+:r) schedule(static)
-        #endif
+        // No parallel region here: eval() is called from post_process's
+        // per-leaf parallel loop, where OpenMP's default single active level
+        // leaves a nested region without threads anyway. Keeping the loop
+        // serial also fixes the summation order of `r`, which a threaded
+        // reduction would leave dependent on the thread count.
         for(int i=0; i<n; i++){
           float sum_w = 0.0;
           float est = 0.0;
           for(int j=0;j<n;j++){
             if(j!=i){
-              float wj = 1.0f/(EPSILON + dist_pow[(size_t)i*n + j]);
+              float dp;
+              if(use_matrix){
+                dp = dist_pow[(size_t)i*n + j];
+              }else{
+                const float dx = tr_x[i] - tr_x[j];
+                const float dy = tr_y[i] - tr_y[j];
+                dp = std::pow(std::sqrt(dx*dx + dy*dy), exponent);
+              }
+              float wj = 1.0f/(EPSILON + dp);
               sum_w += wj;
               est += wj*(*values)[j];
             }
@@ -116,12 +134,12 @@ namespace sptlz{
       std::vector<float> *values;
       bool use_mse;  // true for MSE, false for MAE
       int n;
-      // Same rationale as LOO2D: centroid differences are invariant across the
-      // eval() calls grid_search makes, so they are computed once here rather
-      // than rebuilt by sptlz::transform per call.
+      // As in LOO2D: centroid differences are invariant across eval() calls,
+      // so they are computed once in the constructor.
       std::vector<float> raw_dx, raw_dy, raw_dz;
       std::vector<float> tr_x, tr_y, tr_z;
-      std::vector<float> dist_pow;
+      std::vector<float> dist_pow;   // see LOO2D::dist_pow
+      bool use_matrix;
 
     public:
       LOO3D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, std::string metric = "mae"){
@@ -140,16 +158,18 @@ namespace sptlz{
         tr_x.resize(n);
         tr_y.resize(n);
         tr_z.resize(n);
-        dist_pow.resize((size_t)n * (size_t)n);
+        use_matrix = (n <= MAX_DIST_POW_N);
+        if(use_matrix){
+          dist_pow.resize((size_t)n * (size_t)n);
+        }
       }
 
       float eval(const std::vector<float>& X){
         float r = 0.0;
 
-        // 3D rotation inlined in the IDENTICAL expression order as
-        // utils.hpp transform(): the nine coefficients are built first, then
-        // rows 2 and 3 are scaled by the anisotropy ratios (params[3],
-        // params[4]) -- exactly as transform() does with r4..r9 *= ...
+        // 3D rotation from azimuth, dip and plunge, with rows 2 and 3 scaled
+        // by the two anisotropy ratios. Coefficients follow utils.hpp
+        // transform() term for term, including the order of the scaling.
         const float azim = sptlz::deg_to_rad(X[1]);
         const float dip = sptlz::deg_to_rad(X[2]);
         const float plunge = sptlz::deg_to_rad(X[3]);
@@ -169,27 +189,39 @@ namespace sptlz{
         }
 
         const float exponent = X[0];
-        for(int i=0; i<n; i++){
-          for(int j=i+1; j<n; j++){
-            float dx = tr_x[i] - tr_x[j];
-            float dy = tr_y[i] - tr_y[j];
-            float dz = tr_z[i] - tr_z[j];
-            float dist = std::sqrt(dx*dx + dy*dy + dz*dz);
-            float dp = std::pow(dist, exponent);
-            dist_pow[(size_t)i*n + j] = dp;
-            dist_pow[(size_t)j*n + i] = dp;
+        if(use_matrix){
+          for(int i=0; i<n; i++){
+            for(int j=i+1; j<n; j++){
+              const float dx = tr_x[i] - tr_x[j];
+              const float dy = tr_y[i] - tr_y[j];
+              const float dz = tr_z[i] - tr_z[j];
+              const float dp = std::pow(std::sqrt(dx*dx + dy*dy + dz*dz), exponent);
+              dist_pow[(size_t)i*n + j] = dp;
+              dist_pow[(size_t)j*n + i] = dp;
+            }
           }
         }
 
-        #ifdef _OPENMP
-        #pragma omp parallel for reduction(+:r) schedule(static)
-        #endif
+        // No parallel region here: eval() is called from post_process's
+        // per-leaf parallel loop, where OpenMP's default single active level
+        // leaves a nested region without threads anyway. Keeping the loop
+        // serial also fixes the summation order of `r`, which a threaded
+        // reduction would leave dependent on the thread count.
         for(int i=0; i<n; i++){
           float sum_w = 0.0;
           float est = 0.0;
           for(int j=0;j<n;j++){
             if(j!=i){
-              float wj = 1.0f/(EPSILON + dist_pow[(size_t)i*n + j]);
+              float dp;
+              if(use_matrix){
+                dp = dist_pow[(size_t)i*n + j];
+              }else{
+                const float dx = tr_x[i] - tr_x[j];
+                const float dy = tr_y[i] - tr_y[j];
+                const float dz = tr_z[i] - tr_z[j];
+                dp = std::pow(std::sqrt(dx*dx + dy*dy + dz*dz), exponent);
+              }
+              float wj = 1.0f/(EPSILON + dp);
               sum_w += wj;
               est += wj*(*values)[j];
             }
@@ -288,10 +320,9 @@ namespace sptlz{
           r1 = a_f*cos_phi; r2 = -a_f*sin_phi; r3 = sin_phi; r4 = cos_phi;
         }
 
-        // Transformed sample coordinates and values, extracted once into flat
-        // contiguous arrays. The inner (location x sample) loop then reads
-        // adjacent floats instead of chasing vector-of-vectors pointers for
-        // every pair.
+        // Transformed sample coordinates and values in flat contiguous
+        // arrays, so the (location x sample) loop below reads adjacent
+        // floats.
         const int ns = (int)samples_id->size();
         std::vector<float> tcx(ns), tcy(ns), sv(ns);
         std::vector<float> tcz(is_3d ? ns : 0);
@@ -488,29 +519,27 @@ namespace sptlz{
         bool interrupted = false;
         const int n_trees = static_cast<int>(mondrian_forest.size());
 
-        // Pre-draw one seed per tree sequentially from the shared engine
-        // *before* entering the parallel region. Concurrent threads must
-        // never read/write the same std::mt19937 instance (that would be a
-        // data race, silently corrupting the sequence and making results
-        // depend on thread scheduling instead of `seed`), so each iteration
-        // below gets its own independent, deterministically-seeded engine.
+        // One seed per tree, drawn sequentially from the shared engine. A
+        // std::mt19937 must never be read or written by two threads at once:
+        // that races, corrupting the sequence and making results depend on
+        // thread scheduling rather than on `seed`. Each tree therefore gets
+        // its own independent, deterministically-seeded engine below.
         std::uniform_int_distribution<unsigned int> uni_int;
         std::vector<unsigned int> tree_seeds(n_trees);
         for(int i=0; i<n_trees; i++){
           tree_seeds[i] = uni_int(this->my_rand);
         }
 
-        // Pre-draw every leaf's grid_search starting values in a sequential
-        // pass, so the parallel loop below can process leaves in ANY order
-        // without touching an RNG.
+        // Every leaf's grid_search starting values are drawn up front, in a
+        // sequential pass, so the parallel loop below can take leaves in any
+        // order without touching a shared RNG.
         //
-        // The draws come from a PER-TREE engine seeded with tree_seeds[i] and
-        // are consumed in ascending leaf order -- exactly the engine and
-        // exactly the order the previous per-tree `leaf_rand` used. get_params2
-        // consumes best_of(3) * n_params values, and only for leaves holding at
-        // least 2 samples (the 0- and 1-sample branches return before drawing),
-        // so the sequence produced here is identical value-for-value to the
-        // sequence the serial-per-tree version consumed.
+        // Each tree draws from its own engine seeded with tree_seeds[i],
+        // consumed in ascending leaf order. get_params2 takes
+        // best_of(3) * n_params values per leaf, and only for leaves holding
+        // at least two samples: the 0- and 1-sample branches return before
+        // drawing. Keeping that pattern here is what makes results a function
+        // of `seed` alone rather than of thread scheduling.
         const int n_params = (coords.at(0).size() == 2) ? 3 : 6;
         const int draws_per_leaf = 3 * n_params;
         std::vector<std::vector<std::vector<float>>> pre_randoms(n_trees);
@@ -531,11 +560,11 @@ namespace sptlz{
           }
         }
 
-        // Flatten every (tree, leaf) pair into one work list and schedule the
-        // largest leaves first. Leaf cost grows with leaf size, so without this
-        // a single huge leaf can be picked up last and leave every other thread
-        // idle waiting on it. Reordering is safe precisely because the random
-        // starting values are pre-drawn and addressed by (tree, leaf).
+        // Every (tree, leaf) pair is one work item, largest leaves first.
+        // Leaf cost grows with leaf size, so scheduling a huge leaf last would
+        // leave the other threads idle waiting on it. Reordering is safe
+        // because the random starting values are drawn up front and addressed
+        // by (tree, leaf).
         struct LeafWork { int tree_idx, leaf_idx, leaf_size; };
         std::vector<LeafWork> work_items;
         for(int i = 0; i < n_trees; i++){
@@ -581,13 +610,11 @@ namespace sptlz{
 
           mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values, &pre_randoms[i][j]);
 
-          // NO Python C API here. The binding never releases the GIL, so the
-          // calling (OMP master) thread holds it for the whole call; a worker
-          // thread doing gil_scoped_acquire would block forever on a GIL that
-          // is only released when this function returns -- an unconditional
-          // deadlock as soon as more than one thread runs. Workers therefore
-          // only tally completed trees; the master, which already owns the
-          // GIL, is the sole thread that talks to Python.
+          // The Python C API must only be touched by the master thread. The
+          // binding holds the GIL for the whole call, so a worker trying to
+          // acquire it would wait on a lock that is not released until this
+          // function returns. Workers only tally completed trees; the master,
+          // which already owns the GIL, reports on their behalf.
           bool report_here = false;
           int to_report = 0;
           #ifdef _OPENMP
@@ -624,9 +651,9 @@ namespace sptlz{
           throw std::runtime_error("Computation interrupted by user");
         }
 
-        // Flush the ticks for trees that finished on worker threads after the
-        // master's last visit, so the callback still sees exactly one inform
-        // per tree (the Python handler counts calls, not values).
+        // Trees finished by workers after the master's last visit are
+        // reported here, so the callback receives exactly one inform per tree
+        // (the Python handler counts calls, not values).
         for(int t=0; t<pending_informs; t++){
           progress->inform(++trees_done);
         }

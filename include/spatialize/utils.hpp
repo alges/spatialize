@@ -50,15 +50,14 @@ namespace sptlz{
   // Maximum dimensionality the memoized neighborhood table covers.
   constexpr int MAX_NEIGHBOORHOOD_DIM = 6;
 
-  // Full 3^d {0, +-1} offset neighborhood for d dims (the d==0 base yields the
-  // single empty offset). The result is a pure function of d, so it is built
-  // once per dimension in a thread-safe magic static and returned by const
-  // reference: identical vectors in the identical lexicographic order (the
-  // first element varies slowest, exactly as the original recursion produced),
-  // with zero per-call allocations. The original rebuilt the table on every
-  // call and erased from the front of the vector (O(n^2) shifting); grid_search
-  // calls it once per invocation, and grid_search runs thousands of times per
-  // leaf in the adaptive path.
+  // Full 3^d {0, +-1} offset neighborhood for d dims (d==0 yields the single
+  // empty offset), in lexicographic order with the first element varying
+  // slowest.
+  //
+  // The table is a pure function of d, so it is built once per dimension in a
+  // thread-safe magic static and handed out by const reference. grid_search
+  // needs it on every invocation and runs thousands of times per leaf in the
+  // adaptive path, so building it per call would dominate.
   const std::vector<std::vector<int>>& get_full_neighboorhood(int d){
     static const std::vector<std::vector<std::vector<int>>> all = []{
       std::vector<std::vector<std::vector<int>>> t(MAX_NEIGHBOORHOOD_DIM + 1);
@@ -97,7 +96,11 @@ namespace sptlz{
   // evaluates and stores, and if the table ever filled the insert is skipped
   // and the value still returned -- only speed is lost, never correctness.
   struct GridCache {
-    static constexpr size_t CAP = 8192;               // power of two
+    // Sized so a whole grid_search session fits: at 8192 slots the 3D search
+    // (six parameters, 3^6-1 neighbours per step) filled the table and stopped
+    // memoizing partway through, measurably slowing it. 64K slots is 1 MB per
+    // thread.
+    static constexpr size_t CAP = 65536;              // power of two
     static constexpr size_t MASK = CAP - 1;
     static constexpr int GRID_KEY_BITS = 10;          // -> indices must be < 1024
     static constexpr int GRID_KEY_LIMIT = 1 << GRID_KEY_BITS;
@@ -304,10 +307,10 @@ namespace sptlz{
   }
 
   float distance(std::vector<float> *p1, std::vector<float> *p2){
-    // pow(x, 2.0) == x*x and pow(c, 0.5) == sqrt(c) are bit-exact under
-    // IEEE-754 (both correctly rounded), so this drops two calls into the
-    // generic transcendental without changing a single result bit. p1 and p2
-    // are the same length by contract, so the bounds checks of at() go too.
+    // Squaring and sqrt directly rather than through std::pow: under IEEE-754
+    // both are correctly rounded, so pow(x, 2.0) == x*x and pow(c, 0.5) ==
+    // sqrt(c) bit for bit, at a fraction of the cost. p1 and p2 have equal
+    // length by contract, so indexing is unchecked.
     float c = 0.0;
     for(size_t i=0; i<p1->size(); i++){
       float diff = (*p1)[i] - (*p2)[i];
@@ -596,12 +599,10 @@ namespace sptlz{
         strides                                 /* strides for each axis     */
       ));
     }else{
-      // Allocate the numpy array FIRST and copy each row straight into its
-      // buffer. The previous path flattened the vector-of-vectors into an
-      // intermediate std::vector (as_1d_array) and then py::array copied that
-      // buffer AGAIN into freshly allocated numpy memory -- two full copies of
-      // the whole result matrix per estimation call. Same elements, same
-      // row-major order, so the numpy data is byte-identical.
+      // Allocate the numpy array, then copy each row straight into its
+      // buffer: a single copy of the matrix, in row-major order. Estimation
+      // result matrices reach several MB, so an intermediate flat buffer
+      // would double the copying for no benefit.
       py::ssize_t rows = (py::ssize_t)arr->size();
       py::ssize_t cols = (py::ssize_t)arr->at(0).size();
       py::array_t<T> out({rows, cols});

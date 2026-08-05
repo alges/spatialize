@@ -7,6 +7,9 @@
 #include <string>
 #include <functional>
 #include <stdexcept>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "utils.hpp"
 #include "callback_logging.hpp"
 
@@ -139,9 +142,12 @@ namespace sptlz{
 				}
 			}
 
-			int search_leaf(std::vector<float> point){
+			// `point` is const-ref: this recurses once per tree level and is
+			// called once per (location, tree), so a by-value parameter would
+			// copy the vector at every level of every descent.
+			int search_leaf(const std::vector<float>& point){
 				if(leaf_id<0){
-					if(point.at(axis) < cut){
+					if(point[axis] < cut){
 						return(left->search_leaf(point));
 					}else{
 						return(right->search_leaf(point));
@@ -271,20 +277,32 @@ namespace sptlz{
 					if((cur_node->left==NULL) && (cur_node->right==NULL)){
 						cur_node->leaf_id = (int) this->leaves.size();
 						this->leaves.push_back(cur_node);
-						this->samples_by_leaf.push_back({});
-						this->leaf_params.push_back({});
 					}else{
 						bft.push(cur_node->left);
 						bft.push(cur_node->right);
 					}
 				}
+				// one allocation per collection; every inner vector starts empty
+				this->samples_by_leaf.resize(this->leaves.size());
+				this->leaf_params.resize(this->leaves.size());
 
-				// assign samples to leafs and inverse too
-				int aux;
+				// Assign samples to leaves, and the inverse mapping. Two
+				// passes: the first records each sample's leaf and counts the
+				// samples per leaf, the second fills lists reserved at their
+				// exact size. search_leaf is deterministic and consumes no RNG,
+				// so splitting the work across passes has no side effects.
+				std::vector<int> leaf_count(this->leaves.size(), 0);
+				this->leaf_for_sample.resize(coords->size());
 				for(size_t i=0; i<coords->size(); i++){
-					aux = search_leaf(coords->at(i));
-					this->samples_by_leaf.at(aux).push_back(static_cast<int>(i));
-					this->leaf_for_sample.push_back(aux);
+					const int aux = search_leaf(coords->at(i));
+					this->leaf_for_sample[i] = aux;
+					leaf_count[aux]++;
+				}
+				for(size_t j=0; j<this->leaves.size(); j++){
+					this->samples_by_leaf[j].reserve(leaf_count[j]);
+				}
+				for(size_t i=0; i<coords->size(); i++){
+					this->samples_by_leaf[this->leaf_for_sample[i]].push_back(static_cast<int>(i));
 				}
   			}
 
@@ -300,13 +318,20 @@ namespace sptlz{
 			   std::vector<std::vector<float>>().swap(this->leaf_params);
 			}
 
-  		int search_leaf(std::vector<float> point){
-  			auto bbox = root->bbox;
+  		int search_leaf(const std::vector<float>& point){
+  			// Every binding builds the tree bbox with
+  			// samples_coords_bbox(samples, queries), so all samples and all
+  			// query locations lie inside it by construction. Callers use the
+  			// returned id directly as an index, so a violation would be heap
+  			// corruption rather than a recoverable error: the invariant is
+  			// asserted in debug builds and assumed in release.
+#ifndef NDEBUG
+  			const auto& rbb = root->bbox;
   			for(size_t i=0; i<point.size(); i++){
-  				if((point.at(i) < bbox.at(i).at(0)) || (bbox.at(i).at(1) < point.at(i))){
-  					return(-1);
-  				}
+  				assert(point[i] >= rbb[i][0] && point[i] <= rbb[i][1]
+  				       && "search_leaf: point outside tree bbox -- invariant violated");
   			}
+#endif
   			return(root->search_leaf(point));
   		}
 
@@ -440,9 +465,12 @@ namespace sptlz{
 
 			std::vector<std::vector<float>> estimate(std::vector<std::vector<float>> *locations){
 				std::stringstream json;
-				std::vector<std::vector<float>> results(locations->size());
-				std::vector<std::vector<int>> locations_by_leaf;
-				int aux, n = static_cast<int>(mondrian_forest.size());
+				int n = static_cast<int>(mondrian_forest.size());
+				// results[location][tree], pre-sized and pre-filled with NAN.
+				// Indexing by tree rather than appending is what makes the loop
+				// below safe to run concurrently, and it leaves empty leaves
+				// carrying NAN with no work.
+				std::vector<std::vector<float>> results(locations->size(), std::vector<float>(n, NAN));
                 sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
                 sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
 
@@ -450,36 +478,108 @@ namespace sptlz{
 
 				progress->init(n, 1);
 
+				bool interrupted = false;
+				int trees_done = 0;
+				int pending_informs = 0;
+
+				// The loop over trees is independent per tree: each reads its
+				// own tree and writes a disjoint column of results.
+				#ifdef _OPENMP
+				#pragma omp parallel for schedule(dynamic, 1) shared(interrupted)
+				#endif
 				for(int i=0; i<n; i++){
+					#ifdef _OPENMP
+					if(interrupted) continue;
+					#endif
 					// get tree
 					auto mt = mondrian_forest.at(i);
-					locations_by_leaf = std::vector<std::vector<int>>(mt->leaves.size());
+					const size_t n_leaves = mt->leaves.size();
+					const size_t n_locs = locations->size();
 
-					// join all locations for same leaf
-					for(size_t j=0; j<locations->size(); j++){
-						aux = mt->search_leaf(locations->at(j));
-						locations_by_leaf.at(aux).push_back(static_cast<int>(j));
+					// Per-thread scratch, reused across the trees this thread
+					// handles; one tree is live per thread at a time. Each
+					// buffer is fully rewritten before it is read.
+					static thread_local std::vector<int> loc_leaf;
+					static thread_local std::vector<int> leaf_count;
+					static thread_local std::vector<std::vector<int>> locations_by_leaf;
+					static thread_local std::vector<int> leaf_cursor;
+
+					// Group locations by leaf. Two passes: count per leaf, then
+					// fill lists sized exactly, preserving location order.
+					loc_leaf.resize(n_locs);
+					leaf_count.assign(n_leaves, 0);
+					for(size_t j=0; j<n_locs; j++){
+						const int aux = mt->search_leaf(locations->at(j));
+						loc_leaf[j] = aux;
+						leaf_count[aux]++;
+					}
+					locations_by_leaf.resize(n_leaves);
+					leaf_cursor.assign(n_leaves, 0);
+					for(size_t j=0; j<n_leaves; j++){
+						locations_by_leaf[j].resize(leaf_count[j]);
+					}
+					for(size_t j=0; j<n_locs; j++){
+						const int aux = loc_leaf[j];
+						locations_by_leaf[aux][leaf_cursor[aux]++] = static_cast<int>(j);
 					}
 
 					// make estimation by leaf
 					for(size_t j=0; j<locations_by_leaf.size(); j++){
-						if(mt->samples_by_leaf.at(j).size()==0){
-							for(size_t k=0; k<locations_by_leaf.at(j).size(); k++){
-								results.at(locations_by_leaf.at(j).at(k)).push_back(NAN);
+						if(mt->samples_by_leaf[j].size()!=0){
+							auto predictions = leaf_estimation(&coords, &values, &(mt->samples_by_leaf[j]), locations, &(locations_by_leaf[j]), &(mt->leaf_params[j]));
+							for(size_t k=0; k<locations_by_leaf[j].size(); k++){
+								results[locations_by_leaf[j][k]][i] = predictions[k];
 							}
-						}else{
-							auto predictions = leaf_estimation(&coords, &values, &(mt->samples_by_leaf.at(j)), locations, &(locations_by_leaf.at(j)), &(mt->leaf_params.at(j)));
-							for(size_t k=0; k<locations_by_leaf.at(j).size(); k++){
-								results.at(locations_by_leaf.at(j).at(k)).push_back(predictions.at(k));
-							}
-							if (PyErr_CheckSignals() != 0)  // check after each leaf callback
-								throw pybind11::error_already_set();
 						}
+						// empty leaf: results already hold NAN for these slots
 					}
 
-					if (PyErr_CheckSignals() != 0)  // to allow ctrl-c from user
-                      throw pybind11::error_already_set();
-					progress->inform(static_cast<int>(100.0*(i+1.0)/n));
+					// The Python C API must only be touched by the master
+					// thread. The binding holds the GIL for the whole call, so
+					// a worker trying to acquire it would wait on a lock that
+					// is not released until this function returns. The master
+					// already owns the GIL, so it reports on everyone's behalf.
+					bool report_here = false;
+					int to_report = 0;
+					#ifdef _OPENMP
+					#pragma omp critical
+					#endif
+					{
+						pending_informs++;
+						#ifdef _OPENMP
+						const bool is_master = (omp_get_thread_num() == 0);
+						#else
+						const bool is_master = true;
+						#endif
+						if(is_master && pending_informs > 0){
+							to_report = pending_informs;
+							pending_informs = 0;
+							report_here = true;
+						}
+					}
+					if(report_here){
+						if (PyErr_CheckSignals() != 0){  // to allow ctrl-c from user
+							interrupted = true;
+						}
+						for(int t=0; t<to_report; t++){
+							trees_done++;
+							progress->inform(static_cast<int>(100.0*trees_done/n));
+						}
+					}
+				}
+
+				if(interrupted){
+					delete logger;
+					delete progress;
+					throw pybind11::error_already_set();
+				}
+
+				// Trees finished by workers after the master's last visit are
+				// reported here, so the callback receives exactly n informs
+				// (the Python handler counts calls, not values).
+				for(int t=0; t<pending_informs; t++){
+					trees_done++;
+					progress->inform(static_cast<int>(100.0*trees_done/n));
 				}
 
 				progress->stop();

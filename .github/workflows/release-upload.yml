@@ -103,7 +103,7 @@ jobs:
           overwrite: true
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
 
     permissions:
       contents: write
@@ -111,6 +111,15 @@ jobs:
     strategy:
       matrix:
         python: ["3.13"]
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+
+    env:
+      # Pin build to native arch (Homebrew's libomp is native-arch only).
+      ARCHFLAGS: -arch ${{ matrix.arch }}
 
     steps:
       - name: Checkout repository
@@ -129,10 +138,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install build
+          pip install build delocate
 
       - name: Build project (macOS)
         run: python -m build
+
+      - name: Bundle libomp into the wheel
+        run: |
+          mkdir -p wheelhouse
+          delocate-wheel --require-archs ${{ matrix.arch }} -w wheelhouse dist/*.whl
+          rm -rf dist
+          mv wheelhouse dist
 
       - name: Get WHL
         run: echo "WHEEL_FILE=$(ls dist/*.whl)" >> $GITHUB_ENV
@@ -146,7 +162,7 @@ jobs:
       - name: Upload macOS dist
         uses: actions/upload-artifact@v4
         with:
-          name: dist-macos-${{ matrix.python }}
+          name: dist-macos-${{ matrix.arch }}-${{ matrix.python }}
           path: dist/
           overwrite: true
 

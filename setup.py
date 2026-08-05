@@ -1,3 +1,4 @@
+import glob
 import os
 import sys
 
@@ -9,6 +10,11 @@ with open(os.path.join(os.path.dirname(__file__), 'requirements.txt')) as reqh:
 
 libsptlzsrc = os.path.join('src', 'c++', 'libspatialize.cpp')
 macros = [('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')]
+
+# Header files, tracked as build dependencies.
+libsptlzheaders = sorted(
+    glob.glob(os.path.join('include', 'spatialize', '*.hpp'))
+)
 
 extra_compile_args = ['-std=c++17']
 extra_link_args = []
@@ -45,6 +51,7 @@ libspatialize_extensions = [
     Pybind11Extension(
         "libspatialize",
         sources=[libsptlzsrc],
+        depends=libsptlzheaders,
         include_dirs=[ os.path.join('.', 'include')],#, numpy.get_include()],
         extra_compile_args= extra_compile_args,
         extra_link_args=extra_link_args,

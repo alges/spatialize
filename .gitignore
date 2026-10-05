@@ -198,6 +198,9 @@ cython_debug/
 # IDEA
 .idea/
 
+# VS Code
+.vscode/
+
 # Others
 build/
 .DS_Store

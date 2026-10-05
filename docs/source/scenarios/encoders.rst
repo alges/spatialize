@@ -26,10 +26,19 @@ process of the theory from the processes actually implemented.
        **uniformly** among the dimensions; a child's time is its parent's plus
        :math:`\mathrm{Exp}(\mu(\text{child}))`; splitting continues while the time is below
        :math:`\lambda`. The box is the bounding box of samples and queries.
-   * - ``voronoi/spatialize-v1``
-     - Spatialize's Voronoi partition: the number of nuclei is :math:`\max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))`,
-       at most :math:`n`; for :math:`\alpha \ge 0` the nuclei are random sample points
-       (data-conditioned), for :math:`\alpha < 0` uniform points in the box.
+   * - ``voronoi/book``
+     - The Poisson–Voronoi partition of intensity :math:`\lambda_V` (the theory's Def 2.3.2):
+       generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit
+       volume; each location belongs to the cell of its nearest generator.
+   * - ``voronoi/spatialize-v1-uniform``
+     - Spatialize's Voronoi with ``alpha < 0``: :math:`N \sim \max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))`
+       nuclei, at most :math:`n` (the number of samples), placed uniformly in the box. Apart from
+       the truncation of :math:`N`, this is a Poisson process restricted to the box, i.e.
+       ``voronoi/book`` without generators outside :math:`H`. Two dimensions.
+   * - ``voronoi/spatialize-v1-data``
+     - Spatialize's Voronoi with ``alpha >= 0`` (its default, data-conditioned): the same number of
+       nuclei, drawn among the sample locations (with replacement). Its law depends on the
+       sampling design, so it has no counterpart in the theory. Two dimensions.
 
 ``alpha`` is not the rate :math:`\lambda`
 =========================================
@@ -48,6 +57,25 @@ square :math:`\lambda = 1/(2(1-\alpha))`. Scenarios declare the rate :math:`\lam
 the domain :math:`H`; Spatialize's runner derives ``alpha`` from both
 (:func:`spatialize.scenarios.runners.spatialize.alpha_from_rate`) and pins the box to the declared
 domain by adding the domain's corners as extra queries.
+
+Voronoi: the intensity :math:`\lambda_V` and ``alpha``
+======================================================
+
+Voronoi scenarios declare the book's intensity :math:`\lambda_V`, never ``alpha``. Spatialize's
+``alpha`` sets the expected number of nuclei, :math:`0.5\,n\,|\alpha|`, relative to the number
+of samples :math:`n`; matching it to the expected number of generators of the book's process on
+:math:`H`, :math:`\lambda_V\,|H|` with :math:`|H|` the volume of the box, gives
+
+.. math::
+
+   |\alpha| = \frac{2\,\lambda_V\,|H|}{n},
+
+with the sign set by the profile (negative for ``-uniform``, positive for ``-data``)
+(:func:`spatialize.scenarios.runners.spatialize.alpha_from_intensity`). The same scenario therefore
+means the same partition law whatever the number of samples. Spatialize accepts
+:math:`|\alpha| < 1` only, so a scenario must keep :math:`\lambda_V |H| < n/2`; the runner
+reports an error otherwise. For :math:`N` to be close to Poisson, :math:`\lambda_V |H|` should
+also stay well below :math:`n`, where the truncation at :math:`n` would act.
 
 Measured deviation of ``mondrian/spatialize-v1``
 =================================================

@@ -40,3 +40,8 @@ jobs:
 
       - name: Run example script
         run: python examples/scripted_examples/esi_3d_nongriddata.py
+
+      - name: Run conformance scenarios
+        run: |
+          pip install PyYAML
+          python -m spatialize.scenarios --mode ci

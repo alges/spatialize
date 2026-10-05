@@ -6,8 +6,16 @@ Higher-Order Geostatistics*). Every acceptance criterion is a statistical test w
 level and power; no realisation is compared draw for draw, so any correct implementation of the
 same concepts — not only spatialize — can be tested by plugging in a :class:`~spatialize.scenarios.protocol.Runner`.
 
-Example
--------
+Examples
+--------
+From the command line (exit status 0 when every check passed, 1 otherwise)::
+
+    python -m spatialize.scenarios                  # whole catalogue, fast mode
+    python -m spatialize.scenarios --mode full      # release mode
+    python -m spatialize.scenarios --list           # scenarios and their checks
+
+From Python:
+
 >>> from spatialize import scenarios
 >>> from spatialize.scenarios.runners.spatialize import SpatializeRunner
 >>> report = scenarios.run(scenarios.catalog(), SpatializeRunner(), mode="ci")

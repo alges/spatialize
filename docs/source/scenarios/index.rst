@@ -12,6 +12,19 @@ ensemble estimation over random partitions behaves as the theory says it must. S
 itself, and any other implementation of the same concepts can run it too, by providing a small
 adapter (a :class:`~spatialize.scenarios.protocol.Runner`).
 
+How to run the tests
+====================
+
+.. code-block:: bash
+
+   pip install "spatialize[scenarios]"     # spatialize + PyYAML
+   python -m spatialize.scenarios          # run the whole catalogue (fast mode)
+
+The command prints a report with one line per check and exits with status 0 when every check
+passed and 1 otherwise. Options (``--mode full``, ``--seed``, ``--tier``, ``--id``, ``--list``),
+running from Python or with pytest, running from a source checkout, and how to read the report and
+act on a failure are explained in :doc:`running`.
+
 Why scenarios, and why statistics
 =================================
 
@@ -77,8 +90,9 @@ can pin the version it conforms to.
 .. toctree::
    :maxdepth: 2
 
+   running
    statistics
    encoders
    visual
    catalog
-   running
+   extending

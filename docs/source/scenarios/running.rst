@@ -1,106 +1,198 @@
 .. _scenarios-running:
 
-#######################################
-Running the suite and adding scenarios
-#######################################
+##################
+Running the tests
+##################
 
 .. currentmodule:: spatialize.scenarios
 
-Installation
-============
+There are three equivalent ways to run the scenarios — the command line, Python, and pytest from
+a source checkout. All three run the same checks under the same error budget and print the same
+report.
 
-The suite ships with Spatialize. Reading scenario descriptors needs PyYAML, installed by the
-``scenarios`` extra:
+Quick start
+===========
 
 .. code-block:: bash
 
-   pip install "spatialize[scenarios]"
+   pip install "spatialize[scenarios]"      # spatialize + PyYAML
+   python -m spatialize.scenarios           # run every scenario, fast mode
 
-Running it on Spatialize
-========================
+Expected output (the seed and the p-values change from run to run; the decisions do not):
 
-From Python:
+.. code-block:: text
+
+   runner=spatialize mode=ci seed=978395171 α_suite=0.001 (Holm)
+   scenario/check                     family          p-value     level  expect result
+   E2-mondrian-pair-cooccurrence/c1   gof-closed     1.03e-83   0.00033  reject PASS  — k=8 N=3100 ...
+   S03-anisotropic-field/v1a          equivalence    6.72e-05    0.0005  pass   PASS  — mean=-0.4957 ...
+   S03-anisotropic-field/v1b          one-sided      0.000209     0.001  pass   PASS  — mean=0.6075 ...
+
+   3 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 978395171)
+
+The command exits with status **0** when every check passed and **1** when any check failed, so
+it can be used directly in scripts and continuous integration.
+
+Prerequisites
+=============
+
+**Installed package.** The suite ships inside the ``spatialize`` package (scenario descriptors and
+their data included). The only extra dependency is PyYAML, installed by the ``scenarios`` extra:
+``pip install "spatialize[scenarios]"``, or ``pip install PyYAML`` next to an existing
+installation.
+
+**Source checkout.** Build the compiled library in place, then put the sources on the path:
+
+.. code-block:: bash
+
+   pip install -r requirements.txt PyYAML pytest
+   python setup.py build_ext --inplace --force
+   export PYTHONPATH=.:src/python             # in-place build first, then the sources
+   python -m spatialize.scenarios
+
+``--force`` matters: ``build_ext`` does not track the C++ headers, so without it a change to a
+header alone is not recompiled and you would be testing the old library.
+
+.. note::
+
+   On macOS with a conda Python, importing the compiled library can fail with
+   ``Library not loaded: ...libomp.dylib``. Point the loader at Homebrew's OpenMP:
+   ``export DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib``.
+
+From the command line
+=====================
+
+.. code-block:: text
+
+   python -m spatialize.scenarios [--mode {ci,full}] [--seed N] [--tier {T1,T2,T3}]
+                                  [--id SCENARIO ...] [--alpha A] [--list] [--version]
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Option
+     - Meaning
+   * - ``--mode ci``
+     - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
+       catalogue runs in seconds. Use it on every change.
+   * - ``--mode full``
+     - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
+       before a release or to certify an implementation. Only a ``full`` pass supports claims at
+       that precision (see :doc:`statistics`).
+   * - ``--seed N``
+     - Seed of the run. By default a fresh seed is drawn and printed; pass it back to reproduce a
+       run exactly.
+   * - ``--tier T``
+     - Run only the scenarios of one tier (``T1`` encoder law, ``T2`` estimator properties,
+       ``T3`` geostatistical scenarios).
+   * - ``--id SCENARIO``
+     - Run only this scenario; repeat the option for several. ``--list`` shows the identifiers.
+   * - ``--alpha A``
+     - Family-wise error rate of the run (default :math:`10^{-3}`). Changing it is meant for
+       studying the suite, not for making a run pass.
+   * - ``--list``
+     - List the scenarios and their checks, and exit.
+
+Exit status: ``0`` all checks passed (skipped checks do not count as failures), ``1`` at least one
+check failed, ``2`` usage error (e.g. an unknown scenario).
+
+Examples:
+
+.. code-block:: bash
+
+   python -m spatialize.scenarios --list
+   python -m spatialize.scenarios --tier T1
+   python -m spatialize.scenarios --id S03-anisotropic-field --mode full
+   python -m spatialize.scenarios --mode ci --seed 978395171      # reproduce a reported run
+
+.. important::
+
+   The Holm budget covers **the checks of one run**. Running a subset (``--tier``, ``--id``) gives
+   each check a larger share of the budget than in a full run, so a check can pass alone and fail
+   in the full catalogue when its p-value is close to its level. The full catalogue run is the
+   reference.
+
+From Python
+===========
 
 .. code-block:: python
 
    from spatialize import scenarios
    from spatialize.scenarios.runners.spatialize import SpatializeRunner
 
-   report = scenarios.run(scenarios.catalog(), SpatializeRunner(), mode="ci")
+   selected = scenarios.catalog()                      # or catalog(tier="T3"), catalog(ids=[...])
+   report = scenarios.run(selected, SpatializeRunner(), mode="ci", seed=None)
    print(report.table())
    assert report.passed
 
-:func:`catalog` selects scenarios by tier or id (``catalog(tier="T1")``,
-``catalog(ids=["S03-anisotropic-field"])``). :func:`run` applies one Holm budget to all the
-checks of the call, so the scenarios you run together share the error budget.
+   for o in report.outcomes:                           # one outcome per check
+       print(o.scenario, o.check, o.result.p_value, o.level, o.passed)
 
-From the repository, as part of the test suite:
+:func:`catalog` loads the scenarios and verifies the checksums of their data; :func:`run`
+evaluates them, applies Holm's procedure to all the checks of the call and returns a
+:class:`Report`.
+
+With pytest (source checkout)
+=============================
+
+``tests/scenarios/test_conformance.py`` runs the whole catalogue once and reports each check as a
+separate test, so failures show up in the usual pytest summary. It puts the in-place build and
+``src/python`` on the path itself:
 
 .. code-block:: bash
 
    python -m pytest -q tests/scenarios
-   SPATIALIZE_SCENARIO_MODE=full python -m pytest -q tests/scenarios       # release mode
-   SPATIALIZE_SCENARIO_SEED=12345 python -m pytest -q tests/scenarios      # reproduce a run
+   SPATIALIZE_SCENARIO_MODE=full python -m pytest -q tests/scenarios      # full mode
+   SPATIALIZE_SCENARIO_SEED=978395171 python -m pytest -q tests/scenarios # reproduce a run
+   python -m pytest -q -s tests/scenarios                                # also print the report
 
-Each check appears as one test; a failure message carries the seed, the mode, the p-value, the
-level and the details needed to reproduce it.
+A failing test's message carries everything needed to reproduce it: seed, mode, family, p-value,
+Holm level, expectation and details.
 
-Running it on another implementation
-====================================
+In continuous integration
+=========================
 
-An implementation is tested by providing a :class:`~spatialize.scenarios.protocol.Runner`: an object with a ``name``, a
-``supports(estimator)`` method and a ``members(...)`` method returning the ensemble at the queries
-as an array of shape ``(n_queries, n_members)``. Estimators are described in implementation-free
-terms by an :class:`~spatialize.scenarios.protocol.EstimatorSpec` — encoder profile, the rate :math:`\lambda` and the domain,
-decoder, decoder parameters and empty-cell policy — and each runner maps them to its own
-parameters (for Spatialize, ``alpha`` from :math:`\lambda` and the domain; see :doc:`encoders`).
+Every push to ``develop`` builds the wheel, installs it, and runs
+``python -m spatialize.scenarios --mode ci`` (workflow ``.github/workflows/test-linux.yml``). A
+non-zero exit status fails the job; the seed is in the job log.
 
-.. code-block:: python
+Reading the report
+==================
 
-   import numpy as np
-   from spatialize.scenarios import EstimatorSpec
+.. list-table::
+   :header-rows: 1
+   :widths: 18 82
 
-   class MyRunner:
-       name = "mine"
+   * - Column
+     - Meaning
+   * - ``scenario/check``
+     - Scenario identifier and check identifier, as in the scenario's ``scenario.yaml``.
+   * - ``family``
+     - Test family, which fixes the statistic and the pass rule (:doc:`statistics`).
+   * - ``p-value``
+     - p-value of the check's test in this run.
+   * - ``level``
+     - Level Holm assigned to this p-value within the run (:math:`\alpha/m`,
+       :math:`\alpha/(m-1)`, ... by rank).
+   * - ``expect``
+     - ``pass`` for an ordinary check; ``reject`` for a **negative control**, which passes when
+       its test rejects (it shows the test has the power to see a known deviation).
+   * - ``result``
+     - ``PASS``, ``FAIL`` or ``SKIPPED`` (the runner does not provide that estimator), followed by
+       the check's details: sample sizes, statistics, estimates and margins.
 
-       def supports(self, est: EstimatorSpec) -> bool:
-           return est.decoder in {"idw"} and est.empty_cells == "nan"
+What to do when a check fails
+=============================
 
-       def members(self, est, samples, values, queries, *, n_members, seed):
-           out = np.empty((len(queries), n_members))
-           ...  # one independent partition draw per column
-           return out
-
-Requirements: members must be independent given the data (one partition draw each); empty cells
-must give NaN under the ``"nan"`` policy; checks whose estimator is not supported are reported as
-skipped. Everything else — readings of the law, functionals, tests and the error budget — is
-computed by the suite, identically for every implementation.
-
-Adding a scenario
-=================
-
-1. Create ``catalog/<ID>-<short-name>/scenario.yaml`` with ``id``, ``version``, ``tier``,
-   ``evaluator``, ``book`` (the source in the theory), ``purpose``, ``domain``, the data or truth
-   generator, ``estimators`` and ``checks``. Follow the two existing scenarios.
-2. Pre-register every check: its family, its functional, its margin or bound, the minimum
-   detectable effect :math:`\delta` and the sample sizes per mode, chosen with
-   :func:`stats.budget.required_n` (or :func:`stats.budget.min_sign_test_fields` for sign tests) so
-   that power is at least 0.9 under the budget of the whole catalogue.
-3. Add a negative control when the family could pass vacuously (``expect: reject`` for the profile
-   that must fail).
-4. For pinned data, write the fields with
-   :mod:`spatialize.scenarios.generators.materialise`, which stores ``data/*.npy`` and the
-   ``CHECKSUMS.sha256`` manifest. Never edit a data file by hand: checksums are verified when the
-   catalogue is loaded.
-5. Thresholds are fixed **before** the first reference run and are not tuned afterwards; changing
-   one is a new version of the scenario.
-6. Run the suite in both modes and with several seeds, and record the calibration in the
-   descriptor's ``provenance``.
-
-Not part of the suite: the refactor guard
-=========================================
-
-The repository also has ``tests/refactor_guard``, a bitwise snapshot of the compiled library's
-outputs on fixed inputs. It detects *any* change in the numbers during internal refactors and is
-deliberately the opposite of this suite: it compares realisations, is specific to one platform and
-build, and is not an acceptance criterion. It is not shipped with the package.
+1. **Reproduce it** with the printed seed and mode. Runs are deterministic given the seed.
+2. **Do not reroll the seed until it passes.** With a correct implementation a run fails
+   spuriously with probability at most :math:`10^{-3}`, so a failure is strong evidence of a real
+   change. Rerunning with new seeds until one passes discards exactly that evidence.
+3. **Read the details**: which quantity moved, by how much, and in which direction. Run the
+   scenario in ``--mode full`` for a more precise estimate of the deviation.
+4. If the change is intended (for example, a deliberate change of the partition process), the
+   affected scenario must be revised — a new scenario version with its expectation updated and
+   justified — never its threshold relaxed to accommodate the run.
+5. A **negative control** that fails (its test did not reject) means the test lost power; the
+   passes of that family are not trustworthy until it is fixed.

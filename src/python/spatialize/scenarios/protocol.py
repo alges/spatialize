@@ -19,17 +19,21 @@ class EstimatorSpec:
     id : str
         Name of the estimator inside its scenario (e.g. ``"idw"``).
     encoder : str
-        Partition profile, e.g. ``"mondrian/spatialize-v1"`` or ``"voronoi/spatialize-v1"``
+        Partition profile, e.g. ``"mondrian/spatialize-v1"`` or ``"voronoi/spatialize-v1-uniform"``
         (see the documentation, *Encoder profiles*).
     rate : float or None
-        The book's Mondrian rate/budget λ (Def 2.3.1). Runners derive their own parameters from it
-        and from ``domain`` — for spatialize, ``alpha = 1 - 1/(λ·μ(H))``.
+        The encoder's rate in the book's terms: the Mondrian rate/budget λ (Def 2.3.1), or the
+        intensity λ_V of the Poisson–Voronoi generators, per unit volume (Def 2.3.2). Runners derive
+        their own parameters from it and from ``domain`` — for spatialize's Mondrian,
+        ``alpha = 1 - 1/(λ·μ(H))``; for its Voronoi, ``|alpha| = 2·λ_V·|H|/n``.
     domain : sequence of (low, high)
         The box H the partition is drawn on.
     decoder : str
-        Local interpolator: ``"cell_mean"``, ``"idw"``, ``"adaptive_idw"``, ``"kriging"``, ...
+        Local interpolator, named as spatialize's ``local_interpolator`` (``"idw"``,
+        ``"kriging"``, ``"adaptiveidw"``, ...); other implementations map these names to theirs.
     params : dict
-        Decoder parameters (e.g. ``{"exponent": 2.0}``).
+        Decoder parameters, all of them explicit (e.g. ``{"exponent": 2.0}``); they are
+        pre-registered in the scenario, so runners do not fill in defaults.
     empty_cells : str
         Empty-cell policy; ``"nan"`` (a data-free cell yields NaN) is the only one every runner
         must support.

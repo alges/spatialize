@@ -1,0 +1,30 @@
+id: E2-mondrian-pair-cooccurrence
+version: 1
+tier: T1
+evaluator: pair_cooccurrence
+book: "Def 2.3.1, eq (5.2.2), Fig 2.4g; read through the estimator as in Fig 8.1"
+purpose: >
+  The law of the partition process. For a Mondrian process of rate λ the probability that two
+  locations share a cell is e({x, y}) = exp(−λ‖x − y‖₁). It is read through the estimator itself:
+  with a single datum and empty cells returning NaN, a member is finite exactly when the query
+  falls in the datum's cell, so the fraction of finite members estimates the co-occurrence.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+data:
+  datum: [0.5, 0.5]                 # one observation at the centre, value 1
+  directions: [[1, 0], [1, 1]]      # along an axis and along the diagonal (ℓ1-normalised steps)
+  displacements: [0.05, 0.1, 0.2, 0.3]
+estimators:
+  - {id: idw, encoder: mondrian, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+checks:
+  - id: c1
+    title: "pair co-occurrence = exp(−λ‖h‖₁)"
+    estimator: idw
+    family: gof-closed
+    delta: {ci: 0.05, full: 0.02}   # minimum detectable effect in a co-occurrence
+    n_members: {ci: 3100, full: 19300}   # power ≥ 0.9 at delta, up to 50 tests under Holm (budget.required_n)
+    expect:
+      mondrian/book: pass
+      # Negative control: spatialize's current Mondrian draws the cut axis uniformly and always
+      # splits the root (not Def 2.3.1); measured co-occurrence is 4–21 % below the closed form on
+      # the unit square. The test must reject it — that proves its power.
+      mondrian/spatialize-v1: reject

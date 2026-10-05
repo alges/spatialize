@@ -84,4 +84,5 @@ If you use Spatialize in your research, please cite:
    :maxdepth: 1
    :hidden:
 
+   scenarios/index
    reference/index

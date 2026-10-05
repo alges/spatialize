@@ -29,3 +29,4 @@ Python API
    viz
    data
    result
+   scenarios

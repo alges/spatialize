@@ -593,12 +593,8 @@ def cv_sample_pred_posterior(points, values, xi, **kwargs):
     # get the argument list
     l_args = build_arg_list(points, values, p_xi, kwargs)
     if method == "kfold":
-        # Ensure correct insertion based on expected signature of cross_validate
-        # The original insertion points were -2, -2.
-        # This depends on the structure of l_args from build_arg_list
-        # Assuming k and folding_seed are appended towards the end.
-        l_args.insert(len(l_args) - 1, kwargs["folding_seed"])  # Insert before the last element (often callback)
-        l_args.insert(len(l_args) - 2, k)  # Insert before seed and callback
+        l_args.insert(-2, k)
+        l_args.insert(-2, kwargs["folding_seed"])
 
     # run
     try:

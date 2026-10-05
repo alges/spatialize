@@ -922,7 +922,7 @@ std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<f
     // Restore original thread count
     #ifdef _OPENMP
     if (!parallelize) {
-        omp_set_num_threads(1);
+        omp_set_num_threads(original_threads);
     }
     #endif
 

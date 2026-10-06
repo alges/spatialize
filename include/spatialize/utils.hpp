@@ -419,6 +419,7 @@ namespace sptlz{
       std::vector<T> aux;
 
       for (py::ssize_t i = 0; i < arr->shape()[0]; i++){
+        v.clear();
         for (py::ssize_t j = 0; j < arr->shape()[1]; j++){
           aux.clear();
           for (py::ssize_t k = 0; k < arr->shape()[2]; k++){

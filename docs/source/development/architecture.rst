@@ -158,6 +158,8 @@ The following corrections change numbers.
 - **Voronoi with uniform nuclei** (negative ``alpha``) draws one uniform value per coordinate of each
   nucleus, where earlier versions drew the coordinates :math:`d` times over and kept the last draw.
   The law of the partition is the same, but a given seed yields a different partition.
+- **Co-estimation** (``CUSTOM_COESI``) estimates each variable from its own data. Earlier versions
+  used the first variable's data for all of them.
 
 Reproducibility under parallel execution
 ========================================

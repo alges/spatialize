@@ -176,7 +176,7 @@ namespace sptlz{
 				for(i=0; i<this->esis.size(); i++){
 					auto ind_est = this->esis.at(i)->estimate(&coords);
 					for(j=0; j<ind_est.size(); j++){
-						this->values.at(j).push_back(esis_agg.at(0)(&(ind_est.at(i))));
+						this->values.at(j).push_back(esis_agg.at(i)(&(ind_est.at(j))));  // variable i at location j
 					}
 				}
 
@@ -231,6 +231,7 @@ namespace sptlz{
 				}
 
 				delete logger;
+				delete progress;
 				return(results);
 			}
 
@@ -250,6 +251,7 @@ namespace sptlz{
 				}
 
 				delete logger;
+				delete progress;
 				return(results);
 			}
 

@@ -518,7 +518,7 @@ std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<f
         throw std::runtime_error("[2] values must be a 2 dimensions array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]), m = static_cast<int>(smp_info.shape[0]);
+    int n = static_cast<int>(smp_info.shape[2]), m = static_cast<int>(smp_info.shape[0]);  // coordinates, variables
 
     auto smp = sptlz::ndarray_to_vector_3d(&samples);
     auto val = sptlz::ndarray_to_vector_2d(&values);
@@ -568,7 +568,7 @@ std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<f
             return(sptlz::ndarray_to_vector_1d(&res));
         }, NULL, NULL, _visitor, seed);
     for(int i=0; i<m; i++){
-        coesi->add_variable(smp.at(0), val.at(0), lambda, forest_size, _ind_post,
+        coesi->add_variable(smp.at(i), val.at(i), lambda, forest_size, _ind_post,
             [ind_estimation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<std::vector<float>>* loc, std::vector<float>* params){
                 auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
                 auto _val = sptlz::vector_1d_to_ndarray(val);
@@ -600,7 +600,7 @@ std::tuple<py::object, py::array_t<float>> marginal_loo_custom_coesi(py::array_t
         throw std::runtime_error("[2] values must be a 2 dimensions array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]), m = static_cast<int>(smp_info.shape[0]);
+    int n = static_cast<int>(smp_info.shape[2]), m = static_cast<int>(smp_info.shape[0]);  // coordinates, variables
 
     auto smp = sptlz::ndarray_to_vector_3d(&samples);
     auto val = sptlz::ndarray_to_vector_2d(&values);
@@ -632,7 +632,7 @@ std::tuple<py::object, py::array_t<float>> marginal_loo_custom_coesi(py::array_t
 
     sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, 100, bbox, NULL, NULL, NULL, NULL, _visitor, seed);
     for(int i=0; i<m; i++){
-        coesi->add_variable(smp.at(0), val.at(0), lambda, forest_size, _ind_post, NULL,
+        coesi->add_variable(smp.at(i), val.at(i), lambda, forest_size, _ind_post, NULL,
             [loo, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<float>* params){
                 auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
                 auto _val = sptlz::vector_1d_to_ndarray(val);
@@ -658,7 +658,7 @@ std::tuple<py::object, py::array_t<float>> marginal_kfold_custom_coesi(py::array
         throw std::runtime_error("[2] values must be a 2 dimensions array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]), m = static_cast<int>(smp_info.shape[0]);
+    int n = static_cast<int>(smp_info.shape[2]), m = static_cast<int>(smp_info.shape[0]);  // coordinates, variables
 
     auto smp = sptlz::ndarray_to_vector_3d(&samples);
     auto val = sptlz::ndarray_to_vector_2d(&values);
@@ -690,7 +690,7 @@ std::tuple<py::object, py::array_t<float>> marginal_kfold_custom_coesi(py::array
 
     sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, 100, bbox, NULL, NULL, NULL, NULL, _visitor, creation_seed);
     for(int i=0; i<m; i++){
-        coesi->add_variable(smp.at(0), val.at(0), lambda, forest_size, _ind_post, NULL, NULL,
+        coesi->add_variable(smp.at(i), val.at(i), lambda, forest_size, _ind_post, NULL, NULL,
             [kfold, n](int _k, std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<int>* fld, std::vector<float>* params){
                 auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
                 auto _val = sptlz::vector_1d_to_ndarray(val);

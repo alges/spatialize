@@ -24,6 +24,8 @@ Features
 - Uncertainty quantification: both point estimates and empirical posterior distributions.
 - Works with gridded and non-gridded data, with built-in hyperparameter optimization.
 - Implemented in Python 3.x with a C++ core for performance.
+- Statistically tested for real-world use: a public suite of :doc:`conformance tests
+  <scenarios/index>` holds every estimator to pre-registered geostatistical criteria.
 
 .. _installation:
 

@@ -160,7 +160,7 @@ html_theme_options = {
   ],
 }
 
-# Top navbar links (Home, Documentation, Examples) are rendered by
+# Top navbar links (Home, Documentation, Conformance Tests, Examples) are rendered by
 # docs/source/_templates/navbar-nav.html, which overrides the theme's stock
 # component (see that file for why: it avoids flooding the header with a
 # link per hidden-toctree entry, and uses `pathto()` for same-project links

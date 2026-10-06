@@ -42,7 +42,7 @@ def alpha_from_rate(rate, domain):
 
 
 def alpha_from_intensity(intensity, domain, n_samples):
-    r"""Absolute value of spatialize's Voronoi α from the book's Poisson–Voronoi intensity (Def 2.3.2).
+    r"""Absolute value of spatialize's Voronoi α from the book's Poisson–Voronoi intensity.
 
     spatialize draws :math:`N \sim \max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))` nuclei, at most
     :math:`n`. Matching the expected number of generators of a Poisson process of intensity

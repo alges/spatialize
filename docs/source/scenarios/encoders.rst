@@ -15,7 +15,7 @@ process of the theory from the processes actually implemented.
      - Definition
    * - ``mondrian/book``
      - The Mondrian process of rate (budget) :math:`\lambda` on a box :math:`H` (Roy & Teh 2009;
-       the theory's Def 2.3.1; the ESI paper's Algorithm 1): draw
+       the theory's definition; the ESI paper's Algorithm 1): draw
        :math:`E \sim \mathrm{Exp}(\mu(H))`, :math:`\mu(H) = \sum_i (b_i - a_i)`; if :math:`E` exceeds
        the remaining budget the box is a cell; otherwise cut an axis chosen with probability
        proportional to its side length, at a uniform position, and recurse with budget
@@ -27,7 +27,7 @@ process of the theory from the processes actually implemented.
        :math:`\mathrm{Exp}(\mu(\text{child}))`; splitting continues while the time is below
        :math:`\lambda`. The box is the bounding box of samples and queries.
    * - ``voronoi/book``
-     - The Poisson–Voronoi partition of intensity :math:`\lambda_V` (the theory's Def 2.3.2):
+     - The Poisson–Voronoi partition of intensity :math:`\lambda_V` (as defined in the theory):
        generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit
        volume; each location belongs to the cell of its nearest generator.
    * - ``voronoi/spatialize-v1-uniform``

@@ -2,7 +2,9 @@ id: S03-anisotropic-field
 version: 2
 tier: T3
 evaluator: map_visual
-book: "§12.3.1, Fig 12.1, eqs (12.3.8)–(12.3.9)"
+book:
+  topic: "worked example: anisotropic stationary Gaussian field (exponential covariance, rotated ranges)"
+  draft_2026_09: "§12.3.1, Fig 12.1, eqs (12.3.8)–(12.3.9)"   # the book is a draft: numbers may change
 purpose: >
   An anisotropic stationary Gaussian field, the variogram's own ground. No estimator is told about
   the anisotropy (axis-aligned Mondrian cuts or Voronoi cells, isotropic decoders); the elongation

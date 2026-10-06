@@ -69,7 +69,8 @@ Adding a scenario
 =================
 
 1. Create ``catalog/<ID>-<short-name>/scenario.yaml`` with ``id``, ``version``, ``tier``,
-   ``evaluator``, ``book`` (the source in the theory), ``purpose``, ``domain``, the data or truth
+   ``evaluator``, ``book`` (the source in the theory: a ``topic`` by content and the draft's
+   numbers under a dated key such as ``draft_2026_09``), ``purpose``, ``domain``, the data or truth
    generator, ``estimators`` and ``checks``. Follow the two existing scenarios.
 2. Pre-register every check: its family, its functional, its margin or bound, the minimum
    detectable effect :math:`\delta` and the sample sizes per mode, chosen with

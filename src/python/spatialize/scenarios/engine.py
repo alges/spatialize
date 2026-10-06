@@ -140,7 +140,7 @@ def _expect(check, profile):
 
 def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
                            save_maps=None) -> List[CheckOutcome]:
-    """Pair co-occurrence e({datum, query}) read from members (book Fig 8.1): with a single datum
+    """Pair co-occurrence e({datum, query}) read from the members: with a single datum
     and empty cells as NaN, a member is finite exactly when the query shares the datum's cell."""
     s = sc.spec
     centre = np.asarray(s["data"]["datum"], float)

@@ -22,8 +22,8 @@ class EstimatorSpec:
         Partition profile, e.g. ``"mondrian/spatialize-v1"`` or ``"voronoi/spatialize-v1-uniform"``
         (see the documentation, *Encoder profiles*).
     rate : float or None
-        The encoder's rate in the book's terms: the Mondrian rate/budget λ (Def 2.3.1), or the
-        intensity λ_V of the Poisson–Voronoi generators, per unit volume (Def 2.3.2). Runners derive
+        The encoder's rate in the book's terms: the Mondrian rate/budget λ, or the intensity λ_V
+        of the Poisson–Voronoi generators, per unit volume. Runners derive
         their own parameters from it and from ``domain`` — for spatialize's Mondrian,
         ``alpha = 1 - 1/(λ·μ(H))``; for its Voronoi, ``|alpha| = 2·λ_V·|H|/n``.
     domain : sequence of (low, high)

@@ -37,7 +37,7 @@ def sgf_exponential(rng, points, a1, a2=None, theta_deg=0.0, jitter=1e-8):
 
 
 def vbm(rng, n_cells, mark_sampler, dim=2):
-    """Voronoi block-mark field (Def 12.3.8): returns a function x -> Z(x)."""
+    """Voronoi block-mark field (one mark per Voronoi cell): returns a function x -> Z(x)."""
     centres = rng.random((n_cells, dim))
     marks = mark_sampler(rng, n_cells)
 

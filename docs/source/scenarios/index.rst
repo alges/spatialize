@@ -53,7 +53,10 @@ The scenarios come from the theory of ensemble estimation over random partitions
 Egaña, Díaz, Navarro and Ehrenfeld (*A General Theory of Higher-Order Geostatistics: Random
 Partitions and Distributional Inference for Spatial Fields*) and from the original ensemble spatial
 interpolation paper (Egaña et al., 2021, *Natural Resources Research* 30(5), 3777–3793). Each
-scenario cites the section, equation or figure it comes from. Vocabulary used throughout:
+scenario names the part of the theory it comes from. The theory is still a draft, so the
+documentation cites it by content; each scenario file also records the section, equation and
+figure numbers of the draft it was written against (field ``book``, key ``draft_2026_09``), the
+only place where those numbers live. Vocabulary used throughout:
 
 - **encoder**: the random partition of the domain (Mondrian or Voronoi), whose *law* is fixed
   before seeing any data;

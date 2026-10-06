@@ -2,7 +2,9 @@ id: E2-mondrian-pair-cooccurrence
 version: 1
 tier: T1
 evaluator: pair_cooccurrence
-book: "Def 2.3.1, eq (5.2.2), Fig 2.4g; read through the estimator as in Fig 8.1"
+book:
+  topic: "Mondrian process; closed form of its pair co-occurrence; co-occurrence read through the estimator"
+  draft_2026_09: "Def 2.3.1, eq (5.2.2), Fig 2.4g; Fig 8.1"   # the book is a draft: numbers may change
 purpose: >
   The law of the partition process. For a Mondrian process of rate λ the probability that two
   locations share a cell is e({x, y}) = exp(−λ‖x − y‖₁). It is read through the estimator itself:
@@ -25,6 +27,6 @@ checks:
     expect:
       mondrian/book: pass
       # Negative control: spatialize's current Mondrian draws the cut axis uniformly and always
-      # splits the root (not Def 2.3.1); measured co-occurrence is 4–21 % below the closed form on
+      # splits the root (not the book's Mondrian process); measured co-occurrence is 4–21 % below the closed form on
       # the unit square. The test must reject it — that proves its power.
       mondrian/spatialize-v1: reject

@@ -37,7 +37,8 @@ The ``level`` column is the Holm level each p-value was compared with (:doc:`sta
 E2 — Mondrian pair co-occurrence (T1)
 =====================================
 
-**Source.** Def 2.3.1, eq. (5.2.2) and Fig 2.4g of the theory.
+**Source.** The theory's definition of the Mondrian process and the closed form of its pair
+co-occurrence (a classical property of the Mondrian process; Roy & Teh, 2009).
 
 **Claim.** For a Mondrian process of rate :math:`\lambda`, the probability that two locations
 :math:`x, y` fall in the same cell is
@@ -70,7 +71,7 @@ test that did not reject here would not have the power its "passes" elsewhere cl
 S03 — Anisotropic field, visual criterion V1 (T3)
 =================================================
 
-**Source.** §12.3.1, Fig 12.1, eqs. (12.3.8)–(12.3.9) of the theory.
+**Source.** The theory's worked example of an anisotropic stationary Gaussian field.
 
 **Truth.** A stationary Gaussian field on the unit square with exponential covariance
 :math:`C(h) = \exp(-\sqrt{h^\top A h})`, :math:`A = R_\vartheta^\top \operatorname{diag}(a_1^{-2},
@@ -189,8 +190,9 @@ All ten checks pass, stably across seeds.
 Planned scenarios
 =================
 
-The following are specified and will be added to the catalogue. Section numbers refer to the
-theory.
+The following are specified and will be added to the catalogue. Before a planned scenario is
+implemented, every target value it uses is derived independently (and, where possible, computed
+by its evaluator), rather than copied from the draft of the theory.
 
 **T1 — encoder law** (closed forms; negative controls on ``spatialize-v1``)
 
@@ -202,20 +204,20 @@ theory.
      - source
      - target
    * - E1
-     - Fig 2.1
+     - worked example of a partition of points on a line
      - exact law of the partition of four points on a line under Poisson cuts (8 interval
        groupings with known probabilities; 7 non-interval groupings impossible)
    * - E3
-     - (3.6.17)
+     - Mondrian co-occurrence of a set
      - co-occurrence of three points :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`
    * - E4
-     - Fig 2.4h, (8.4.4)
+     - Poisson–Voronoi co-occurrence
      - Poisson–Voronoi co-occurrence: isotropic in 2D; known decay in 1D
    * - E5
-     - Fig 5.2a, Cor 5.4.4
+     - higher-order cumulants of block-mark fields
      - fourth joint cumulant of four points on a line, maximum 27/128 at :math:`s = \log(4/3)`
    * - E6
-     - Fig 5.2b, Prop 5.5.1
+     - conditional covariance under a random cut
      - conditional covariance under one uniform cut, :math:`-0.21\,\beta^2`
 
 **T2 — estimator properties**
@@ -228,35 +230,35 @@ theory.
      - source
      - check
    * - P1
-     - Thm 4.2.6
+     - convergence of the ensemble
      - spread across independent ensembles decreases as :math:`T^{-1/2}`
    * - P2
-     - Prop 12.3.6
+     - weighted-draw decoder
      - weighted-draw members are data values; their mean equals the IDW estimate
    * - P3
-     - Prop 12.3.7
+     - draw decoder
      - draw frequencies match the share of each value in the cell
    * - P4
-     - Thm 1.5.1
+     - validity of the estimated law
      - estimated CDFs are monotone and within :math:`[0, 1]` (almost sure)
    * - P5
-     - Thm 12.1.1
+     - residual weight of the decoders
      - weights on the data plus residual weight sum to 1; residual weight grows with distance to data
    * - P6
      - locality
      - the law at a location does not change when the other queries change (expected to reject on
        ``spatialize-v1``, whose partition box depends on the queries)
    * - P7
-     - §11.3
+     - covariance of an uncorrelated field
      - estimated covariance of an uncorrelated field matches its closed form
    * - P8
-     - Thm 12.2.1
+     - data-free cells in the block-mark model
      - with ``empty_cells="mark"``, two queries far from the data share one mark per empty cell
    * - P9
-     - Def 2.5.1
+     - block-mark model
      - under preferential sampling, cell-weighted marks are unbiased; data-weighted marks are not
 
-**T3 — geostatistical scenarios** (§12.3 and companions): S01 simulation keeps geometry; S02
+**T3 — geostatistical scenarios** (the theory's worked examples and companions): S01 simulation keeps geometry; S02
 ensemble size floor; S04 zero-inflated field; S05 heavy tail; S06 non-stationary field and order
 relations; S07 exceedance areas; S08 support effect on tonnage; S09 resource categories; S10
 optimal quantile levels; S11 granularity and covariance; S12 edge cases; S13 connectivity.

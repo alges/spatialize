@@ -98,4 +98,5 @@ can pin the version it conforms to.
    encoders
    visual
    catalog
+   file_format
    extending

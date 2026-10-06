@@ -49,19 +49,60 @@ class EstimatorSpec:
 
 @runtime_checkable
 class Runner(Protocol):
-    """What an implementation must provide to be tested by the suite."""
+    """What an implementation must provide to be tested by the suite.
+
+    The suite only asks a runner for ensembles; it computes every reading of the law, functional,
+    test and decision itself, identically for every implementation. Any object with these members
+    is a runner (structural typing); spatialize's is
+    :class:`~spatialize.scenarios.runners.spatialize.SpatializeRunner`.
+
+    Attributes
+    ----------
+    name : str
+        Name of the implementation, shown in the report.
+    """
 
     name: str
 
     def supports(self, estimator: EstimatorSpec) -> bool:
-        """Whether this implementation provides the estimator (unsupported checks are skipped)."""
+        """Whether this implementation provides the estimator.
+
+        Parameters
+        ----------
+        estimator : EstimatorSpec
+            Implementation-free description of the estimator.
+
+        Returns
+        -------
+        bool
+            ``False`` makes the checks of that estimator be reported as skipped.
+        """
         ...
 
     def members(self, estimator: EstimatorSpec, samples: np.ndarray, values: np.ndarray,
                 queries: np.ndarray, *, n_members: int, seed: int) -> np.ndarray:
-        """Ensemble of the estimator at the queries: array of shape ``(n_queries, n_members)``.
+        """Ensemble of the estimator at the queries.
 
-        Members must be independent given the data (one partition draw each). ``seed`` makes a
-        run reproducible for this implementation; no criterion depends on its value.
+        Parameters
+        ----------
+        estimator : EstimatorSpec
+            The estimator (partition profile, rate, domain, decoder and its parameters).
+        samples : ndarray of shape (n, d)
+            Data locations.
+        values : ndarray of shape (n,)
+            Data values.
+        queries : ndarray of shape (q, d)
+            Prediction locations.
+        n_members : int
+            Number of ensemble members (partition draws).
+        seed : int
+            Seed making the run reproducible for this implementation; no criterion depends on its
+            value.
+
+        Returns
+        -------
+        ndarray of shape (q, n_members)
+            One column per member. Members must be independent given the data (one partition draw
+            each); with ``empty_cells="nan"`` a query in a cell without data is NaN.
         """
         ...

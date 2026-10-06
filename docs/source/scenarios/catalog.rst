@@ -10,33 +10,39 @@ pinned data, ``data/*.npy`` files with a ``CHECKSUMS.sha256`` manifest. The desc
 normative definition of the scenario; this page explains the two scenarios that are implemented
 and lists those that are planned.
 
-Example run (``ci`` mode, seed 12345, about a minute and a half on a multi-core machine):
+Example run (``ci`` mode, seed 12345, about six minutes on a multi-core machine; excerpt):
 
 .. code-block:: text
 
    runner=spatialize mode=ci seed=12345 α_suite=0.001 (Holm)
    scenario/check                                    family          p-value     level  expect result
-   E2-mondrian-pair-cooccurrence/c1                  gof-closed     2.43e-87   6.7e-05  reject PASS  — k=8 N=3100 ...
-   S03-anisotropic-field/v1a                         equivalence    1.51e-12   0.00017  pass   PASS  — mean=-0.2454 se=0.629 ...
-   S03-anisotropic-field/v1b                         one-sided      3.35e-08   0.00025  pass   PASS  — mean=0.6183 se=0.0139 ...
-   S03-anisotropic-field/v1a-aidw                    equivalence     1.6e-14   8.3e-05  pass   PASS  — mean=-1.243 se=0.438 ...
-   S03-anisotropic-field/v1b-aidw                    one-sided      2.31e-25   7.1e-05  pass   PASS  — mean=0.9813 se=0.00634 ...
-   S03-anisotropic-field/v1a-krig                    equivalence    1.95e-14   9.1e-05  pass   PASS  — mean=-0.4098 se=0.485 ...
-   S03-anisotropic-field/v1b-krig                    one-sided      2.36e-14   0.00011  pass   PASS  — mean=0.7514 se=0.0128 ...
-   S03-anisotropic-field/v1a-vor-uniform             equivalence    5.32e-05    0.0005  pass   PASS  — mean=-0.3353 se=1.98 ...
-   S03-anisotropic-field/v1b-vor-uniform             one-sided      1.07e-08    0.0002  pass   PASS  — mean=0.8409 se=0.0372 ...
-   S03-anisotropic-field/v1a-vor-data                equivalence    8.49e-05     0.001  pass   PASS  — mean=-0.1086 se=2.12 ...
-   S03-anisotropic-field/v1b-vor-data                one-sided      4.93e-08   0.00033  pass   PASS  — mean=0.8004 se=0.0362 ...
-   S03-anisotropic-field/v1a-vor-uniform-krig [run]  equivalence    3.28e-14   0.00013  pass   PASS  — mean=-0.3517 se=0.502 ...
-   S03-anisotropic-field/v1b-vor-uniform-krig [run]  one-sided       3.4e-14   0.00014  pass   PASS  — mean=0.749 se=0.013 ...
-   S03-anisotropic-field/v1a-vor-uniform-aidw [run]  equivalence    2.01e-14    0.0001  pass   PASS  — mean=-0.8784 se=0.462 ...
-   S03-anisotropic-field/v1b-vor-uniform-aidw [run]  one-sided      2.39e-21   7.7e-05  pass   PASS  — mean=0.9301 se=0.00924 ...
+   E2-mondrian-pair-cooccurrence/c1                  gof-closed     2.43e-87   3.2e-05  reject PASS  — k=8 N=3100 ...
+   S03-anisotropic-field/v1a                         equivalence    7.86e-23   6.7e-05  pass   PASS  — mean=-0.3027 se=0.472 ...
+   S03-anisotropic-field/v1b                         one-sided      6.41e-12   0.00011  pass   PASS  — mean=0.6097 se=0.0116 ...
+   ...
+   S03-anisotropic-field/v1a-vor-uniform-aidw [run]  equivalence    1.22e-25   4.8e-05  pass   PASS  — mean=-1.079 se=0.363 ...
+   ...
+   S03-anisotropic-field/v4a-idw                     one-sided      4.53e-09   0.00013  pass   PASS  — mean=0.3495 se=0.0207 ...
+   S03-anisotropic-field/v4b-idw                     one-sided      6.08e-28     4e-05  pass   PASS  — mean=2.594 se=0.0915 ...
+   ...
+   S03-anisotropic-field/v4c-vor-uniform-krig [run]  equivalence    8.94e-29   3.8e-05  pass   PASS  — mean=0.005446 se=0.0166 ...
+   ...
+   S03-anisotropic-field/v5-idw                      one-sided             1   0.00033  pass   KNOWN  — mean=0.8461 se=0.00607 ...
+   ...
+   S03-anisotropic-field/v5-krig                     one-sided      3.26e-23   5.9e-05  pass   PASS  — mean=0.956 se=0.00266 ...
+   S03-anisotropic-field/v5-vor-uniform              one-sided             1    0.0005  pass   KNOWN  — mean=0.6674 se=0.0133 ...
+   ...
+   S12-edge-cases/e1-m-idw                           almost-sure           1     exact  pass   PASS  — 0 violations ...
+   ...
+   S12-edge-cases/e4-m-aidw                          almost-sure           1     exact  pass   PASS  — 0 violations ...
+   ...
 
-   15 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 12345)
+   59 passed, 0 failed, 3 known failures, 0 skipped (reproduce with --mode ci --seed 12345)
 
 The ``level`` column is the Holm level each p-value was compared with (:doc:`statistics`). ``[run]``
 marks checks whose estimator is not in the public API yet and was reached through the compiled
-engine's generic entry point (:doc:`extending`).
+engine's generic entry point (:doc:`extending`). ``exact`` marks almost-sure checks, which spend
+no error budget, and ``KNOWN`` a recorded known failure (:doc:`statistics`).
 
 .. _scenario-E2:
 
@@ -85,7 +91,7 @@ a_2^{-2}) R_\vartheta`, ranges :math:`a_1 = 0.45`, :math:`a_2 = 0.09` and orient
 :math:`\vartheta = 30°` — a 5:1 anisotropy, the variogram's own ground.
 
 **Data.** 400 uniformly placed samples and a 40×40 grid of queries (cell centres, row-major),
-drawn **jointly** by Cholesky factorisation so samples and truth are one realisation. Twenty pinned
+drawn **jointly** by Cholesky factorisation so samples and truth are one realisation. Forty pinned
 replicate fields (generator seed 20261005), stored as ``.npy`` with SHA-256 checksums.
 
 **Estimators.** Seven ensembles, none of them told about the anisotropy — cuts are axis-aligned or
@@ -129,14 +135,14 @@ process of rate 5 on the unit square.
 
 **Claim (V1).** The elongation at 30° must nevertheless be *clearly visible* in each estimator's
 point map. Two pre-registered map functionals (:doc:`visual`), the same for every estimator,
-computed on each of the :math:`K = 20` fields:
+computed on each of the :math:`K = 40` fields:
 
 - **v1a — direction** (equivalence, TOST): the orientation error :math:`\theta(\text{map}) - 30°`
   lies within :math:`\pm 10°`.
 - **v1b — strength** (one-sided :math:`t`): the coherence of the map is more than half that of the
   truth, :math:`c(\text{map}) / c(\text{truth}) > 0.5`.
 
-Results (``ci``, seed 12345; mean :math:`\pm` standard error over the 20 fields):
+Results (``ci``, seed 12345; mean :math:`\pm` standard error over the 40 fields):
 
 .. list-table::
    :header-rows: 1
@@ -148,40 +154,40 @@ Results (``ci``, seed 12345; mean :math:`\pm` standard error over the 20 fields)
      - coherence ratio (v1b)
      - p
    * - ``idw``
-     - :math:`-0.2° \pm 0.6°`
-     - :math:`1.5 \cdot 10^{-12}`
-     - :math:`0.62 \pm 0.014`
-     - :math:`3.4 \cdot 10^{-8}`
+     - :math:`-0.3° \pm 0.5°`
+     - :math:`7.9 \cdot 10^{-23}`
+     - :math:`0.61 \pm 0.012`
+     - :math:`6.4 \cdot 10^{-12}`
    * - ``aidw``
-     - :math:`-1.2° \pm 0.4°`
-     - :math:`1.6 \cdot 10^{-14}`
-     - :math:`0.98 \pm 0.006`
-     - :math:`2.3 \cdot 10^{-25}`
+     - :math:`-1.7° \pm 0.3°`
+     - :math:`5.4 \cdot 10^{-27}`
+     - :math:`0.98 \pm 0.007`
+     - :math:`4.0 \cdot 10^{-43}`
    * - ``krig``
-     - :math:`-0.4° \pm 0.5°`
-     - :math:`2.0 \cdot 10^{-14}`
-     - :math:`0.75 \pm 0.013`
-     - :math:`2.4 \cdot 10^{-14}`
+     - :math:`-0.5° \pm 0.4°`
+     - :math:`8.5 \cdot 10^{-25}`
+     - :math:`0.73 \pm 0.013`
+     - :math:`4.9 \cdot 10^{-21}`
    * - ``vor-uniform-idw``
-     - :math:`-0.3° \pm 2.0°`
-     - :math:`5.3 \cdot 10^{-5}`
-     - :math:`0.84 \pm 0.037`
+     - :math:`-0.7° \pm 1.3°`
      - :math:`1.1 \cdot 10^{-8}`
+     - :math:`0.82 \pm 0.027`
+     - :math:`6.9 \cdot 10^{-15}`
    * - ``vor-data-idw``
-     - :math:`-0.1° \pm 2.1°`
-     - :math:`8.5 \cdot 10^{-5}`
-     - :math:`0.80 \pm 0.036`
-     - :math:`4.9 \cdot 10^{-8}`
+     - :math:`-0.4° \pm 1.4°`
+     - :math:`2.8 \cdot 10^{-8}`
+     - :math:`0.79 \pm 0.026`
+     - :math:`3.6 \cdot 10^{-14}`
    * - ``vor-uniform-krig``
-     - :math:`-0.4° \pm 0.5°`
-     - :math:`3.3 \cdot 10^{-14}`
-     - :math:`0.75 \pm 0.013`
-     - :math:`3.4 \cdot 10^{-14}`
+     - :math:`-0.4° \pm 0.4°`
+     - :math:`2.4 \cdot 10^{-24}`
+     - :math:`0.73 \pm 0.013`
+     - :math:`1.4 \cdot 10^{-20}`
    * - ``vor-uniform-aidw``
-     - :math:`-0.9° \pm 0.5°`
-     - :math:`2.0 \cdot 10^{-14}`
-     - :math:`0.93 \pm 0.009`
-     - :math:`2.4 \cdot 10^{-21}`
+     - :math:`-1.1° \pm 0.4°`
+     - :math:`1.2 \cdot 10^{-25}`
+     - :math:`0.91 \pm 0.010`
+     - :math:`2.7 \cdot 10^{-34}`
 
 All fourteen checks pass, stably across seeds. With kriging, the partition barely matters for the
 median map (Mondrian and Voronoi median maps correlate at 0.999 on a field, although their members
@@ -195,15 +201,124 @@ close to global kriging.
    S03, field 13 (``ci``, seed 12345): the truth with its samples and the median map of each
    estimator, on one colour scale. White: the declared 30°; red: the measured orientation.
 
+**Contrast (V5).** A map can show the right direction and still be washed out. V5 compares the
+spread of each estimator's median map with that of the best linear predictor — simple kriging with
+the true covariance, computed from the same data (:doc:`visual`): **v5** passes when
+:math:`\mathrm{std}(\text{map}) / \mathrm{std}(\text{reference}) > 0.9` (one-sided :math:`t` over
+the 40 fields). The threshold was fixed before the criterion was first run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 20 20
+
+   * - estimator
+     - contrast ratio (v5)
+     - p
+     - result
+   * - ``aidw``
+     - :math:`0.96 \pm 0.003`
+     - :math:`6.7 \cdot 10^{-26}`
+     - pass
+   * - ``vor-uniform-aidw``
+     - :math:`0.98 \pm 0.002`
+     - :math:`1.7 \cdot 10^{-31}`
+     - pass
+   * - ``krig``
+     - :math:`0.96 \pm 0.003`
+     - :math:`3.3 \cdot 10^{-23}`
+     - pass
+   * - ``vor-uniform-krig``
+     - :math:`0.96 \pm 0.003`
+     - :math:`1.6 \cdot 10^{-23}`
+     - pass
+   * - ``idw``
+     - :math:`0.85 \pm 0.006`
+     - 1
+     - known failure
+   * - ``vor-uniform-idw``
+     - :math:`0.67 \pm 0.013`
+     - 1
+     - known failure
+   * - ``vor-data-idw``
+     - :math:`0.67 \pm 0.013`
+     - 1
+     - known failure
+
+IDW with exponent 2 is 15 % more washed out than the best linear predictor on this field; the
+public Voronoi IDW, whose weights :math:`1/(1+d^p)` are close to uniform on the unit square, 33 %.
+Both are recorded as known failures (:doc:`statistics`); the threshold is not changed.
+
+**Mondrian blocks averaged away (V4).** Each ensemble member of a Mondrian estimator is made of
+axis-aligned blocks; the median of many members should not keep them. V4 measures *axis-locking*:
+the spectral energy on the coordinate axes against the diagonals of the median map, minus the same
+quantity for the same estimator run on the data rotated 45° about the domain centre and evaluated
+at the same physical points (:func:`~spatialize.scenarios.stats.maps.axis_lock`). Both maps share
+data, decoder and smoothing, so only artefacts tied to the axes remain: a rotation-invariant
+partition (Voronoi) gives 0. Pre-registered with :math:`\delta = 0.5` (log ratio of energies):
+
+- **v4a** (Mondrian estimators): axis-locking of the median map below :math:`\delta`;
+- **v4b** (power check): single members are axis-locked, mean over 5 members per field above 0;
+- **v4c** (calibration, Voronoi estimators): axis-locking of the median map within :math:`\pm\delta`
+  of 0 (TOST) — the functional itself is checked on every run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 22 13 26 15
+
+   * - estimator
+     - median map (v4a / v4c)
+     - p
+     - single members (v4b)
+     - p
+   * - ``idw``
+     - :math:`0.35 \pm 0.021`
+     - :math:`4.5 \cdot 10^{-9}`
+     - :math:`2.59 \pm 0.091`
+     - :math:`6.1 \cdot 10^{-28}`
+   * - ``krig``
+     - :math:`0.28 \pm 0.020`
+     - :math:`6.3 \cdot 10^{-14}`
+     - :math:`2.88 \pm 0.082`
+     - :math:`2.0 \cdot 10^{-31}`
+   * - ``aidw``
+     - :math:`0.37 \pm 0.028`
+     - :math:`1.8 \cdot 10^{-5}`
+     - :math:`2.04 \pm 0.081`
+     - :math:`5.4 \cdot 10^{-26}`
+   * - ``vor-uniform-idw`` (v4c)
+     - :math:`-0.07 \pm 0.087`
+     - :math:`6.7 \cdot 10^{-6}`
+     - —
+     - —
+   * - ``vor-uniform-krig`` (v4c)
+     - :math:`0.01 \pm 0.017`
+     - :math:`8.9 \cdot 10^{-29}`
+     - —
+     - —
+   * - ``vor-uniform-aidw`` (v4c)
+     - :math:`-0.07 \pm 0.021`
+     - :math:`7.7 \cdot 10^{-23}`
+     - —
+     - —
+
+Single members are strongly axis-locked (+2.0 to +2.9) and the Voronoi controls are at 0, so the
+test sees what it is meant to see. At :math:`T = 100` the Mondrian medians keep a residual of about
+0.3 (roughly a third more energy on the axes than in the rotated run): clearly below a small
+ensemble's, within the pre-registered :math:`\delta`, but not zero.
+
 .. note::
 
    **History.** The first version of S03 had only ``idw`` and :math:`K = 6` fields; v1b then passed
    with :math:`p \approx 4 \cdot 10^{-4}`, just below a Holm level of :math:`10^{-3}`. Version 2
    added the other four estimators with the same thresholds, fixed before their first run, and
    raised :math:`K` — first to 12, then to 20 when the Voronoi orientation checks (standard error
-   about 2°) passed close to their levels. More fields buy power; thresholds were never relaxed. Version 3 added kriging and adaptive IDW on
-   the uniform Voronoi profile, which the encoder/decoder refactor made available, again with the
-   same thresholds fixed before their first run.
+   about 2°) passed close to their levels. More fields buy power; thresholds were never relaxed.
+   Version 3 added kriging and adaptive IDW on the uniform Voronoi profile, which the encoder/decoder refactor made available, again with the
+   same thresholds fixed before their first run. Version 4 added V5. Version 5 added V4: the axis-artefact
+   index of the specification (gradient energy near the axes) failed its power check and turned out
+   to measure smoothing — Voronoi controls gave the same values — so it was replaced by axis-locking
+   against a rotated run; its threshold was set by the user knowing diagnostic values on 8 fields,
+   and :math:`K` was raised to 40 when two of its checks lacked power at 20.
 
 .. note::
 
@@ -218,6 +333,53 @@ close to global kriging.
    instead of 0.99 on field 0. Smoothness and contrast are separate properties, for separate
    criteria (contrast ratio, roughness; :doc:`visual`).
 
+.. _scenario-S12:
+
+S12 — Edge cases (T3)
+=====================
+
+**Purpose.** Every estimator must give well-defined output in the configurations real data produce
+and that break naive code. There is no target from the theory: all checks are almost sure, so a
+single violation is a defect.
+
+**Data.** On a Voronoi block-mark field (12 cells, lognormal marks), each of 5 pinned fields
+(20 in ``full``) has 30 data confined to :math:`[0.1, 0.9]^2`, plus 3 duplicated locations with the
+same value and 3 with a different value (36 samples). The queries are a 10×10 grid over the unit
+square — so part of them lie outside the data box — and 5 queries placed exactly on data that are
+not duplicated.
+
+**Estimators.** Nine: IDW, kriging and adaptive IDW on Mondrian partitions (rate 2, about 9 cells)
+and on both Voronoi profiles (intensity 8); :math:`T = 50` members (200 in ``full``).
+
+**Checks** (one outcome per estimator):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 50 42
+
+   * - id
+     - claim
+     - estimators
+   * - e1
+     - runs: no error, one member per partition at every query
+     - all
+   * - e2
+     - no infinite value (finite, or NaN for an empty cell)
+     - all
+   * - e3
+     - finite members within the data range (up to :math:`10^{-5}` × range, float rounding)
+     - positive-weight decoders: IDW and adaptive IDW; not kriging, whose weights can be negative
+   * - e4
+     - at a query on a datum, every member equals the datum (up to :math:`10^{-3}` × range)
+     - exact interpolators: Mondrian IDW, kriging, adaptive IDW; not the public Voronoi IDW, whose
+       weights :math:`1/(1+d^p)` do not interpolate exactly
+
+**Result.** All 31 outcomes pass, across seeds and in ``full`` mode. The first run found a defect:
+adaptive IDW did not return the datum at its own location in about 11 % of the members (median
+error 1.4 %, maximum 20 % of the data range), because the guard against division by zero capped the
+datum's weight below that of close neighbours under large fitted exponents. It was fixed by giving
+a query on a datum that datum's value, as IDW does.
+
 Catalogue status
 ================
 
@@ -226,7 +388,7 @@ values taken from examples of the theory are derived independently (and, where p
 by the evaluator) before a scenario is implemented, because the theory is still a draft.
 
 - **implemented** — in the catalogue and run on every change;
-- **ready** — needs only new evaluators or generators; *(next)* marks the following ones;
+- **ready** — needs only new evaluators or generators;
 - **negative control** — its target is the theory's Mondrian process, which Spatialize does not
   implement (:doc:`encoders`): on Spatialize it can only be a test expected to reject;
 - **blocked / partly ready** — needs a feature not yet in Spatialize or an external baseline.
@@ -357,7 +519,7 @@ by the evaluator) before a scenario is implemented, because the theory is still 
      - —
    * - S12
      - edge cases: few data, duplicates, queries on data and outside the data box
-     - ready (next)
+     - **implemented**
      - —
    * - S13
      - connectivity of high-value bodies
@@ -380,13 +542,14 @@ by the evaluator) before a scenario is implemented, because the theory is still 
      - ready
      - —
    * - V4
-     - axis artefacts averaged away (S03, S11)
-     - ready (next)
-     - —
+     - Mondrian blocks averaged away (S03); S11
+     - **implemented** on S03
+     - S11 for the coarse-partition case
    * - V5
-     - contrast and the "false cure" of coarse partitions (S03, S11)
-     - ready (next)
-     - —
+     - contrast: maps not more washed out than the best linear predictor (S03); the "false cure"
+       of coarse partitions (S11)
+     - **implemented** on S03
+     - S11 for the "false cure"
    * - V6
      - sharp dry-region boundaries (S04)
      - blocked

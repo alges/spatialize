@@ -42,10 +42,21 @@ Map functionals
      - whether an anisotropy is visible, and in which direction
    * - axis-artefact index (:func:`axis_artifact_index`)
      - share of gradient energy within ±5° of the coordinate axes, minus the truth's share
-     - blocks and terraces aligned with the axes
+     - not used: confounded with smoothing (see below)
+   * - axis-locking (:func:`axis_lock`)
+     - spectral energy on the coordinate axes against the diagonals (Hann-tapered, per frequency
+       ring; :func:`axis_diagonal_log_ratio`) of the map, minus the same for the estimator run on
+       the data rotated 45° and evaluated at the same points
+     - blocks and terraces tied to the coordinate axes (criterion V4); 0 for rotation-invariant
+       partitions
    * - contrast ratio (:func:`contrast_ratio`)
      - standard deviation of the map over that of the truth
      - washed-out maps
+   * - contrast against the best linear predictor
+     - standard deviation of the map over that of the simple-kriging map computed with the true
+       covariance from the same data
+       (:func:`spatialize.scenarios.generators.fields.simple_kriging_exponential`)
+     - maps more washed out than any good linear estimate needs to be (criterion V5)
    * - level-set IoU (:func:`level_set_iou`)
      - intersection over union of a thresholded map and the true region
      - shapes of plumes, dry regions, exceeded areas
@@ -53,6 +64,10 @@ Map functionals
      - directional range ratio, roughness, edge sharpness, connectivity (components and Euler
        characteristic over thresholds), halo index, level-curve shape of an estimated covariance
      - see the catalogue
+
+The axis-artefact index is confounded with smoothing: maps of rotation-invariant (Voronoi)
+estimators get the same values as Mondrian ones, and it barely changes between eight and a hundred
+ensemble members. Criterion V4 therefore uses axis-locking instead.
 
 *Calibration of orientation and coherence* (scenario :ref:`S03 <scenario-S03>`, 40×40 grid,
 :math:`\sigma = 2`): the six truth fields of an anisotropy at 30° give orientations 26–29° and

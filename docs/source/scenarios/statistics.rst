@@ -161,6 +161,28 @@ test at this level.
 - ``full`` (before a release, or to certify another implementation): :math:`\delta \approx 0.02`,
   book-sized ensembles and enough fields, slow. Only a ``full`` pass says "about 0.02".
 
+Almost-sure checks and the budget
+=================================
+
+An almost-sure check counts violations of a property that a correct implementation satisfies
+with certainty (an output outside the data range for a positive-weight decoder, an infinite
+value, ...). It is decided exactly — it passes with zero violations — and a correct implementation
+cannot fail it, so its probability of a false failure is zero. It therefore spends **none** of the
+error budget: Holm's procedure is applied to the statistical tests only, and the report shows
+``exact`` in place of a level. Without this, a scenario with many almost-sure checks (such as
+:ref:`S12 <scenario-S12>`) would lower the levels of every statistical test of the run without
+adding any risk of a false alarm.
+
+Known failures
+==============
+
+A pre-registered check that fails on Spatialize documents a finding; the remedy is to fix the code
+or to accept the finding, never to relax the threshold. While a finding stands, the check carries
+``known_failure: <reason>`` in its scenario file. It is still run, inside the Holm budget like any
+other test, and reported as ``KNOWN`` without failing the run. If it starts passing it is reported
+as ``XPASS`` and the run fails, so that the record is updated in the same change that fixed the
+behaviour.
+
 Negative controls
 =================
 
@@ -171,6 +193,11 @@ elsewhere are not to be trusted. The first control of the catalogue is
 :ref:`E2 <scenario-E2>`: the closed-form co-occurrence of the book's Mondrian process tested on
 Spatialize's current Mondrian, which deviates from it by design (:doc:`encoders`); the test rejects
 with :math:`p \approx 10^{-87}` at :math:`N = 3\,100`.
+
+A failed power check is a finding about the test, not about the estimator. The first functional
+tried for criterion V4 failed its check that eight members show more axis artefacts than a hundred,
+and turned out to measure smoothing; it was replaced by a functional whose power check and
+calibration both pass (:ref:`S03 <scenario-S03>`).
 
 Seeds, independence and data
 ============================

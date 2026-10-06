@@ -1,0 +1,69 @@
+id: S12-edge-cases
+version: 1
+tier: T3
+evaluator: edge_cases
+book:
+  topic: "robustness of the estimators in degenerate designs (no target from the theory)"
+  draft_2026_09: null
+purpose: >
+  Every estimator must give well-defined output in the configurations that real data produce and
+  that break naive code: few data, data confined to part of the domain, duplicated locations with
+  equal and with different values, queries outside the data box and queries exactly on a datum.
+  All checks are almost sure: a single violation is a defect.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm_edge_cases
+  n_cells: 12                       # Voronoi block-mark field, one lognormal mark per cell
+  marks: {lognormal: [0.0, 1.0]}
+data:
+  design: {type: uniform, n: 30, box: [[0.1, 0.9], [0.1, 0.9]]}   # data leave a margin of the domain
+  duplicates: {same_value: 3, different_value: 3}                 # 36 samples in all
+  queries: {grid: 10, on_data: 5}   # 10×10 cell centres over the domain + 5 queries on non-duplicated data
+  mode: pinned                      # data/{samples,values,queries,exact}_<k>.npy
+  fields: {ci: 5, full: 20}
+  generator_seed: 20261006
+estimators_T: {ci: 50, full: 200}
+estimators:
+  # Mondrian rate 2 on the unit square: E[#cells] = (1 + 2)² = 9. Voronoi intensity 8 (below n/2).
+  - {id: m-idw, encoder: mondrian, rate: 2.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: m-krig, encoder: mondrian, rate: 2.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
+  - {id: m-aidw, encoder: mondrian, rate: 2.0, decoder: adaptiveidw,
+     params: {metric: mae, parallelize: true}, empty_cells: nan}
+  - {id: vu-idw, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vu-krig, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
+  - {id: vu-aidw, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: adaptiveidw,
+     params: {metric: mae, parallelize: true}, empty_cells: nan}
+  - {id: vd-idw, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vd-krig, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
+  - {id: vd-aidw, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: adaptiveidw,
+     params: {metric: mae, parallelize: true}, empty_cells: nan}
+checks:
+  - id: e1
+    title: "runs: no error, one member per partition at every query"
+    kind: runs
+    family: almost-sure
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
+  - id: e2
+    title: "no infinite values (finite, or NaN for an empty cell)"
+    kind: finite
+    family: almost-sure
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
+  - id: e3
+    title: "positive-weight decoders stay within the data range"
+    kind: convex
+    family: almost-sure
+    tolerance: 1.0e-5               # × data range: float32 rounding of a weighted mean
+    # not kriging: its weights can be negative, so it may leave the data range by design
+    estimators: [m-idw, m-aidw, vu-idw, vu-aidw, vd-idw, vd-aidw]
+  - id: e4
+    title: "exact interpolators return the datum at its location"
+    kind: exact
+    family: almost-sure
+    tolerance: 1.0e-3               # × data range: float32 linear algebra (kriging) and the 1e-10 guard (adaptive IDW)
+    # not the public Voronoi IDW (vu-idw, vd-idw): its weights 1/(1 + d^p) do not interpolate exactly
+    estimators: [m-idw, m-krig, m-aidw, vu-krig, vu-aidw, vd-krig, vd-aidw]
+provenance:
+  design: "2026-10-06: checks, tolerances and estimators fixed before the first run"

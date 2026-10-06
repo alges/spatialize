@@ -1,14 +1,16 @@
-"""spatialize's own Runner — the only module of the suite that imports spatialize's estimators.
+"""Spatialize's own runner — the only module of the suite that imports spatialize's estimators.
 
-The runner holds no list of decoders. It dispatches through spatialize's own facade — the
+The runner holds no list of decoders. It first dispatches through spatialize's public facade (the
 operator table ``lib_spatialize_facade.function_hash_map`` and the argument builder
-``build_arg_list`` used by ``esi_griddata``/``esi_nongriddata`` — so it supports exactly the
-encoder/decoder/dimension combinations spatialize supports. A decoder added to the facade becomes
-testable by naming it in a scenario's ``estimators``; nothing here changes.
+``build_arg_list`` used by ``esi_griddata`` / ``esi_nongriddata``), so everything the public API
+offers is tested the way users run it. Combinations the public API does not offer yet but the
+compiled engine does (e.g. kriging on Voronoi partitions) go through ``libspatialize.run``; the
+report marks them ``[run]``.
 
 Decoder names are spatialize's ``local_interpolator`` names (``"idw"``, ``"kriging"``,
 ``"adaptiveidw"``, ...), and a scenario must declare every decoder parameter explicitly (they are
-pre-registered, so no default is filled in here).
+pre-registered, so no default is filled in here). Rates are translated into spatialize's ``alpha``
+by :func:`alpha_from_rate` (Mondrian) and :func:`alpha_from_intensity` (Voronoi).
 """
 import itertools
 
@@ -33,9 +35,29 @@ _RESERVED = {"alpha", "n_partitions", "seed", "p_process", "local_interpolator",
 
 
 def alpha_from_rate(rate, domain):
-    """spatialize's granularity α from the book's Mondrian rate λ and the box H (ESI paper, eq. 8).
+    r"""Spatialize's Mondrian granularity α from a Mondrian rate λ and a box H.
 
-    λ = 1/(μ(H)(1 − α)), μ(H) = Σ side lengths  ⇒  α = 1 − 1/(λ μ(H)).
+    Parameters
+    ----------
+    rate : float
+        Rate (lifetime) λ of the Mondrian process.
+    domain : sequence of (low, high)
+        The box H.
+
+    Returns
+    -------
+    float
+        :math:`\alpha = 1 - 1/(\lambda\,\mu(H))`, with :math:`\mu(H)` the sum of the box's sides
+        (Egaña et al., 2021, eq. 8).
+
+    Raises
+    ------
+    ValueError
+        If the rate is too small for the box (α ≥ 1).
+
+    Notes
+    -----
+    Inverts λ = 1/(μ(H)(1 − α)).
     """
     mu = float(sum(hi - lo for lo, hi in domain))
     alpha = 1.0 - 1.0 / (float(rate) * mu)
@@ -45,7 +67,25 @@ def alpha_from_rate(rate, domain):
 
 
 def alpha_from_intensity(intensity, domain, n_samples):
-    r"""Absolute value of spatialize's Voronoi α from the book's Poisson–Voronoi intensity.
+    r"""Absolute value of spatialize's Voronoi α from a Poisson–Voronoi intensity.
+
+    Parameters
+    ----------
+    intensity : float
+        Intensity :math:`\lambda_V` of the Voronoi generators, per unit volume.
+    domain : sequence of (low, high)
+        The box H.
+    n_samples : int
+        Number of data, n.
+
+    Returns
+    -------
+    float
+        :math:`|\alpha| = 2\lambda_V |H| / n`; the sign (nuclei uniform in the box or among the data)
+        is set by the encoder profile.
+
+    Notes
+    -----
 
     spatialize draws :math:`N \sim \max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))` nuclei, at most
     :math:`n`. Matching the expected number of generators of a Poisson process of intensity
@@ -58,7 +98,20 @@ def alpha_from_intensity(intensity, domain, n_samples):
 
 
 class SpatializeRunner:
-    """:class:`~spatialize.scenarios.protocol.Runner` for spatialize's compiled estimators."""
+    """:class:`~spatialize.scenarios.protocol.Runner` for spatialize's compiled estimators.
+
+    Supports the encoder profiles in :data:`PROFILES` with ``empty_cells="nan"``, and every decoder
+    the public facade or ``libspatialize.run`` offers for the domain's dimension. The partition box
+    is pinned to the scenario's domain by adding its corners as extra queries.
+
+    Examples
+    --------
+    >>> from spatialize import scenarios
+    >>> from spatialize.scenarios.runners.spatialize import SpatializeRunner
+    >>> report = scenarios.run(scenarios.catalog(ids=["S12-edge-cases"]), SpatializeRunner())
+    >>> report.passed
+    True
+    """
 
     name = "spatialize"
 
@@ -71,7 +124,17 @@ class SpatializeRunner:
         self._lib = libspatialize
 
     def profile(self, encoder):
-        """Encoder profile name (``"mondrian"`` is an alias of ``"mondrian/spatialize-v1"``)."""
+        """Canonical encoder profile name (``"mondrian"`` is an alias of ``"mondrian/spatialize-v1"``).
+
+        Parameters
+        ----------
+        encoder : str
+            Profile as written in a scenario.
+
+        Returns
+        -------
+        str
+        """
         return "mondrian/spatialize-v1" if encoder == "mondrian" else encoder
 
     def _operator(self, est):
@@ -93,8 +156,18 @@ class SpatializeRunner:
         return est.decoder != "adaptiveidw" or len(est.domain) in (2, 3)
 
     def route(self, est):
-        """How the estimator is run: ``"facade"`` (the public API's dispatch, preferred), ``"run"``
-        (``libspatialize.run``, for combinations the public API does not offer yet) or None."""
+        """How the estimator is run.
+
+        Parameters
+        ----------
+        est : EstimatorSpec
+
+        Returns
+        -------
+        {"facade", "run", None}
+            ``"facade"``: the public API's dispatch (preferred); ``"run"``: ``libspatialize.run``,
+            for combinations the public API does not offer yet; None: not supported.
+        """
         if self._operator(est) is not None:
             return "facade"
         if self._engine_supports(est):
@@ -102,9 +175,21 @@ class SpatializeRunner:
         return None
 
     def supports(self, est: EstimatorSpec) -> bool:
+        """Whether :meth:`route` finds a way to run the estimator (see the protocol)."""
         return self.route(est) is not None
 
     def members(self, est, samples, values, queries, *, n_members, seed):
+        r"""Ensemble of the estimator at the queries (see :meth:`Runner.members
+        <spatialize.scenarios.protocol.Runner.members>`).
+
+        Raises
+        ------
+        NotImplementedError
+            If the estimator is not supported.
+        ValueError
+            If a decoder parameter is missing or reserved, or the Voronoi intensity is too large
+            for spatialize (it needs :math:`\lambda_V |H| < n/2`).
+        """
         route = self.route(est)
         if route is None:
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")

@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 3
+version: 5
 tier: T3
 evaluator: map_visual
 book:
@@ -20,7 +20,7 @@ data:
   design: {type: uniform, n: 400}
   grid: 40                          # queries: 40×40 cell centres, row-major
   mode: pinned                      # data/{samples,values,truth}_<k>.npy, drawn jointly by Cholesky
-  fields: {ci: 20, full: 20}
+  fields: {ci: 40, full: 40}
   generator_seed: 20261005
 estimators_T: {ci: 100, full: 300}
 estimators:
@@ -75,6 +75,51 @@ checks:
      family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
   - {id: v1b-vor-uniform-aidw, title: "V1 strength visible (Voronoi uniform, adaptive idw)", estimator: vor-uniform-aidw,
      family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
+  # V4 — Mondrian blocks averaged away. Axis-locking L = axis/diagonal spectral log ratio of the map
+  # minus that of the same estimator on the data rotated 45° about the domain centre (same physical
+  # points, same smoothing): ≈ 0 for rotation-invariant partitions, > 0 for axis-aligned artefacts.
+  # v4a: median map L < 0.5 (Mondrian); v4b (power): single members L > 0 (Mondrian); v4c
+  # (calibration): Voronoi median map L within ±0.5 of 0. δ = 0.5 chosen by the user.
+  - {id: v4a-idw, title: "V4 blocks averaged away (idw)", estimator: idw, family: one-sided,
+     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5}
+  - {id: v4b-idw, title: "V4 power check: single members are axis-locked (idw)", estimator: idw,
+     family: one-sided, functional: axis_lock_members, map: member, rotation_deg: 45.0, members_checked: 5,
+     min_value: 0.0}
+  - {id: v4a-krig, title: "V4 blocks averaged away (krig)", estimator: krig, family: one-sided,
+     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5}
+  - {id: v4b-krig, title: "V4 power check: single members are axis-locked (krig)", estimator: krig,
+     family: one-sided, functional: axis_lock_members, map: member, rotation_deg: 45.0, members_checked: 5,
+     min_value: 0.0}
+  - {id: v4a-aidw, title: "V4 blocks averaged away (aidw)", estimator: aidw, family: one-sided,
+     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5}
+  - {id: v4b-aidw, title: "V4 power check: single members are axis-locked (aidw)", estimator: aidw,
+     family: one-sided, functional: axis_lock_members, map: member, rotation_deg: 45.0, members_checked: 5,
+     min_value: 0.0}
+  - {id: v4c-vor-uniform, title: "V4 calibration: no axis-locking without axis-aligned cells (vor-uniform-idw)",
+     estimator: vor-uniform-idw, family: equivalence, functional: axis_lock, map: point, rotation_deg: 45.0, margin: 0.5}
+  - {id: v4c-vor-uniform-krig, title: "V4 calibration: no axis-locking without axis-aligned cells (vor-uniform-krig)",
+     estimator: vor-uniform-krig, family: equivalence, functional: axis_lock, map: point, rotation_deg: 45.0, margin: 0.5}
+  - {id: v4c-vor-uniform-aidw, title: "V4 calibration: no axis-locking without axis-aligned cells (vor-uniform-aidw)",
+     estimator: vor-uniform-aidw, family: equivalence, functional: axis_lock, map: point, rotation_deg: 45.0, margin: 0.5}
+  # V5 — not washed out: std(median map) >= 0.9 · std(reference), the reference being the simple-
+  # kriging map with the true covariance (the best linear predictor), computed from the same data.
+  - {id: v5-idw, title: "V5 contrast against the best linear predictor (idw)", estimator: idw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
+     known_failure: "IDW with exponent 2 is smoother than the best linear predictor on this field (contrast ratio about 0.84)"}
+  - {id: v5-aidw, title: "V5 contrast against the best linear predictor (aidw)", estimator: aidw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v5-krig, title: "V5 contrast against the best linear predictor (krig)", estimator: krig,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v5-vor-uniform, title: "V5 contrast against the best linear predictor (vor-uniform-idw)", estimator: vor-uniform-idw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
+     known_failure: "the public Voronoi IDW weights data by 1/(1+d^p), close to a cell mean on the unit square (contrast ratio about 0.65)"}
+  - {id: v5-vor-data, title: "V5 contrast against the best linear predictor (vor-data-idw)", estimator: vor-data-idw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
+     known_failure: "the public Voronoi IDW weights data by 1/(1+d^p), close to a cell mean on the unit square (contrast ratio about 0.65)"}
+  - {id: v5-vor-uniform-krig, title: "V5 contrast against the best linear predictor (vor-uniform-krig)", estimator: vor-uniform-krig,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v5-vor-uniform-aidw, title: "V5 contrast against the best linear predictor (vor-uniform-aidw)", estimator: vor-uniform-aidw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
   v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
@@ -89,4 +134,18 @@ provenance:
     2026-10-06: kriging and adaptive IDW on the uniform Voronoi profile, reached through
     libspatialize.run after the encoder/decoder refactor; same pre-registered thresholds, fixed before
     their first run; data unchanged.
+  v4: >
+    2026-10-06: visual criterion V5 (contrast against simple kriging with the true covariance;
+    threshold 0.9 chosen by the user before any run of this criterion; diagnostics had already shown
+    the public Voronoi IDW maps to be smoother than the others). First run: kriging and adaptive IDW
+    pass on both partitions; IDW fails (0.84 Mondrian, 0.65 public Voronoi) — recorded as known
+    failures, threshold unchanged.
+    V4: the specification's axis-artefact index (gradient energy near the axes, bound 0.05) failed its
+    power check (8 vs 100 members) and diagnostics showed it measures smoothing (Voronoi controls gave
+    the same values). Redesigned as axis-locking against a 45°-rotated run (axis_lock); diagnostics on
+    8 fields before fixing the threshold: single Mondrian members +1.8 to +2.8, Mondrian medians at
+    T=100 +0.27 to +0.39, Voronoi ≈ 0 (±0.1). δ = 0.5 chosen by the user with those values known.
+    First run (K = 20): power checks and Voronoi kriging/adaptive IDW calibrations pass; v4a-aidw and
+    v4c on the public Voronoi IDW lack power (means 0.34 and -0.09, p ≈ 1-2e-3 against Holm levels
+    ≈ 2e-4). K raised to 40 (ci and full, user decision); fields 0-19 unchanged; δ unchanged.
   pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"

@@ -32,7 +32,7 @@ def report():
 def _ids():
     out = []
     for sc in scenarios.catalog().values():
-        out += [f"{sc.id}/{c['id']}" for c in sc.spec["checks"]]
+        out += [f"{sc.id}/{cid}" for cid in scenarios.engine.check_ids(sc)]
     return out
 
 
@@ -41,5 +41,8 @@ def test_check(report, check):
     o = next(o for o in report.outcomes if f"{o.scenario}/{o.check}" == check)
     if o.skipped:
         pytest.skip(o.skipped)
+    if o.status == "KNOWN":
+        pytest.xfail(f"known failure: {o.known_failure}")
+    assert o.status != "XPASS", f"{check} passed but is recorded as a known failure ({o.known_failure}): update the scenario"
     assert o.passed, (f"{check} failed (seed {report.seed}, mode {report.mode}): {o.result.family} "
                       f"p={o.result.p_value:.3g} level={o.level:.2g} expect={o.expect} — {o.result.detail}")

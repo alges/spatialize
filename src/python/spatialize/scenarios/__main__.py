@@ -12,6 +12,20 @@ from .stats.budget import ALPHA_SUITE
 
 
 def main(argv=None):
+    """Command line entry point (``python -m spatialize.scenarios``).
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Arguments (default: ``sys.argv[1:]``); see ``--help`` and the documentation page *Running
+        the tests*.
+
+    Returns
+    -------
+    int
+        Exit status: 0 when every outcome is as expected (passed, or a recorded known failure),
+        1 when any check failed or unexpectedly passed, 2 on a usage error.
+    """
     parser = argparse.ArgumentParser(
         prog="python -m spatialize.scenarios",
         description="Run spatialize's geostatistical conformance scenarios.")
@@ -50,10 +64,10 @@ def main(argv=None):
     report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha,
                  save_maps=args.save_maps)
     print(report.table())
-    n_fail = sum(1 for o in report.outcomes if not o.skipped and not o.passed)
-    n_skip = sum(1 for o in report.outcomes if o.skipped)
-    n_pass = len(report.outcomes) - n_fail - n_skip
-    print(f"\n{n_pass} passed, {n_fail} failed, {n_skip} skipped "
+    count = {k: sum(1 for o in report.outcomes if o.status == k) for k in ("PASS", "FAIL", "KNOWN", "XPASS", "SKIPPED")}
+    known = f", {count['KNOWN']} known failures" if count["KNOWN"] else ""
+    xpass = f", {count['XPASS']} unexpectedly passed (update their known_failure)" if count["XPASS"] else ""
+    print(f"\n{count['PASS']} passed, {count['FAIL']} failed{known}{xpass}, {count['SKIPPED']} skipped "
           f"(reproduce with --mode {report.mode} --seed {report.seed})")
     if args.save_maps:
         print(f"maps saved under {args.save_maps}")

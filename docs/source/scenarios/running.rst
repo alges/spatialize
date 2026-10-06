@@ -23,17 +23,19 @@ Expected output (the seed and the p-values change from run to run; the decisions
 .. code-block:: text
 
    runner=spatialize mode=ci seed=12345 α_suite=0.001 (Holm)
-   scenario/check                         family          p-value     level  expect result
-   E2-mondrian-pair-cooccurrence/c1       gof-closed     2.43e-87   9.1e-05  reject PASS  — k=8 N=3100 ...
-   S03-anisotropic-field/v1a              equivalence    1.51e-12   0.00017  pass   PASS  — mean=-0.2454 ...
-   S03-anisotropic-field/v1b              one-sided      3.35e-08   0.00025  pass   PASS  — mean=0.6183 ...
-   ...                                    (one line per check)
-   S03-anisotropic-field/v1b-vor-data     one-sided      4.93e-08   0.00033  pass   PASS  — mean=0.8004 ...
+   scenario/check                                    family          p-value     level  expect result
+   E2-mondrian-pair-cooccurrence/c1                  gof-closed     2.43e-87   3.2e-05  reject PASS  — k=8 ...
+   S03-anisotropic-field/v1a                         equivalence    7.86e-23   6.7e-05  pass   PASS  — mean=-0.3027 ...
+   S03-anisotropic-field/v1b                         one-sided      6.41e-12   0.00011  pass   PASS  — mean=0.6097 ...
+   ...                                               (one line per check)
+   S03-anisotropic-field/v5-idw                      one-sided             1   0.00033  pass   KNOWN  — mean=0.8461 ...
+   S12-edge-cases/e4-m-aidw                          almost-sure           1     exact  pass   PASS  — 0 ...
 
-   15 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 12345)
+   59 passed, 0 failed, 3 known failures, 0 skipped (reproduce with --mode ci --seed 12345)
 
-The command exits with status **0** when every check passed and **1** when any check failed, so
-it can be used directly in scripts and continuous integration.
+The command exits with status **0** when every check passed (recorded known failures included, see
+:doc:`statistics`) and **1** when any check failed, so it can be used directly in scripts and
+continuous integration.
 
 Prerequisites
 =============
@@ -77,7 +79,7 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in about a minute and a half on a multi-core machine. Use it on every change.
+       catalogue runs in about six minutes on a multi-core machine. Use it on every change.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at
@@ -228,13 +230,16 @@ Reading the report
      - p-value of the check's test in this run.
    * - ``level``
      - Level Holm assigned to this p-value within the run (:math:`\alpha/m`,
-       :math:`\alpha/(m-1)`, ... by rank).
+       :math:`\alpha/(m-1)`, ... by rank); ``exact`` for almost-sure checks, which are decided
+       exactly and spend none of the budget (:doc:`statistics`).
    * - ``expect``
      - ``pass`` for an ordinary check; ``reject`` for a **negative control**, which passes when
        its test rejects (it shows the test has the power to see a known deviation).
    * - ``result``
-     - ``PASS``, ``FAIL`` or ``SKIPPED`` (the runner does not provide that estimator), followed by
-       the check's details: sample sizes, statistics, estimates and margins.
+     - ``PASS``, ``FAIL``, ``SKIPPED`` (the runner does not provide that estimator), ``KNOWN`` (a
+       recorded known failure that failed, as expected; it does not fail the run) or ``XPASS`` (a
+       known failure that passed: the run fails until the record is updated), followed by the
+       check's details: sample sizes, statistics, estimates and margins.
 
 What to do when a check fails
 =============================

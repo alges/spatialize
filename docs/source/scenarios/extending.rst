@@ -70,7 +70,8 @@ an error naming it, and parameters the runner sets itself (``alpha``, ``n_partit
 Adding a scenario
 =================
 
-1. Create ``catalog/<ID>-<short-name>/scenario.yaml`` with ``id``, ``version``, ``tier``,
+1. Create ``catalog/<ID>-<short-name>/scenario.yaml`` (every key is described in
+   :doc:`file_format`) with ``id``, ``version``, ``tier``,
    ``evaluator``, ``book`` (the source in the theory: a ``topic`` by content and the draft's
    numbers under a dated key such as ``draft_2026_09``), ``purpose``, ``domain``, the data or truth
    generator, ``estimators`` and ``checks``. Follow the two existing scenarios.
@@ -80,12 +81,17 @@ Adding a scenario
    that power is at least 0.9 under the budget of the whole catalogue.
 3. Add a negative control when the family could pass vacuously (``expect: reject`` for the profile
    that must fail).
+   A check whose violation is impossible for a correct implementation (no infinite values, outputs
+   within the data range, ...) is ``almost-sure``: it is decided exactly and spends no error budget.
+   A check listing several ``estimators`` produces one outcome per estimator (``<check>-<estimator>``).
 4. For pinned data, write the fields with
    :mod:`spatialize.scenarios.generators.materialise`, which stores ``data/*.npy`` and the
    ``CHECKSUMS.sha256`` manifest. Never edit a data file by hand: checksums are verified when the
    catalogue is loaded.
 5. Thresholds are fixed **before** the first reference run and are not tuned afterwards; changing
-   one is a new version of the scenario.
+   one is a new version of the scenario. A pre-registered check that fails on Spatialize is a finding: fix the code,
+   or record it with ``known_failure: <reason>`` (reported as ``KNOWN``, see :doc:`statistics`);
+   never relax the threshold to make it pass.
 6. Run the suite (:doc:`running`) in both modes and with several seeds, and record the calibration
    in the descriptor's ``provenance``.
 

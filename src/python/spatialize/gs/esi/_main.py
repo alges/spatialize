@@ -10,7 +10,7 @@ from spatialize import SpatializeError, logging, GridSearchResult, EstimationRes
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
 import spatialize.gs.esi.scorefunction as sf
-from spatialize._util import signature_overload
+from spatialize._util import signature_overload, random_seed
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
@@ -723,8 +723,8 @@ class ESIResult(EstimationResult):
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
                                  "scoring": sf.mae,
-                                 "seed": np.random.randint(1000, 10000),
-                                 "folding_seed": np.random.randint(1000, 10000),
+                                 "seed": random_seed,
+                                 "folding_seed": random_seed,
                                  "callback": default_singleton_callback,
                                  },
                     specific_args={
@@ -1220,8 +1220,8 @@ def esi_nongriddata(points, values, xi, **kwargs):
         "k":                    5,
         "n_partitions":         [100, 200, 300],
         "alpha":                list(np.flip(np.arange(0.70, 0.90, 0.05))),
-        "seed":                 np.random.randint(1000, 10000),
-        "folding_seed":         np.random.randint(1000, 10000),
+        "seed":                 random_seed,
+        "folding_seed":         random_seed,
         "pair_strategy":        "max_min",
         "point_model_name":     "kde",
         "nan_model_name":       "ignore",
@@ -1380,7 +1380,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
                                  # -- valid only when ‘p_process’ is ‘voronoi’.
                                  "alpha": 0.8,
                                  "agg_function": af.mean,
-                                 "seed": np.random.randint(1000, 10000),
+                                 "seed": random_seed,
                                  "callback": default_singleton_callback,
                                  "best_params_found": None
                                  },

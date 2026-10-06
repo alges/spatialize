@@ -1,3 +1,4 @@
+import numpy as np
 from rich.progress import track
 
 from spatialize import SpatializeError
@@ -21,6 +22,21 @@ else:
     from tqdm import tqdm
 
 
+class per_call:
+    """Default of a :func:`signature_overload` argument, computed anew at every call."""
+
+    def __init__(self, factory):
+        self.factory = factory
+
+
+# the documented default of every `seed` and `folding_seed`: a random integer in [1000, 10000)
+random_seed = per_call(lambda: int(np.random.randint(1000, 10000)))
+
+
+def _default(value):
+    return value.factory() if isinstance(value, per_call) else value
+
+
 def signature_overload(pivot_arg, common_args, specific_args):
     def outer_function(func):
         def inner_function(*args, **kwargs):
@@ -34,7 +50,7 @@ def signature_overload(pivot_arg, common_args, specific_args):
             # default value
             for arg in common_args.keys():
                 if arg not in kwargs:
-                    kwargs[arg] = common_args[arg]
+                    kwargs[arg] = _default(common_args[arg])
 
             # get the specific args for the current pivot key
             pk = kwargs[pivot_key]
@@ -49,7 +65,7 @@ def signature_overload(pivot_arg, common_args, specific_args):
             # default value
             for arg in spec_args.keys():
                 if arg not in kwargs:
-                    kwargs[arg] = spec_args[arg]
+                    kwargs[arg] = _default(spec_args[arg])
 
             # check that all arguments are consistent
             # with the pivot key

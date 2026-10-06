@@ -3,6 +3,7 @@ from scipy.interpolate import Akima1DInterpolator
 from scipy.spatial import cKDTree
 from scipy.stats import skew as _scipy_skew, skewnorm
 
+from sklearn.base import clone
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from sklearn.neighbors import KernelDensity
 from sklearn.exceptions import ConvergenceWarning
@@ -373,7 +374,7 @@ class FittedModelFactory:
             The fitted density model (e.g. `sklearn.neighbors.KernelDensity`,
             `sklearn.mixture.GaussianMixture`, or
             `sklearn.mixture.BayesianGaussianMixture`, depending on
-            ``point_model_name``).
+            ``point_model_name``), a new estimator at every call.
         data : ndarray
             The processed (possibly widened) sample data actually used to fit
             `model`.
@@ -417,7 +418,8 @@ class FittedModelFactory:
             data = _widen_sample(data, self.widening, target_var, target_skew,
                                   rng=np.random.default_rng(effective_seed))
 
-        return self.model.fit(data.reshape(-1, 1)), data
+        # a fresh copy per call, so models created earlier keep their own fit
+        return clone(self.model).fit(data.reshape(-1, 1)), data
 
     def __repr__(self):
         return (f"model_name={self.point_model_name}, "
@@ -1164,7 +1166,7 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     def __init__(self, skl_model=None, sample=None,
                        support_sample_size=1000,
-                       fitted_model_factory=FittedModelFactory(),
+                       fitted_model_factory=None,
                        target_var=None, target_skew=None, seed=None):
         """
         Initialize the model wrapper and prepare PDF, CDF, and inverse CDF functions.
@@ -1214,6 +1216,8 @@ class EmpiricalModel(BaseEmpiricalModel):
             if not isinstance(sample, np.ndarray):
                 raise ValueError("Sample must be a numpy array")
 
+            if fitted_model_factory is None:
+                fitted_model_factory = FittedModelFactory()
             self.model, data = fitted_model_factory.create(sample, target_var=target_var,
                                                             target_skew=target_skew, seed=seed)
             # the (possibly widened) data actually used to fit `self.model` -- distinct from

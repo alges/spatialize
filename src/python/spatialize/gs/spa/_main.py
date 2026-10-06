@@ -14,7 +14,7 @@ from copy import deepcopy
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
 import spatialize.gs.esi.aggfunction as af
 from spatialize.gs.esi._main import build_arg_list
-from spatialize._util import signature_overload
+from spatialize._util import signature_overload, per_call, random_seed
 from spatialize.logging import default_singleton_callback, log_message
 from spatialize import SpatializeError, logging  # Assuming 'logging' here refers to your custom logging
 from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
@@ -487,13 +487,13 @@ class PosteriorSampleAnalyzer:
                                  "n_partitions": 200,
                                  "alpha": 0.8,
                                  "agg_function": af.mean,
-                                 "seed": np.random.randint(1000, 10000),
-                                 "folding_seed": np.random.randint(1000, 10000),
-                                 "fitted_model_factory": FittedModelFactory(
+                                 "seed": random_seed,
+                                 "folding_seed": random_seed,
+                                 "fitted_model_factory": per_call(lambda: FittedModelFactory(
                                      nan_model_name="ignore",
                                      point_model_name="vim", n_components=3,
                                      bgm_sample_size=1000, bgm_max_iter=100
-                                 ),
+                                 )),
                                  "callback": default_singleton_callback,
                                  "best_params_found": None
                                  },

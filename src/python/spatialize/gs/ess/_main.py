@@ -116,7 +116,7 @@ class ESSResult:
 
 def ess_sample(esi_result,
                n_sims=100,
-               fitted_model_factory=FittedModelFactory(),
+               fitted_model_factory=None,
                desc=None,
                n_jobs=-1,
                callback=default_singleton_callback):
@@ -142,7 +142,7 @@ def ess_sample(esi_result,
     fitted_model_factory : FittedModelFactory, optional
         A factory for creating fitted probabilistic models per sample. Must
         provide a ``create(...)`` method and define ``point_model_name`` and
-        other relevant attributes.
+        other relevant attributes. Default: a new ``FittedModelFactory()``.
     desc : str, optional
         Textual description for the result. If not provided, it is generated
         based on the model type and simulation parameters.
@@ -195,6 +195,8 @@ def ess_sample(esi_result,
     (n_xi, 100)
     >>> ess_result.quick_plot()
     """
+    if fitted_model_factory is None:
+        fitted_model_factory = FittedModelFactory()
     if fitted_model_factory.point_model_name not in {"vim", "emm", "kde"}:
         raise ValueError(f"Unsupported model type: {fitted_model_factory.point_model_name}")
 

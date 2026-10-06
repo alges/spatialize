@@ -89,7 +89,7 @@ def idw_hparams_search(points, values, xi,
                        griddata=False,
                        radius=(0.1, 0.2, 0.5, 0.1, 0.2),
                        exponent=tuple(np.arange(0.8, 1.0, 0.1)),
-                       folding_seed=np.random.randint(1000, 10000),
+                       folding_seed=None,
                        callback=default_singleton_callback
                        ):
     """Perform a k-fold (or leave-one-out) cross-validation hyperparameter search for plain IDW.
@@ -131,7 +131,8 @@ def idw_hparams_search(points, values, xi,
     folding_seed : int, optional
         Seed for the random number generator used to build the
         cross-validation folds (only used when `k`-fold, not LOO, is
-        performed). Default: a random integer in ``[1000, 10000)``.
+        performed). Default: a random integer in ``[1000, 10000)``, drawn
+        at every call.
     callback : callable, optional
         Callback used to report search progress. Default:
         :func:`~spatialize.logging.default_singleton_callback`.
@@ -143,6 +144,9 @@ def idw_hparams_search(points, values, xi,
         exponent)`` combination.
     """
     log_message(logging.logger.debug(f"searching best params ..."))
+
+    if folding_seed is None:
+        folding_seed = int(np.random.randint(1000, 10000))
 
     method = "kfold"
     if k == points.shape[0] or k == -1:

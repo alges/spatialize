@@ -9,7 +9,6 @@
 #include "spatialize/partitions/mondrian.hpp"
 #include "spatialize/partitions/voronoi.hpp"
 #include "spatialize/decoders/idw.hpp"
-#include "spatialize/decoders/voronoi_idw.hpp"
 #include "spatialize/decoders/kriging.hpp"
 #include "spatialize/decoders/adaptive_idw.hpp"
 #include "spatialize/decoders/custom.hpp"
@@ -346,21 +345,21 @@ EsiOutput kfold_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> va
     return(esi_kriging(3, EsiMethod::KFOLD, samples, values, forest_size, alpha, model, nugget, range, sill, creation_seed, k, folding_seed, queries, visitor));
 }
 
-/* Voronoi IDW (its own IDW kernel, see VoronoiIDWDecoder) */
+/* Voronoi IDW */
 
 EsiOutput estimation_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
     check_arrays(samples, values, queries);
-    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::ESTIMATE, 0, 0, visitor, "VORONOI_IDW"));
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::IDWDecoder(exp), EsiMethod::ESTIMATE, 0, 0, visitor, "VORONOI_IDW"));
 }
 
 EsiOutput loo_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
     check_arrays(samples, values, queries);
-    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::LOO, 0, 0, visitor, "VORONOI_IDW"));
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::IDWDecoder(exp), EsiMethod::LOO, 0, 0, visitor, "VORONOI_IDW"));
 }
 
 EsiOutput kfold_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
     check_arrays(samples, values, queries);
-    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, creation_seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::KFOLD, k, folding_seed, visitor, "VORONOI_IDW"));
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, creation_seed, new sptlz::IDWDecoder(exp), EsiMethod::KFOLD, k, folding_seed, visitor, "VORONOI_IDW"));
 }
 
 /* Adaptive ESI IDW */

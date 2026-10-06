@@ -31,9 +31,9 @@ location form the estimator's predictive law there.
      - ``Partition``: ``MondrianTree``, ``VoronoiTree``
      - ``partition.hpp``; ``partitions/mondrian.hpp``, ``partitions/voronoi.hpp``
    * - local interpolator
-     - ``Decoder``: ``IDWDecoder``, ``VoronoiIDWDecoder``, ``KrigingDecoder``,
+     - ``Decoder``: ``IDWDecoder``, ``KrigingDecoder``,
        ``AdaptiveIDWDecoder``, ``CustomDecoder``
-     - ``decoder.hpp``; ``decoders/idw.hpp``, ``decoders/voronoi_idw.hpp``,
+     - ``decoder.hpp``; ``decoders/idw.hpp``,
        ``decoders/kriging.hpp``, ``decoders/adaptive_idw.hpp``, ``decoders/custom.hpp``
    * - the ensemble
      - ``Ensemble`` (one loop for estimation, leave-one-out and k-fold); ``ESI`` draws a Mondrian
@@ -133,24 +133,29 @@ Supported combinations
      - 2–3D
    * - Voronoi
      - IDW
-     - ``idw`` with ``p_process="voronoi"``, 2D (Voronoi IDW kernel)
-     - any dimension (standard IDW kernel)
+     - ``idw`` with ``p_process="voronoi"``, 2D
+     - any dimension
    * - Voronoi
      - kriging, adaptive IDW
      - —
      - as for Mondrian
 
-Behaviours kept for reproducibility
-===================================
+Changes of results
+==================
 
-The engine reproduces the results of earlier versions bit for bit. Two behaviours that follow
-from this are worth knowing when comparing numbers:
+The engine reproduces earlier results bit for bit except where a defect was corrected on purpose.
+Corrections that change numbers:
 
-- The Voronoi IDW of the public API weights the data by :math:`1/(1+d^p)`, while the Mondrian IDW
-  uses :math:`1/d^p` in estimation (a query on a datum takes its value). This is the
-  ``VoronoiIDWDecoder``; ``libspatialize.run`` with ``decoder="idw"`` uses the standard
-  ``IDWDecoder`` on both partitions.
-- Leave-one-out and k-fold for IDW weight the data by :math:`1/(1+d^p)`.
+- **IDW weights** are :math:`1/d^p` everywhere — estimation, leave-one-out and k-fold, on Mondrian
+  and Voronoi partitions — and a datum at distance 0 takes all the weight. Earlier versions used
+  :math:`1/(1+d^p)` in leave-one-out and k-fold (so cross-validation scored a different decoder from
+  the one that predicts) and everywhere in the Voronoi IDW, which on a unit-scale domain is close to
+  a cell mean.
+- **Kriging leave-one-out** applies the weights to the other data of the cell; earlier versions
+  mixed in the held-out datum's own value.
+- **k-fold** gives NaN for a sample whose cell has no other sample to train on; earlier versions
+  returned 0.0.
+- **Adaptive IDW** returns the datum's value at a query placed on it.
 
 Reproducibility and threads
 ===========================

@@ -170,7 +170,9 @@ namespace sptlz{
 
           Eigen::Map<Eigen::MatrixXf> A = Eigen::Map<Eigen::MatrixXf>(aux.first.data(), n, n);
           auto inv = A.completeOrthogonalDecomposition().pseudoInverse();
-          Eigen::Map<Eigen::MatrixXf> v = Eigen::Map<Eigen::MatrixXf>(sl_values.data(), 1, n);
+          // the held-out datum's value must not enter its own prediction: weights apply to the other
+          // n-1 values (and the 0 that cancels the Lagrange multiplier)
+          Eigen::Map<Eigen::MatrixXf> v = Eigen::Map<Eigen::MatrixXf>(new_values.data(), 1, n);
           Eigen::Map<Eigen::MatrixXf> b = Eigen::Map<Eigen::MatrixXf>(right_cov.data(), n, 1);
           auto weights = inv*b;
           auto est = v*weights;

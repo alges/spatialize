@@ -90,7 +90,7 @@ class lib_spatialize_facade:
         d = int(points.shape[1])
 
         if d not in lib_spatialize_facade.function_hash_map:
-            raise SpatializeError(f"Points dimension must be in {list(lib_spatialize_facade.function_hash_map.keys)}")
+            raise SpatializeError(f"Points dimension must be in {list(lib_spatialize_facade.function_hash_map.keys())}")
 
         operator = lib_spatialize_facade.raw_operator(local_interpolator, partitioning_process)
 

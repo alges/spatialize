@@ -151,9 +151,6 @@ class AsyncProgressHandler:  # callback function
     def _done(self):
         self.elapsed_time = time.time() - self.start_time
 
-    def _update(self):
-        raise NotImplemented
-
     def __call__(self, msg):
         try:
             m = self._pass_protocol(msg)

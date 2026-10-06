@@ -22,13 +22,15 @@ Expected output (the seed and the p-values change from run to run; the decisions
 
 .. code-block:: text
 
-   runner=spatialize mode=ci seed=978395171 α_suite=0.001 (Holm)
-   scenario/check                     family          p-value     level  expect result
-   E2-mondrian-pair-cooccurrence/c1   gof-closed     1.03e-83   0.00033  reject PASS  — k=8 N=3100 ...
-   S03-anisotropic-field/v1a          equivalence    6.72e-05    0.0005  pass   PASS  — mean=-0.4957 ...
-   S03-anisotropic-field/v1b          one-sided      0.000209     0.001  pass   PASS  — mean=0.6075 ...
+   runner=spatialize mode=ci seed=12345 α_suite=0.001 (Holm)
+   scenario/check                         family          p-value     level  expect result
+   E2-mondrian-pair-cooccurrence/c1       gof-closed     2.43e-87   9.1e-05  reject PASS  — k=8 N=3100 ...
+   S03-anisotropic-field/v1a              equivalence    1.51e-12   0.00017  pass   PASS  — mean=-0.2454 ...
+   S03-anisotropic-field/v1b              one-sided      3.35e-08   0.00025  pass   PASS  — mean=0.6183 ...
+   ...                                    (one line per check)
+   S03-anisotropic-field/v1b-vor-data     one-sided      4.93e-08   0.00033  pass   PASS  — mean=0.8004 ...
 
-   3 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 978395171)
+   11 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 12345)
 
 The command exits with status **0** when every check passed and **1** when any check failed, so
 it can be used directly in scripts and continuous integration.
@@ -75,7 +77,7 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in seconds. Use it on every change.
+       catalogue runs in about a minute on a multi-core machine. Use it on every change.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at
@@ -91,6 +93,9 @@ From the command line
    * - ``--alpha A``
      - Family-wise error rate of the run (default :math:`10^{-3}`). Changing it is meant for
        studying the suite, not for making a run pass.
+   * - ``--save-maps DIR``
+     - Save the maps computed by the run (arrays and figures) under ``DIR`` for human review; see
+       :ref:`scenarios-maps`. Does not change any decision.
    * - ``--list``
      - List the scenarios and their checks, and exit.
 
@@ -104,7 +109,8 @@ Examples:
    python -m spatialize.scenarios --list
    python -m spatialize.scenarios --tier T1
    python -m spatialize.scenarios --id S03-anisotropic-field --mode full
-   python -m spatialize.scenarios --mode ci --seed 978395171      # reproduce a reported run
+   python -m spatialize.scenarios --mode ci --seed 12345      # reproduce a reported run
+   python -m spatialize.scenarios --save-maps maps/                # also save the maps
 
 .. important::
 
@@ -133,6 +139,52 @@ From Python
 evaluates them, applies Holm's procedure to all the checks of the call and returns a
 :class:`Report`.
 
+.. _scenarios-maps:
+
+Looking at the maps
+===================
+
+Scenarios with visual criteria compute maps (for instance the median map of S03 on each replicate
+field). They are not kept unless asked for:
+
+.. code-block:: bash
+
+   python -m spatialize.scenarios --id S03-anisotropic-field --save-maps maps/
+
+or, from Python, ``scenarios.run(..., save_maps="maps/")``. This writes, under
+``maps/<scenario>/``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - File
+     - Content
+   * - ``<estimator>_<k>.png``
+     - Field *k*: the truth with the sample locations (left) and the estimated map (right), on one
+       colour scale; the declared orientation in white and the measured one in red; orientation
+       :math:`\theta` and coherence :math:`c` of each map in the titles.
+   * - ``<estimator>_summary.png``
+     - All fields at once, five per row: each truth above its estimated map.
+   * - ``compare_<k>.png``
+     - Field *k*: the truth next to the map of every estimator of the scenario, on one colour scale
+       (when the scenario has more than one estimator).
+   * - ``<estimator>_point_<k>.npy``, ``<estimator>_truth_<k>.npy``
+     - The arrays themselves (rows = :math:`y`, columns = :math:`x`, on the scenario's grid), to
+       analyse further without rerunning.
+
+The maps are those the checks were computed from in the same run, so each figure matches its line
+of the report; with ``--seed`` they are reproducible. Saving needs matplotlib (a dependency of
+spatialize) and never changes a decision: figures are for human review only (:doc:`visual`).
+
+.. figure:: /_static/scenarios/S03_compare_13.png
+   :width: 100%
+   :alt: Truth and the five median maps of S03 on field 13
+
+   ``compare_13.png`` of S03 (``ci`` mode, seed 12345): the truth with its samples and the median
+   map of each estimator, on one colour scale; white is the declared orientation, red the measured
+   one.
+
 With pytest (source checkout)
 =============================
 
@@ -144,7 +196,7 @@ separate test, so failures show up in the usual pytest summary. It puts the in-p
 
    python -m pytest -q tests/scenarios
    SPATIALIZE_SCENARIO_MODE=full python -m pytest -q tests/scenarios      # full mode
-   SPATIALIZE_SCENARIO_SEED=978395171 python -m pytest -q tests/scenarios # reproduce a run
+   SPATIALIZE_SCENARIO_SEED=12345 python -m pytest -q tests/scenarios # reproduce a run
    python -m pytest -q -s tests/scenarios                                # also print the report
 
 A failing test's message carries everything needed to reproduce it: seed, mode, family, p-value,

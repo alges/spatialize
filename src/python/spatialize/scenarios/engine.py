@@ -138,7 +138,8 @@ def _expect(check, profile):
     return exp.get(profile, exp.get("default", "pass")) if isinstance(exp, dict) else exp
 
 
-def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int) -> List[CheckOutcome]:
+def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
+                           save_maps=None) -> List[CheckOutcome]:
     """Pair co-occurrence e({datum, query}) read from members (book Fig 8.1): with a single datum
     and empty cells as NaN, a member is finite exactly when the query shares the datum's cell."""
     s = sc.spec
@@ -168,13 +169,18 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int) -
     return out
 
 
-def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int) -> List[CheckOutcome]:
-    """Visual criteria on point maps over K pinned fields (documentation: Visual criteria)."""
+def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
+                    save_maps=None) -> List[CheckOutcome]:
+    """Visual criteria on point maps over K pinned fields (documentation: Visual criteria).
+
+    With ``save_maps`` (a directory), the maps of every field are also saved for human review.
+    """
     s = sc.spec
     m_grid = s["data"]["grid"]
     queries = generators.grid(m_grid).astype(np.float32)
     K = int(_mode_value(s["data"]["fields"], mode))
     est_cache: Dict[str, list] = {}
+    maps_by_est: Dict[str, list] = {}
     out = []
     for check in s["checks"]:
         est = sc.estimator(next(e for e in s["estimators"] if e["id"] == check["estimator"]))
@@ -186,14 +192,21 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int) -> List[
             continue
         if est.id not in est_cache:
             T = int(_mode_value(s["estimators_T"], mode))
-            rows = []
+            rows, saved = [], []
             for k in range(K):
                 f = sc.field(k)
                 mem = runner.members(est, f["samples"], f["values"], queries, n_members=T, seed=seed + k)
                 point = np.nanmedian(mem, axis=1).reshape(m_grid, m_grid)
                 truth = f["truth"].reshape(m_grid, m_grid)
-                rows.append((maps.orientation_coherence(point), maps.orientation_coherence(truth)))
+                (th, c), (th_t, c_t) = maps.orientation_coherence(point), maps.orientation_coherence(truth)
+                rows.append(((th, c), (th_t, c_t)))
+                saved.append(dict(point=point, truth=truth, theta=th, coherence=c, theta_truth=th_t,
+                                  coherence_truth=c_t, samples=np.asarray(f["samples"])))
             est_cache[est.id] = rows
+            if save_maps:
+                from .figures import save_map_fields
+                save_map_fields(save_maps, sc.id, est.id, saved, target_theta=s["truth"].get("theta_deg"))
+                maps_by_est[est.id] = saved
         rows = est_cache[est.id]
         target = float(s["truth"]["theta_deg"])
         if check["functional"] == "orientation":
@@ -205,6 +218,9 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int) -> List[
         else:
             raise ValueError(f"unknown functional {check['functional']}")
         out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile)))
+    if save_maps and len(maps_by_est) > 1:
+        from .figures import save_comparison
+        save_comparison(save_maps, sc.id, maps_by_est, target_theta=s["truth"].get("theta_deg"))
     return out
 
 
@@ -238,19 +254,20 @@ class Report:
 
     def table(self):
         """Plain-text table of the outcomes, with p-values, Holm levels and decisions."""
+        w = max([len("scenario/check")] + [len(f"{o.scenario}/{o.check}") for o in self.outcomes])
         lines = [f"runner={self.runner} mode={self.mode} seed={self.seed} α_suite={self.alpha:g} (Holm)",
-                 f"{'scenario/check':34s} {'family':16s} {'p-value':>10s} {'level':>9s}  {'expect':6s} result"]
+                 f"{'scenario/check':{w}s}  {'family':12s} {'p-value':>10s} {'level':>9s}  {'expect':6s} result"]
         for o in self.outcomes:
             name = f"{o.scenario}/{o.check}"
             if o.skipped:
-                lines.append(f"{name:34s} SKIPPED: {o.skipped}")
+                lines.append(f"{name:{w}s}  SKIPPED: {o.skipped}")
                 continue
             res = "PASS" if o.passed else "FAIL"
-            lines.append(f"{name:34s} {o.result.family:16s} {o.result.p_value:10.3g} {o.level:9.2g}  {o.expect:6s} {res}  — {o.result.detail}")
+            lines.append(f"{name:{w}s}  {o.result.family:12s} {o.result.p_value:10.3g} {o.level:9.2g}  {o.expect:6s} {res}  — {o.result.detail}")
         return "\n".join(lines)
 
 
-def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE) -> Report:
+def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE, save_maps=None) -> Report:
     """Evaluate scenarios with a runner and decide every check under one Holm budget.
 
     Parameters
@@ -266,6 +283,10 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
     alpha : float, default 1e-3
         Family-wise error rate of the run, controlled with Holm's step-down procedure over all
         the checks evaluated in this call.
+    save_maps : str, optional
+        Directory where the maps computed by the run are saved for human review: per scenario,
+        estimator and field, the arrays (``.npy``) and a figure of truth and map; plus a summary
+        figure. Needs matplotlib. Maps never enter the decisions.
 
     Returns
     -------
@@ -282,7 +303,7 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
         scenarios = list(scenarios.values())
     rep = Report(runner.name, mode, seed, alpha=alpha)
     for sc in scenarios:
-        rep.outcomes += EVALUATORS[sc.spec["evaluator"]](sc, runner, mode, seed)
+        rep.outcomes += EVALUATORS[sc.spec["evaluator"]](sc, runner, mode, seed, save_maps=save_maps)
     active = [o for o in rep.outcomes if not o.skipped]
     if active:
         levels, reject = budget.holm_levels([o.result.p_value for o in active], alpha)

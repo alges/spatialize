@@ -26,6 +26,8 @@ def main(argv=None):
                         help="run only this scenario (repeatable)")
     parser.add_argument("--alpha", type=float, default=ALPHA_SUITE,
                         help=f"family-wise error rate of the run (default {ALPHA_SUITE:g})")
+    parser.add_argument("--save-maps", metavar="DIR", default=None,
+                        help="save the maps computed by the run (arrays and figures) under DIR")
     parser.add_argument("--list", action="store_true", help="list the scenarios and exit")
     parser.add_argument("--version", action="version", version=f"spatialize.scenarios {VERSION}")
     args = parser.parse_args(argv)
@@ -45,13 +47,16 @@ def main(argv=None):
         parser.error("no scenario selected")
 
     from .runners.spatialize import SpatializeRunner  # loads the compiled library
-    report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha)
+    report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha,
+                 save_maps=args.save_maps)
     print(report.table())
     n_fail = sum(1 for o in report.outcomes if not o.skipped and not o.passed)
     n_skip = sum(1 for o in report.outcomes if o.skipped)
     n_pass = len(report.outcomes) - n_fail - n_skip
     print(f"\n{n_pass} passed, {n_fail} failed, {n_skip} skipped "
           f"(reproduce with --mode {report.mode} --seed {report.seed})")
+    if args.save_maps:
+        print(f"maps saved under {args.save_maps}")
     return 0 if report.passed else 1
 
 

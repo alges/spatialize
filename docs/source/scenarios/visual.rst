@@ -62,7 +62,14 @@ orientations. The functional separates the two cases cleanly.
 Figures for human review
 ========================
 
-Figures — truth and estimators on one shared colour scale, with the criteria overlaid — are meant
-for people, to spot what no criterion anticipated. They are never an acceptance criterion: when a
-figure reveals a problem, the remedy is a new pre-registered criterion, not a reference image.
-Rendering is planned as an optional feature (it needs matplotlib; the criteria do not).
+Figures are meant for people, to spot what no criterion anticipated. They are never an acceptance
+criterion: when a figure reveals a problem, the remedy is a new pre-registered criterion, not a
+reference image.
+
+A run saves the maps it computes when asked to (``--save-maps DIR`` on the command line,
+``save_maps=DIR`` in :func:`spatialize.scenarios.run`; see :ref:`scenarios-maps`). For each scenario,
+estimator and replicate field it writes the arrays and a figure of the truth (with the sample
+locations) next to the estimated map, on one colour scale, with the declared orientation (white)
+and the measured one (red) drawn through the centre and the functionals in the titles; a summary
+figure shows all fields at once. The maps are the ones the checks were computed from, in the same
+run — nothing is recomputed — so a figure always matches the report line it illustrates.

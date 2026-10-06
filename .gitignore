@@ -210,3 +210,6 @@ test/testdata/output/
 #Dask locks
 *.lock
 *.dirlock
+
+# maps written by `python -m spatialize.scenarios --save-maps maps/`
+/maps/

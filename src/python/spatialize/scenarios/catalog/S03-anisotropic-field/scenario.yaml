@@ -1,12 +1,12 @@
 id: S03-anisotropic-field
-version: 1
+version: 2
 tier: T3
 evaluator: map_visual
 book: "§12.3.1, Fig 12.1, eqs (12.3.8)–(12.3.9)"
 purpose: >
-  An anisotropic stationary Gaussian field, the variogram's own ground. The estimator is told
-  nothing about the anisotropy (axis-aligned Mondrian cuts, isotropic decoder); the elongation at
-  30° must nevertheless be clearly visible in its point map (visual criterion V1).
+  An anisotropic stationary Gaussian field, the variogram's own ground. No estimator is told about
+  the anisotropy (axis-aligned Mondrian cuts or Voronoi cells, isotropic decoders); the elongation
+  at 30° must nevertheless be clearly visible in each estimator's point map (visual criterion V1).
 domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
 truth:
   generator: sgf_exponential
@@ -18,25 +18,55 @@ data:
   design: {type: uniform, n: 400}
   grid: 40                          # queries: 40×40 cell centres, row-major
   mode: pinned                      # data/{samples,values,truth}_<k>.npy, drawn jointly by Cholesky
-  fields: {ci: 6, full: 6}
+  fields: {ci: 20, full: 20}
   generator_seed: 20261005
 estimators_T: {ci: 100, full: 300}
 estimators:
+  # Mondrian rate 5 on the unit square: E[#cells] = (1 + 5)² = 36 for the book's process.
   - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: aidw, encoder: mondrian, rate: 5.0, decoder: adaptiveidw,
+     params: {metric: mae, parallelize: true}, empty_cells: nan}   # parallel == serial bitwise
+  # Isotropic exponential kriging (spatialize: exp(−3d/r)); scale = geometric mean of the true
+  # ranges, √(0.45·0.09) = 0.201 (same ellipse area), practical range r = 3·0.201 = 0.604.
+  - {id: krig, encoder: mondrian, rate: 5.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
+  # Poisson–Voronoi intensity 36: the same expected number of cells as the Mondrian estimators.
+  - {id: vor-uniform-idw, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: idw,
+     params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vor-data-idw, encoder: voronoi/spatialize-v1-data, rate: 36.0, decoder: idw,
+     params: {exponent: 2.0}, empty_cells: nan}
 checks:
-  - id: v1a
-    title: "V1 anisotropy direction visible: |θ(median map) − 30°| < 10°"
-    estimator: idw
-    family: equivalence
-    functional: orientation
-    map: point                      # median of the members per location
-    margin_deg: 10.0
-  - id: v1b
-    title: "V1 anisotropy strength visible: coherence(map) > 0.5·coherence(truth)"
-    estimator: idw
-    family: one-sided
-    functional: coherence_ratio
-    map: point
-    min_ratio: 0.5
+  # The same two pre-registered criteria for every estimator:
+  #   v1a — direction visible: |θ(median map) − 30°| < 10° (TOST over the K fields)
+  #   v1b — strength visible: coherence(map) > 0.5·coherence(truth) (one-sided t over the K fields)
+  - {id: v1a, title: "V1 direction visible (idw)", estimator: idw, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b, title: "V1 strength visible (idw)", estimator: idw, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-aidw, title: "V1 direction visible (adaptive idw)", estimator: aidw, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-aidw, title: "V1 strength visible (adaptive idw)", estimator: aidw, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-krig, title: "V1 direction visible (kriging)", estimator: krig, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-krig, title: "V1 strength visible (kriging)", estimator: krig, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-vor-uniform, title: "V1 direction visible (Voronoi uniform, idw)", estimator: vor-uniform-idw,
+     family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-vor-uniform, title: "V1 strength visible (Voronoi uniform, idw)", estimator: vor-uniform-idw,
+     family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-vor-data, title: "V1 direction visible (Voronoi data, idw)", estimator: vor-data-idw,
+     family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-vor-data, title: "V1 strength visible (Voronoi data, idw)", estimator: vor-data-idw,
+     family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
+  v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
+  v2: >
+    2026-10-05: adaptive idw, kriging and two Voronoi estimators added with the same pre-registered
+    thresholds, fixed before their first run; K raised to 12 (ci) / 20 (full) for power, since the
+    catalogue grows from 3 to 11 checks under Holm. Fields 0–5 unchanged (same generator stream).
+    First run (ci, K = 12, seed 12345): 11/11 pass, but the Voronoi orientation checks (s.e. ≈ 2°)
+    passed close to their Holm levels (p = 2.9e-4 vs 5e-4, 6.9e-4 vs 1e-3), so K was raised to 20
+    in ci too — more power, thresholds unchanged.
+  pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"

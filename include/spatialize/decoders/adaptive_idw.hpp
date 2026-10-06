@@ -307,9 +307,9 @@ namespace sptlz{
         auto sl_folds = slice(folds, samples_id);
 
         if((samples_id->size()==0) || (samples_id->size()==1)){
-          for([[maybe_unused]] auto l: *samples_id){
-            result.push_back(NAN);
-          }
+          // nothing to train on: every sample of the cell gets NaN (result already has their size,
+          // so the NaN must be assigned, not appended — appending left 0.0 in place)
+          result.assign(samples_id->size(), NAN);
           return(result);
         }
 

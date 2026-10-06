@@ -164,6 +164,9 @@ Reproducibility under parallel execution
 - **Parallel adaptive IDW.** With ``parallelize=True`` the per-cell fitting runs under OpenMP. Each
   tree receives its own generator, seeded before the parallel region, so parallel and serial runs
   give bitwise identical results.
+- **Linear algebra.** Eigen is compiled with ``EIGEN_DONT_PARALLELIZE``. A matrix product split
+  across threads changes the order of summation, which on a nearly singular kriging system can change
+  the rank the pseudo-inverse keeps, so the results would depend on the number of threads.
 - **Python from C++.** Progress reports, log messages and the Ctrl-C check call into Python, which
   requires the GIL. Inside a parallel region only the calling thread, identified by its OS thread
   id, may make such calls, the worker threads updating only atomic counters. Any new parallel code

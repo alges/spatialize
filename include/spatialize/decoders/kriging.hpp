@@ -4,6 +4,13 @@
 #include <cmath>
 #include <functional>
 #include <utility>
+// Eigen must not parallelise inside a cell: with OpenMP it splits matrix products across threads,
+// and on nearly singular kriging systems the changed summation order flips the pseudo-inverse's rank
+// decision, making results depend on the number of threads and on scheduling. The ensemble already
+// parallelises over trees and cells.
+#ifndef EIGEN_DONT_PARALLELIZE
+#define EIGEN_DONT_PARALLELIZE
+#endif
 #include <Eigen/Dense>
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"

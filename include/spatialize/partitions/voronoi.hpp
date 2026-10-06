@@ -16,29 +16,10 @@
 namespace sptlz{
 
 
-	class VoronoiNode {
-		protected:
-			int n_dims;
-		public:
-			std::vector<std::vector<float>> nuclei_coords;
-
-			VoronoiNode(){}
-
-			VoronoiNode(std::vector<std::vector<float>> _nuclei_coords, std::vector<std::vector<float>> *_coords){
-				this->nuclei_coords = _nuclei_coords;
-				this->n_dims = static_cast<int>(_coords->at(0).size());
-			}
-
-			~VoronoiNode(){
-			}
-
-	};
-
 	class VoronoiTree: public Partition {
 		public:
-			sptlz::KDTree<float> *kdt;
-			std::vector<VoronoiNode*> leaves;
-			std::vector<std::vector<float>> nuclei_coords;
+			sptlz::KDTree<float> *kdt = nullptr;
+			std::vector<std::vector<float>> nuclei_coords;   // one nucleus per cell
 
 			int vsize, ndim;
 
@@ -50,15 +31,14 @@ namespace sptlz{
 
 				if (alpha < 0) {
 					for (int i=0; i<vsize; ++i) {
-						std::vector<float> rand_coord(coords->at(0).size());
-						for(int j=0; j<(int)rand_coord.size(); j++){
-							for (int k=0; k<ndim; ++k) {
-								std::uniform_real_distribution<float> uni_float(bbox[k][0], bbox[k][1]);
-								rand_coord.at(k) = uni_float(my_rand);
-							}
+						std::vector<float> rand_coord(ndim);
+						for (int k=0; k<ndim; ++k) {
+							std::uniform_real_distribution<float> uni_float(bbox[k][0], bbox[k][1]);
+							rand_coord.at(k) = uni_float(my_rand);
 						}
 						this->nuclei_coords.push_back(rand_coord);
 						this->samples_by_leaf.push_back({});
+						this->leaf_params.push_back({});
 					}
 				}
 				else {
@@ -67,6 +47,7 @@ namespace sptlz{
 						int sampleid = samples_choice(my_rand);
 						this->nuclei_coords.push_back(coords->at(sampleid));
 						this->samples_by_leaf.push_back({});
+						this->leaf_params.push_back({});
 					}
 
 				}
@@ -78,22 +59,12 @@ namespace sptlz{
 					// assign samples to leafs and inverse too
 					this->samples_by_leaf.at(aux).push_back(i);
 					this->leaf_for_sample.push_back(aux);
-					this->leaf_params.push_back({});
-				}
-				// build voronoi node using nuclei and all sample locations
-				for (int i=0; i<vsize; ++i) {
-					VoronoiNode* cur_node = new VoronoiNode(this->nuclei_coords, coords);
-					this->leaves.push_back(cur_node);
 				}
 			}
 
 			VoronoiTree(){}
 
 			~VoronoiTree(){
-				for(int i=0; i<this->leaves.size(); i++){
-					delete(this->leaves.at(i));
-				}
-				std::vector<VoronoiNode*>().swap(this->leaves);
 				std::vector<std::vector<int>>().swap(this->samples_by_leaf);
 				std::vector<std::vector<float>>().swap(this->nuclei_coords);
 				if(this->kdt != NULL){
@@ -102,7 +73,7 @@ namespace sptlz{
 			}
 
 			int n_leaves(){
-				return(static_cast<int>(this->leaves.size()));
+				return(static_cast<int>(this->nuclei_coords.size()));
 			}
 
 			int search_leaf(std::vector<float> point){

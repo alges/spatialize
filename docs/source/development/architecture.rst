@@ -155,6 +155,9 @@ The following corrections change numbers.
 - **k-fold** gives NaN for a sample whose cell has no other sample to train on, where earlier versions
   returned 0.0.
 - **Adaptive IDW** returns the datum's value at a query placed on it.
+- **Voronoi with uniform nuclei** (negative ``alpha``) draws one uniform value per coordinate of each
+  nucleus, where earlier versions drew the coordinates :math:`d` times over and kept the last draw.
+  The law of the partition is the same, but a given seed yields a different partition.
 
 Reproducibility under parallel execution
 ========================================

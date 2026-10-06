@@ -17,7 +17,7 @@ def _check_fresh_build():
     so = glob.glob(os.path.join(REPO, "libspatialize*.so")) + glob.glob(os.path.join(REPO, "libspatialize*.pyd"))
     if not so:
         raise RuntimeError("no in-place build of libspatialize; run: python setup.py build_ext --inplace --force")
-    sources = glob.glob(os.path.join(REPO, "src", "c++", "*.cpp")) + glob.glob(os.path.join(REPO, "include", "spatialize", "*.hpp"))
+    sources = glob.glob(os.path.join(REPO, "src", "c++", "*.cpp")) + glob.glob(os.path.join(REPO, "include", "spatialize", "**", "*.hpp"), recursive=True)
     newest = max(sources, key=os.path.getmtime)
     if os.path.getmtime(newest) > max(os.path.getmtime(f) for f in so):
         raise RuntimeError(f"libspatialize is older than {os.path.relpath(newest, REPO)}; rebuild with: "

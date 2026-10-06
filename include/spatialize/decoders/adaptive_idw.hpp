@@ -1,5 +1,5 @@
-#ifndef _SPTLZ_ADTV_ESI_IDW_
-#define _SPTLZ_ADTV_ESI_IDW_
+#ifndef _SPTLZ_DECODERS_ADAPTIVE_IDW_
+#define _SPTLZ_DECODERS_ADAPTIVE_IDW_
 
 #include <stdexcept>
 #include <atomic>
@@ -9,7 +9,6 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include "spatialize/abstract_esi.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 #include "spatialize/grad_descent.hpp"
@@ -215,16 +214,29 @@ namespace sptlz{
         for(int i=0; i<locations_id->size(); i++){
           float w_sum = 0.0;
           float w_v_sum = 0.0;
+          // a query on a datum takes its value (the mean, for duplicated locations): the EPSILON
+          // guard alone caps that datum's weight at 1/EPSILON, which close neighbours can exceed
+          // with large fitted exponents
+          float exact_sum = 0.0f;
+          int n_exact = 0;
 
           for(int j=0; j<samples_id->size(); j++){
+            float dist = distance(&(tr_locations.at(i)), &(tr_coords.at(j)));
+            if(dist == 0.0f){
+              exact_sum += sl_values.at(j);
+              n_exact++;
+              continue;
+            }
             // calculate weight
-            float w = 1.0f/(EPSILON + std::pow(distance(&(tr_locations.at(i)), &(tr_coords.at(j))), exponent));
+            float w = 1.0f/(EPSILON + std::pow(dist, exponent));
             // keep sum of weighted values and sum of weights
             w_sum += w;
             w_v_sum += w*sl_values.at(j);
           }
-          // return weighted values sum normalized (divided by weights sum)
-          if(w_sum > EPSILON){
+          if(n_exact > 0){
+            result[i] = exact_sum/n_exact;
+          }else if(w_sum > EPSILON){
+            // return weighted values sum normalized (divided by weights sum)
             result[i] = w_v_sum/w_sum;
           }else{
             result[i] = NAN;
@@ -549,21 +561,6 @@ namespace sptlz{
       }
   };
 
-  class ADAPTIVE_ESI_IDW: public ESI {
-    public:
-      ADAPTIVE_ESI_IDW(std::vector<std::vector<float>> _coords,
-                       std::vector<float> _values,
-                       float lambda,
-                       int forest_size,
-                       std::vector<std::vector<float>> bbox,
-                       std::function<int(std::string)> visitor,
-                       int seed=206936,
-                       std::string _metric="mae"):
-      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        this->class_name = __func__;
-        set_decoder(new AdaptiveIDWDecoder(static_cast<int>(_coords.at(0).size()), _metric));
-      }
-  };
 }
 
 #endif

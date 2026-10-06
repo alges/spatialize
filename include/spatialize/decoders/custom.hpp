@@ -1,10 +1,9 @@
-#ifndef _SPTLZ_CUSTOM_ESI_
-#define _SPTLZ_CUSTOM_ESI_
+#ifndef _SPTLZ_DECODERS_CUSTOM_
+#define _SPTLZ_DECODERS_CUSTOM_
 
 #include <stdexcept>
 #include <cmath>
 #include <functional>
-#include "spatialize/abstract_esi.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
@@ -99,24 +98,6 @@ namespace sptlz{
 
   };
 
-  class CUSTOM_ESI: public ESI {
-    public:
-      CUSTOM_ESI( std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  float lambda,
-                  int forest_size,
-                  std::vector<std::vector<float>> bbox,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
-                  std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> _kfold,
-                  std::function<int(std::string)> visitor,
-                  int seed=206936):
-      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        this->class_name = __func__;
-        set_decoder(new CustomDecoder(_post, _est, _loo, _kfold));
-      }
-  };
 }
 
 #endif

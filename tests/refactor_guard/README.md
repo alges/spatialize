@@ -35,6 +35,6 @@ Developer documentation: `docs/source/development/testing.rst`.
 
 ## Verified (2026-10-05, darwin-arm64)
 - deterministic: 32/32 pass in three fresh processes;
-- sensitive: adding 1e-7 to the IDW weight in `esi_idw.hpp` makes exactly `estimation_esi_idw`
+- sensitive: adding 1e-7 to the IDW weight in `esi_idw.hpp` (now `decoders/idw.hpp`) makes exactly `estimation_esi_idw`
   fail (the LOO/k-fold IDW paths use a different kernel, 1/(1+d^p)), and reverting restores 32/32.
 - used for the encoder/decoder refactor (2026-10-05): 32/32 bitwise before and after.

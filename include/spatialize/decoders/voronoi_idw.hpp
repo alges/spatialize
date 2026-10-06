@@ -1,9 +1,8 @@
-#ifndef _SPTLZ_VORONOI_IDW_
-#define _SPTLZ_VORONOI_IDW_
+#ifndef _SPTLZ_DECODERS_VORONOI_IDW_
+#define _SPTLZ_DECODERS_VORONOI_IDW_
 
 #include <stdexcept>
 #include <cmath>
-#include "spatialize/abstract_voronoi.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
@@ -126,21 +125,6 @@ namespace sptlz{
       }
   };
 
-  class VORONOI_IDW: public VORONOI {
-    public:
-      VORONOI_IDW(std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  float lambda,
-                  int forest_size,
-                  std::vector<std::vector<float>> bbox,
-                  float _exponent,
-                  std::function<int(std::string)> visitor,
-                  int seed=206936):
-      VORONOI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        class_name = __func__;
-        set_decoder(new VoronoiIDWDecoder(_exponent));
-      }
-  };
 }
 
 #endif

@@ -1,9 +1,8 @@
-#ifndef _SPTLZ_ESI_IDW_
-#define _SPTLZ_ESI_IDW_
+#ifndef _SPTLZ_DECODERS_IDW_
+#define _SPTLZ_DECODERS_IDW_
 
 #include <stdexcept>
 #include <cmath>
-#include "spatialize/abstract_esi.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
@@ -155,20 +154,6 @@ namespace sptlz{
       }
   };
 
-  class ESI_IDW: public ESI {
-    public:
-      ESI_IDW(std::vector<std::vector<float>> _coords,
-              std::vector<float> _values, float lambda,
-              int forest_size,
-              std::vector<std::vector<float>> bbox,
-              float _exponent,
-              std::function<int(std::string)> visitor,
-              int seed=206936):
-      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        this->class_name = __func__;
-        set_decoder(new IDWDecoder(_exponent));
-      }
-  };
 }
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef _SPTLZ_ESI_
-#define _SPTLZ_ESI_
+#ifndef _SPTLZ_PARTITIONS_MONDRIAN_
+#define _SPTLZ_PARTITIONS_MONDRIAN_
 
 #include <sstream>
 #include <random>
@@ -7,10 +7,10 @@
 #include <string>
 #include <functional>
 #include <stdexcept>
-#include "utils.hpp"
-#include "callback_logging.hpp"
-#include "partition.hpp"
-#include "ensemble.hpp"
+#include "spatialize/utils.hpp"
+#include "spatialize/callback_logging.hpp"
+#include "spatialize/partition.hpp"
+#include "spatialize/ensemble.hpp"
 
 namespace sptlz{
 	std::string IND_STEP = "    ";

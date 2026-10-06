@@ -4,9 +4,9 @@
 #include <vector>
 #include <random>
 #include <functional>
-#include "kdtree.hpp"
-#include "utils.hpp"
-#include "callback_logging.hpp"
+#include "spatialize/kdtree.hpp"
+#include "spatialize/utils.hpp"
+#include "spatialize/callback_logging.hpp"
 
 namespace sptlz{
 

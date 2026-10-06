@@ -7,10 +7,10 @@
 #include <vector>
 #include <functional>
 #include <stdexcept>
-#include "utils.hpp"
-#include "callback_logging.hpp"
-#include "partition.hpp"
-#include "decoder.hpp"
+#include "spatialize/utils.hpp"
+#include "spatialize/callback_logging.hpp"
+#include "spatialize/partition.hpp"
+#include "spatialize/decoder.hpp"
 
 namespace sptlz{
 	// Ensemble of random partitions (encoder) with a local interpolator (decoder): one loop for

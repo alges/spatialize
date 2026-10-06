@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional>
 #include <stdexcept>
-#include "partition.hpp"
+#include "spatialize/partition.hpp"
 
 namespace sptlz{
 	// Local interpolator applied inside one cell (the "decoder"). It never sees the partition

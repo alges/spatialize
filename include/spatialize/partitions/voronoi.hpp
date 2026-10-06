@@ -1,5 +1,5 @@
-#ifndef _SPTLZ_VORONOI_
-#define _SPTLZ_VORONOI_
+#ifndef _SPTLZ_PARTITIONS_VORONOI_
+#define _SPTLZ_PARTITIONS_VORONOI_
 
 #include <sstream>
 #include <random>
@@ -8,10 +8,10 @@
 #include <functional>
 #include <stdexcept>
 #include <algorithm>
-#include "kdtree.hpp"
-#include "utils.hpp"
-#include "partition.hpp"
-#include "ensemble.hpp"
+#include "spatialize/kdtree.hpp"
+#include "spatialize/utils.hpp"
+#include "spatialize/partition.hpp"
+#include "spatialize/ensemble.hpp"
 
 namespace sptlz{
 

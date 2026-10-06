@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <random>
-#include "spatialize/abstract_nn.hpp"
+#include "spatialize/nn/abstract_nn.hpp"
 #include "spatialize/kdtree.hpp"
 #include "spatialize/utils.hpp"
 

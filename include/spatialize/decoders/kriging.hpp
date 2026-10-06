@@ -1,11 +1,10 @@
-#ifndef _SPTLZ_ESI_KRIGING_
-#define _SPTLZ_ESI_KRIGING_
+#ifndef _SPTLZ_DECODERS_KRIGING_
+#define _SPTLZ_DECODERS_KRIGING_
 
 #include <cmath>
 #include <functional>
 #include <utility>
 #include <Eigen/Dense>
-#include "spatialize/abstract_esi.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
@@ -246,24 +245,6 @@ namespace sptlz{
       }
   };
 
-  class ESI_Kriging: public ESI {
-    public:
-      ESI_Kriging(std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  float lambda,
-                  int forest_size,
-                  std::vector<std::vector<float>> bbox,
-                  int _model,
-                  float _nugget,
-                  float _range,
-                  float _sill,
-                  std::function<int(std::string)> visitor,
-                  int seed=206936):
-      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        class_name = __func__;
-        set_decoder(new KrigingDecoder(_model, _nugget, _range, _sill));
-      }
-  };
 }
 
 #endif

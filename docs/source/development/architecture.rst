@@ -29,12 +29,12 @@ location form the estimator's predictive law there.
      - Header
    * - one partition
      - ``Partition``: ``MondrianTree``, ``VoronoiTree``
-     - ``partition.hpp``, ``abstract_esi.hpp``, ``abstract_voronoi.hpp``
+     - ``partition.hpp``; ``partitions/mondrian.hpp``, ``partitions/voronoi.hpp``
    * - local interpolator
      - ``Decoder``: ``IDWDecoder``, ``VoronoiIDWDecoder``, ``KrigingDecoder``,
        ``AdaptiveIDWDecoder``, ``CustomDecoder``
-     - ``decoder.hpp``, ``esi_idw.hpp``, ``voronoi_idw.hpp``, ``esi_kriging.hpp``,
-       ``adaptive_esi_idw.hpp``, ``custom_esi.hpp``
+     - ``decoder.hpp``; ``decoders/idw.hpp``, ``decoders/voronoi_idw.hpp``,
+       ``decoders/kriging.hpp``, ``decoders/adaptive_idw.hpp``, ``decoders/custom.hpp``
    * - the ensemble
      - ``Ensemble`` (one loop for estimation, leave-one-out and k-fold); ``ESI`` draws a Mondrian
        forest, ``VORONOI`` a Voronoi forest
@@ -47,10 +47,15 @@ after the forest is drawn to compute per-cell parameters (adaptive IDW fits its 
 anisotropy there). Because the loop knows neither the partition process nor the decoder, any
 decoder runs on any partition.
 
-The classes named after the original estimators — ``ESI_IDW``, ``VORONOI_IDW``, ``ESI_Kriging``,
-``ADAPTIVE_ESI_IDW``, ``CUSTOM_ESI`` — are kept as fixed combinations of a partition and a decoder.
-Co-estimation (``CUSTOM_COESI``) and the non-ensemble nearest-neighbour IDW (``NN_IDW``) are
-separate engines.
+Headers are organised by role under ``include/spatialize/``: the three interfaces at the top
+(``partition.hpp``, ``decoder.hpp``, ``ensemble.hpp``), one file per partition process in
+``partitions/`` and one per decoder in ``decoders/``. There is deliberately no file per
+combination — Voronoi with kriging is ``partitions/voronoi.hpp`` plus ``decoders/kriging.hpp``,
+put together at run time. Two separate engines have their own folders: co-estimation
+(``coesi/custom_coesi.hpp``, ``CUSTOM_COESI``, which runs one ``CUSTOM_ESI`` ensemble per variable)
+and the non-ensemble nearest-neighbour IDW (``nn/``). Shared utilities stay at the top
+(``utils.hpp``, ``kdtree.hpp``, ``callback*.hpp``, and ``grad_descent.hpp``, the optimiser used by
+adaptive IDW).
 
 From Python to C++
 ==================
@@ -166,6 +171,7 @@ Adding a decoder
 1. Subclass ``Decoder`` and implement ``leaf_estimation``, ``leaf_loo`` and ``leaf_kfold`` (on the
    samples of one cell); implement ``fit`` if the decoder needs per-cell parameters, storing them
    in ``partition->leaf_params``. Use only the generator passed to ``fit`` for randomness.
+   Put it in its own file in ``include/spatialize/decoders/``.
 2. Register it in ``run`` (``src/c++/libspatialize.cpp``) with its parameters.
 3. Test it: the conformance scenarios run any decoder known to the facade (:doc:`testing`).
 4. Expose it in the Python facade (``function_hash_map``, ``build_arg_list``, defaults of the

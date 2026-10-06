@@ -5,13 +5,15 @@
 #include <tuple>
 #include <optional>
 #include <memory>
-#include "spatialize/nn_idw.hpp"
-#include "spatialize/esi_idw.hpp"
-#include "spatialize/esi_kriging.hpp"
-#include "spatialize/voronoi_idw.hpp"
-#include "spatialize/adaptive_esi_idw.hpp"
-#include "spatialize/custom_esi.hpp"
-#include "spatialize/custom_coesi.hpp"
+#include "spatialize/nn/nn_idw.hpp"
+#include "spatialize/partitions/mondrian.hpp"
+#include "spatialize/partitions/voronoi.hpp"
+#include "spatialize/decoders/idw.hpp"
+#include "spatialize/decoders/voronoi_idw.hpp"
+#include "spatialize/decoders/kriging.hpp"
+#include "spatialize/decoders/adaptive_idw.hpp"
+#include "spatialize/decoders/custom.hpp"
+#include "spatialize/coesi/custom_coesi.hpp"
 
 namespace py = pybind11;
 

@@ -7,12 +7,32 @@
 #include <string>
 #include <functional>
 #include <stdexcept>
-#include "utils.hpp"
-#include "spatialize/abstract_esi.hpp"
-#include "spatialize/custom_esi.hpp"
-#include "callback_logging.hpp"
+#include "spatialize/utils.hpp"
+#include "spatialize/callback_logging.hpp"
+#include "spatialize/partitions/mondrian.hpp"
+#include "spatialize/decoders/custom.hpp"
 
 namespace sptlz{
+  // Custom decoder on Mondrian partitions: one marginal ensemble per variable of the co-estimation.
+  class CUSTOM_ESI: public ESI {
+    public:
+      CUSTOM_ESI( std::vector<std::vector<float>> _coords,
+                  std::vector<float> _values,
+                  float lambda,
+                  int forest_size,
+                  std::vector<std::vector<float>> bbox,
+                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
+                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
+                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
+                  std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> _kfold,
+                  std::function<int(std::string)> visitor,
+                  int seed=206936):
+      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
+        this->class_name = __func__;
+        set_decoder(new CustomDecoder(_post, _est, _loo, _kfold));
+      }
+  };
+
 	class CUSTOM_COESI {
 		protected:
 			std::string class_name;

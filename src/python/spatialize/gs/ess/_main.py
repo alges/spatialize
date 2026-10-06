@@ -175,8 +175,9 @@ def ess_sample(esi_result,
     includes a separate thread for real-time progress monitoring. It is
     designed for large-scale scenario generation from spatial ensemble data.
 
-    If model fitting or sampling fails for a given sample, its corresponding
-    scenario row is replaced with zeros.
+    In parallel execution, a location where model fitting or sampling fails
+    gets NaN scenarios, and a warning reports how many locations failed.
+    Serial execution raises the error instead.
 
     When using ``n_jobs != 1``, this function must be called within an
     ``if __name__ == "__main__":`` block to avoid multiprocessing issues
@@ -194,6 +195,9 @@ def ess_sample(esi_result,
     (n_xi, 100)
     >>> ess_result.quick_plot()
     """
+    if fitted_model_factory.point_model_name not in {"vim", "emm", "kde"}:
+        raise ValueError(f"Unsupported model type: {fitted_model_factory.point_model_name}")
+
     # work always with the flattened array just to support arbitrary dimensions
     esi_samples = np.array(esi_result.esi_samples(raw=True))
 
@@ -261,13 +265,12 @@ def ess_sample(esi_result,
 
             if progress_q:
                 progress_q.put(1)
-            return idx, sims
+            return idx, sims, None
 
         except Exception as e:
-            logging.logger.debug(f"Sampling failed for sample[{idx}]: {e}")
             if progress_q:
                 progress_q.put(1)
-            return idx, None
+            return idx, None, f"{type(e).__name__}: {e}"
 
     def run_parallel():
         def progress_monitor(queue, total, cb):
@@ -304,7 +307,12 @@ def ess_sample(esi_result,
 
         # Sort results and construct the scenarios array
         sorted_results = sorted(results, key=lambda x: x[0])
-        valid_scenarios = [r[1] if r[1] is not None else np.zeros(n_sims) for r in sorted_results]
+        failed = [(r[0], r[2]) for r in sorted_results if r[1] is None]
+        if failed:
+            log_message(logging.logger.warning(
+                f"sampling failed at {len(failed)} of {len(sorted_results)} locations, whose "
+                f"scenarios are NaN (first failure, location {failed[0][0]}: {failed[0][1]})"))
+        valid_scenarios = [r[1] if r[1] is not None else np.full(n_sims, np.nan) for r in sorted_results]
         scenarios = np.stack(valid_scenarios)
 
         return scenarios

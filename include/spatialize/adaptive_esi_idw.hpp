@@ -2,6 +2,8 @@
 #define _SPTLZ_ADTV_ESI_IDW_
 
 #include <stdexcept>
+#include <atomic>
+#include <thread>
 #include <cmath>
 #include <random>
 #ifdef _OPENMP
@@ -320,7 +322,13 @@ namespace sptlz{
 
         progress->init(static_cast<int>(mondrian_forest.size()), 1);
 
-        bool interrupted = false;
+        // Python (signals, progress) may only be touched by the thread that holds the GIL, i.e.
+        // the calling thread. It is identified by its OS thread id, not by omp_get_thread_num():
+        // the loop body opens nested OpenMP regions (LOO2D::eval), so OpenMP thread numbers do not
+        // identify it reliably. Worker threads only update these atomics.
+        const std::thread::id caller = std::this_thread::get_id();
+        std::atomic<bool> interrupted(false);
+        std::atomic<int> n_done(0);
 
         // Pre-draw one seed per tree sequentially from the shared engine
         // *before* entering the parallel region. Concurrent threads must
@@ -335,12 +343,10 @@ namespace sptlz{
         }
 
         #ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 1) shared(interrupted)
+        #pragma omp parallel for schedule(dynamic, 1) shared(interrupted, n_done)
         #endif
         for(int i=0; i<mondrian_forest.size(); i++){
-          #ifdef _OPENMP
-          if(interrupted) continue;  // Skip remaining work if interrupted
-          #endif
+          if(interrupted.load()) continue;  // Skip remaining work if interrupted
 
           std::mt19937 leaf_rand(tree_seeds[i]);
 
@@ -356,18 +362,16 @@ namespace sptlz{
             mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values, leaf_rand);
           }
 
-          #ifdef _OPENMP
-          #pragma omp critical
-          #endif
-          {
+          int done = ++n_done;
+          if(std::this_thread::get_id() == caller){
             if (PyErr_CheckSignals() != 0) {  // to allow ctrl-c from user
               interrupted = true;
             }
-            progress->inform(i + 1);
+            progress->inform(done);
           }
         }
 
-        if(interrupted){
+        if(interrupted.load()){
           delete logger;
           delete progress;
           throw std::runtime_error("Computation interrupted by user");

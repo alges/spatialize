@@ -6,9 +6,8 @@ Running the tests
 
 .. currentmodule:: spatialize.scenarios
 
-There are three equivalent ways to run the scenarios — the command line, Python, and pytest from
-a source checkout. All three run the same checks under the same error budget and print the same
-report.
+The scenarios run in three equivalent ways, from the command line, from Python, or with pytest in a
+source checkout. All three run the same checks under the same error budget, printing the same report.
 
 Quick start
 ===========
@@ -18,7 +17,8 @@ Quick start
    pip install "spatialize[scenarios]"      # spatialize + PyYAML
    python -m spatialize.scenarios           # run every scenario, fast mode
 
-Expected output (the seed and the p-values change from run to run; the decisions do not):
+The seed and the p-values change from run to run, while the decisions stay the same. A typical
+output looks like this.
 
 .. code-block:: text
 
@@ -40,12 +40,12 @@ continuous integration.
 Prerequisites
 =============
 
-**Installed package.** The suite ships inside the ``spatialize`` package (scenario descriptors and
-their data included). The only extra dependency is PyYAML, installed by the ``scenarios`` extra:
-``pip install "spatialize[scenarios]"``, or ``pip install PyYAML`` next to an existing
+**Installed package.** The suite ships inside the ``spatialize`` package, scenario descriptors and
+their data included. Its only extra dependency, PyYAML, comes with the ``scenarios`` extra
+(``pip install "spatialize[scenarios]"``), or with ``pip install PyYAML`` next to an existing
 installation.
 
-**Source checkout.** Build the compiled library in place, then put the sources on the path:
+**Source checkout.** Build the compiled library in place, then put the sources on the path.
 
 .. code-block:: bash
 
@@ -54,14 +54,14 @@ installation.
    export PYTHONPATH=.:src/python             # in-place build first, then the sources
    python -m spatialize.scenarios
 
-``--force`` matters: ``build_ext`` does not track the C++ headers, so without it a change to a
-header alone is not recompiled and you would be testing the old library.
+``build_ext`` does not track the C++ headers, so without ``--force`` a change to a header alone is not
+recompiled and you would be testing the old library.
 
 .. note::
 
    On macOS with a conda Python, importing the compiled library can fail with
-   ``Library not loaded: ...libomp.dylib``. Point the loader at Homebrew's OpenMP:
-   ``export DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib``.
+   ``Library not loaded: ...libomp.dylib``. Pointing the loader at Homebrew's OpenMP with
+   ``export DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib`` solves it.
 
 From the command line
 =====================
@@ -101,10 +101,9 @@ From the command line
    * - ``--list``
      - List the scenarios and their checks, and exit.
 
-Exit status: ``0`` all checks passed (skipped checks do not count as failures), ``1`` at least one
-check failed, ``2`` usage error (e.g. an unknown scenario).
-
-Examples:
+The exit status is ``0`` when every outcome is as expected (skipped checks do not count as
+failures), ``1`` when at least one check failed and ``2`` on a usage error (e.g. an unknown
+scenario). Some examples follow.
 
 .. code-block:: bash
 
@@ -116,10 +115,10 @@ Examples:
 
 .. important::
 
-   The Holm budget covers **the checks of one run**. Running a subset (``--tier``, ``--id``) gives
-   each check a larger share of the budget than in a full run, so a check can pass alone and fail
-   in the full catalogue when its p-value is close to its level. The full catalogue run is the
-   reference.
+   The Holm budget covers the checks of one run. Running a subset (``--tier``, ``--id``) gives each
+   check a larger share of the budget than a full run does, so a check whose p-value is close to its
+   level can pass alone while failing in the full catalogue. The run of the full catalogue serves as
+   the reference.
 
 From Python
 ===========
@@ -137,9 +136,8 @@ From Python
    for o in report.outcomes:                           # one outcome per check
        print(o.scenario, o.check, o.result.p_value, o.level, o.passed)
 
-:func:`catalog` loads the scenarios and verifies the checksums of their data; :func:`run`
-evaluates them, applies Holm's procedure to all the checks of the call and returns a
-:class:`Report`.
+:func:`catalog` loads the scenarios, verifying the checksums of their data. :func:`run` evaluates
+them, applies Holm's procedure to all the checks of the call and returns a :class:`Report`.
 
 .. _scenarios-maps:
 
@@ -147,14 +145,14 @@ Looking at the maps
 ===================
 
 Scenarios with visual criteria compute maps (for instance the median map of S03 on each replicate
-field). They are not kept unless asked for:
+field), which are kept only on request.
 
 .. code-block:: bash
 
    python -m spatialize.scenarios --id S03-anisotropic-field --save-maps maps/
 
-or, from Python, ``scenarios.run(..., save_maps="maps/")``. This writes, under
-``maps/<scenario>/``:
+From Python the same request reads ``scenarios.run(..., save_maps="maps/")``. Either form writes the
+following files under ``maps/<scenario>/``.
 
 .. list-table::
    :header-rows: 1
@@ -163,36 +161,36 @@ or, from Python, ``scenarios.run(..., save_maps="maps/")``. This writes, under
    * - File
      - Content
    * - ``<estimator>_<k>.png``
-     - Field *k*: the truth with the sample locations (left) and the estimated map (right), on one
-       colour scale; the declared orientation in white and the measured one in red; orientation
-       :math:`\theta` and coherence :math:`c` of each map in the titles.
+     - Field *k*, with the truth and its sample locations (left) next to the estimated map (right) on
+       one colour scale, the declared and the measured orientations drawn through the centre, and
+       the orientation :math:`\theta` and coherence :math:`c` of each map in the titles.
    * - ``<estimator>_summary.png``
-     - All fields at once, five per row: each truth above its estimated map.
+     - All fields at once, five per row, each truth above its estimated map.
    * - ``compare_<k>.png``
-     - Field *k*: the truth next to the map of every estimator of the scenario, on one colour scale
-       (when the scenario has more than one estimator).
+     - Field *k*, with the truth next to the map of every estimator of the scenario on one colour
+       scale (when the scenario has more than one estimator).
    * - ``<estimator>_point_<k>.npy``, ``<estimator>_truth_<k>.npy``
      - The arrays themselves (rows = :math:`y`, columns = :math:`x`, on the scenario's grid), to
        analyse further without rerunning.
 
-The maps are those the checks were computed from in the same run, so each figure matches its line
-of the report; with ``--seed`` they are reproducible. Saving needs matplotlib (a dependency of
-spatialize) and never changes a decision: figures are for human review only (:doc:`visual`).
+The checks were computed from these same maps in the same run, so each figure matches its line of
+the report, and ``--seed`` reproduces them. Saving needs matplotlib, a dependency of Spatialize, and
+never changes a decision, since figures serve human review only (:doc:`visual`).
 
 .. figure:: /_static/scenarios/S03_compare_13.png
    :width: 100%
    :alt: Truth and the seven median maps of S03 on field 13
 
-   ``compare_13.png`` of S03 (``ci`` mode, seed 12345): the truth with its samples and the median
-   map of each estimator, on one colour scale; white is the declared orientation, red the measured
-   one.
+   ``compare_13.png`` of S03 (``ci`` mode, seed 12345), with the truth and its samples next to the
+   median map of each estimator on one colour scale and the declared and the measured orientations
+   drawn through the centre.
 
 With pytest (source checkout)
 =============================
 
 ``tests/scenarios/test_conformance.py`` runs the whole catalogue once and reports each check as a
 separate test, so failures show up in the usual pytest summary. It puts the in-place build and
-``src/python`` on the path itself:
+``src/python`` on the path itself.
 
 .. code-block:: bash
 
@@ -248,10 +246,10 @@ What to do when a check fails
 2. **Do not reroll the seed until it passes.** With a correct implementation a run fails
    spuriously with probability at most :math:`10^{-3}`, so a failure is strong evidence of a real
    change. Rerunning with new seeds until one passes discards exactly that evidence.
-3. **Read the details**: which quantity moved, by how much, and in which direction. Run the
-   scenario in ``--mode full`` for a more precise estimate of the deviation.
+3. **Read the details**, which say which quantity moved, by how much and in which direction. Running
+   the scenario in ``--mode full`` gives a more precise estimate of the deviation.
 4. If the change is intended (for example, a deliberate change of the partition process), the
-   affected scenario must be revised — a new scenario version with its expectation updated and
-   justified — never its threshold relaxed to accommodate the run.
-5. A **negative control** that fails (its test did not reject) means the test lost power; the
-   passes of that family are not trustworthy until it is fixed.
+   affected scenario gets a new version with its expectation updated and justified. Its threshold is
+   never relaxed to accommodate the run.
+5. A **negative control** that fails (its test did not reject) shows that the test lost power, so
+   the passes of that family cannot be trusted until it is fixed.

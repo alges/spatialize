@@ -26,7 +26,7 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - the ensemble keeps the short axis that a fitted isotropic kriging blurs
      - :ref:`S03 <scenario-S03>`
      - coherence of the ensemble map > that of ordinary kriging with a fitted isotropic variogram (paired)
-     - blocked: ordinary-kriging baseline
+     - blocked (ordinary-kriging baseline)
    * - V3
      - the anisotropy is in the fields, not only in the mean
      - :ref:`S03 <scenario-S03>`
@@ -46,12 +46,12 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - sharp dry-region boundaries
      - :ref:`S04 <scenario-S04>`
      - IoU of :math:`p_{dry}>1/2` with the dry region and edge sharpness, weighted draw > draw
-     - blocked: draw decoders
+     - blocked (draw decoders)
    * - V7
      - no halos around extreme values
      - :ref:`S05 <scenario-S05>`
      - halo index of ordinary kriging negative around top-decile cells; ensemble maps never below the data minimum
-     - partly ready: kriging baseline
+     - partly ready (kriging baseline)
    * - V8
      - exceedance regions
      - :ref:`S07 <scenario-S07>`
@@ -66,7 +66,7 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - connectivity of high-value bodies
      - :ref:`S13 <scenario-S13>`
      - Euler-characteristic curves of members and simulated fields equivalent to the truth's; the mean map departs
-     - ready: connectivity functional
+     - ready (connectivity functional)
    * - V11
      - shape of the estimated covariance
      - :ref:`S11 <scenario-S11>`

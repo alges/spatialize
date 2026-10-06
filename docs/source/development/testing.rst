@@ -4,7 +4,7 @@
 Testing
 #######
 
-Three layers, each answering a different question.
+Spatialize is tested in three layers, each answering a different question.
 
 .. list-table::
    :header-rows: 1
@@ -30,22 +30,22 @@ Building for tests
 
    python setup.py build_ext --inplace --force
 
-``--force`` is required after editing headers: ``build_ext`` does not track
-``include/spatialize/*.hpp``, so without it a header-only change is not recompiled. On macOS with a
-conda Python, set ``DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib`` so the in-place build loads
-Homebrew's OpenMP runtime.
+``build_ext`` does not track the headers under ``include/spatialize/``, so after editing one only
+``--force`` makes the change reach the compiled library. On macOS with a conda Python, setting
+``DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib`` makes the in-place build load Homebrew's OpenMP
+runtime.
 
 Example scripts
 ===============
 
-The scripts in ``examples/scripted_examples/`` are runnable end-to-end uses of the public API. Every
-push to ``develop`` builds the wheel, installs it and runs ``esi_3d_nongriddata.py``.
+The scripts in ``examples/scripted_examples/`` use the public API end to end. Every push to
+``develop`` builds the wheel, installs it and runs ``esi_3d_nongriddata.py``.
 
 Conformance scenarios
 =====================
 
-Statistical acceptance tests on geostatistical situations with a known truth; see
-:doc:`../scenarios/running`. They run in CI after the example script:
+The conformance scenarios are statistical acceptance tests on geostatistical situations with a known
+truth (:doc:`../scenarios/running`). They run in CI after the example script.
 
 .. code-block:: bash
 
@@ -54,22 +54,22 @@ Statistical acceptance tests on geostatistical situations with a known truth; se
 Refactor guard
 ==============
 
-Bitwise snapshots of the outputs of the compiled entry points on fixed inputs, used to prove that a
-pure refactor changes nothing:
+The refactor guard keeps bitwise snapshots of the outputs of the compiled entry points on fixed
+inputs, which show that a pure refactor changes nothing.
 
 .. code-block:: bash
 
    python -m pytest -q tests/refactor_guard
 
-- The snapshots describe the code they were taken from, including its defects. When a behaviour is
-  changed on purpose, regenerate only the affected cases, in the same commit as the change:
+- The snapshots describe the code they were taken from, defects included. A behaviour changed on
+  purpose needs only the affected cases regenerated, in the same commit as the change, with
   ``python tests/refactor_guard/make_snapshots.py --only CASE ...``.
-- Floating-point results depend on the compiler, the math library and the OpenMP runtime, so
-  snapshots are per platform (``snapshots/<platform>/``); the test is skipped where none exist. On a
-  new platform, generate them from a commit *before* the change to be checked.
+- Floating-point results depend on the compiler, the math library and the OpenMP runtime, so the
+  snapshots are kept per platform (``snapshots/<platform>/``), the test being skipped where none
+  exist. On a new platform they are generated from a commit before the change to be checked.
 - The guard refuses to run against a binary older than the sources (see "Building for tests").
-- It checks numbers, not log or progress messages, and it is not shipped with the package.
+- It checks numbers, not log or progress messages, and does not ship with the package.
 
-The guard and the scenarios are complementary: the guard detects any change at all, but only on
-one platform and with no notion of right or wrong; the scenarios accept any correct implementation
-and reject wrong behaviour, but cannot see a change too small to matter statistically.
+The guard and the scenarios complement each other. The guard detects any change at all, on one
+platform only, with no notion of right or wrong. The scenarios accept any correct implementation
+while rejecting wrong behaviour, though a change too small to matter statistically escapes them.

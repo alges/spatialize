@@ -4,8 +4,8 @@
 Encoder profiles
 #################
 
-A scenario states which partition process it targets, because the suite distinguishes the
-process of the theory from the processes actually implemented.
+A scenario states which partition process it targets, since the suite distinguishes the process of
+the theory from the processes actually implemented.
 
 .. list-table::
    :header-rows: 1
@@ -13,75 +13,76 @@ process of the theory from the processes actually implemented.
 
    * - Profile
      - Definition
-   * - ``mondrian/book``
-     - The Mondrian process of rate (budget) :math:`\lambda` on a box :math:`H` (Roy & Teh 2009;
-       the theory's definition; the ESI paper's Algorithm 1): draw
-       :math:`E \sim \mathrm{Exp}(\mu(H))`, :math:`\mu(H) = \sum_i (b_i - a_i)`; if :math:`E` exceeds
-       the remaining budget the box is a cell; otherwise cut an axis chosen with probability
-       proportional to its side length, at a uniform position, and recurse with budget
-       :math:`\lambda - E`. Its co-occurrence is :math:`e(S) = \exp(-\lambda \sum_c
-       \mathrm{range}_c(S))`.
-   * - ``mondrian/spatialize-v1``
-     - Spatialize's current Mondrian: the root box is always split; the cut axis is chosen
-       **uniformly** among the dimensions; a child's time is its parent's plus
-       :math:`\mathrm{Exp}(\mu(\text{child}))`; splitting continues while the time is below
-       :math:`\lambda`. The box is the bounding box of samples and queries.
-   * - ``voronoi/book``
-     - The Poisson–Voronoi partition of intensity :math:`\lambda_V` (as defined in the theory):
-       generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit
-       volume; each location belongs to the cell of its nearest generator.
-   * - ``voronoi/spatialize-v1-uniform``
-     - Spatialize's Voronoi with ``alpha < 0``: :math:`N \sim \max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))`
+   * - the theory's Mondrian process
+     - The Mondrian process of rate (budget) :math:`\lambda` on a box :math:`H`, as defined by Roy
+       and Teh (2009), by the theory and by Algorithm 1 of the ESI paper. It draws
+       :math:`E \sim \mathrm{Exp}(\mu(H))` with :math:`\mu(H) = \sum_i (b_i - a_i)`. If :math:`E`
+       exceeds the remaining budget the box becomes a cell. Otherwise it cuts an axis chosen with
+       probability proportional to its side length, at a uniform position, recursing with budget
+       :math:`\lambda - E`. Its co-occurrence is
+       :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`.
+   * - Spatialize's Mondrian partition
+     - Spatialize's current Mondrian partition. It always splits the root box, choosing the cut axis uniformly
+       among the dimensions. A child's time is its parent's plus
+       :math:`\mathrm{Exp}(\mu(\text{child}))`, with splitting continuing while the time stays
+       below :math:`\lambda`. The box is the bounding box of samples and queries.
+   * - the theory's Poisson–Voronoi partition
+     - The Poisson–Voronoi partition of intensity :math:`\lambda_V`, as defined in the theory. Its
+       generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit volume,
+       each location belonging to the cell of its nearest generator.
+   * - Spatialize's Voronoi partition with uniform nuclei
+     - Spatialize's Voronoi partition with ``alpha < 0``, with :math:`N \sim \max(1, \mathrm{Poisson}(0.5\,n\,|\alpha|))`
        nuclei, at most :math:`n` (the number of samples), placed uniformly in the box. Apart from
-       the truncation of :math:`N`, this is a Poisson process restricted to the box, i.e.
-       ``voronoi/book`` without generators outside :math:`H`. Two dimensions.
-   * - ``voronoi/spatialize-v1-data``
-     - Spatialize's Voronoi with ``alpha >= 0`` (its default, data-conditioned): the same number of
-       nuclei, drawn among the sample locations (with replacement). Its law depends on the
+       the truncation of :math:`N`, this is a Poisson process restricted to the box, i.e. the
+       theory's Poisson–Voronoi partition without generators outside :math:`H`. Two dimensions.
+   * - Spatialize's Voronoi partition with nuclei at the data
+     - Spatialize's Voronoi partition with ``alpha >= 0`` (its default, data-conditioned), with the same number
+       of nuclei drawn among the sample locations (with replacement). Its law depends on the
        sampling design, so it has no counterpart in the theory. Two dimensions.
 
-``alpha`` is not the rate :math:`\lambda`
-=========================================
+From the Mondrian rate to ``alpha``
+===================================
 
-Spatialize exposes a normalised granularity :math:`\alpha \in [0, 1)` (Egaña et al., 2021, eq. 8)
-from which the Mondrian budget is derived for the box :math:`H` the partition is drawn on:
+Spatialize exposes a normalised granularity :math:`\alpha \in [0, 1)` (Egaña et al., 2021, eq. 8),
+which differs from the rate :math:`\lambda`. The Mondrian budget is derived from it for the box
+:math:`H` the partition is drawn on, as
 
 .. math::
 
    \lambda(\alpha) = \frac{1}{\mu(H)\,(1-\alpha)}, \qquad \mu(H) = \sum_i (b_i - a_i),
    \qquad\text{equivalently}\qquad \alpha = 1 - \frac{1}{\lambda\,\mu(H)} .
 
-The same :math:`\alpha` gives different rates on different boxes: :math:`\alpha = 0` is the coarsest
-partition (:math:`\lambda = 1/\mu(H)`) and :math:`\alpha \to 1` gives ever finer ones; on the unit
-square :math:`\lambda = 1/(2(1-\alpha))`. Scenarios declare the rate :math:`\lambda` together with
-the domain :math:`H`; Spatialize's runner derives ``alpha`` from both
-(:func:`spatialize.scenarios.runners.spatialize.alpha_from_rate`) and pins the box to the declared
-domain by adding the domain's corners as extra queries.
+The same :math:`\alpha` therefore gives different rates on different boxes. The value
+:math:`\alpha = 0` gives the coarsest partition (:math:`\lambda = 1/\mu(H)`), while
+:math:`\alpha \to 1` gives ever finer ones, and on the unit square :math:`\lambda = 1/(2(1-\alpha))`.
+Scenarios declare the rate :math:`\lambda` together with the domain :math:`H`. Spatialize's runner
+derives ``alpha`` from both (:func:`spatialize.scenarios.runners.spatialize.alpha_from_rate`),
+pinning the box to the declared domain by adding the domain's corners as extra queries.
 
-Voronoi: the intensity :math:`\lambda_V` and ``alpha``
-======================================================
+From the Voronoi intensity to ``alpha``
+=======================================
 
-Voronoi scenarios declare the book's intensity :math:`\lambda_V`, never ``alpha``. Spatialize's
-``alpha`` sets the expected number of nuclei, :math:`0.5\,n\,|\alpha|`, relative to the number
-of samples :math:`n`; matching it to the expected number of generators of the book's process on
+Voronoi scenarios declare the theory's intensity :math:`\lambda_V`, never ``alpha``. Spatialize's
+``alpha`` sets the expected number of nuclei, :math:`0.5\,n\,|\alpha|`, relative to the number of
+samples :math:`n`. Matching it to the expected number of generators of the theory's process on
 :math:`H`, :math:`\lambda_V\,|H|` with :math:`|H|` the volume of the box, gives
 
 .. math::
 
    |\alpha| = \frac{2\,\lambda_V\,|H|}{n},
 
-with the sign set by the profile (negative for ``-uniform``, positive for ``-data``)
+with the sign set by the profile (negative for uniform nuclei, positive for nuclei at the data)
 (:func:`spatialize.scenarios.runners.spatialize.alpha_from_intensity`). The same scenario therefore
-means the same partition law whatever the number of samples. Spatialize accepts
-:math:`|\alpha| < 1` only, so a scenario must keep :math:`\lambda_V |H| < n/2`; the runner
-reports an error otherwise. For :math:`N` to be close to Poisson, :math:`\lambda_V |H|` should
-also stay well below :math:`n`, where the truncation at :math:`n` would act.
+means the same partition law whatever the number of samples. Spatialize accepts only
+:math:`|\alpha| < 1`, so a scenario must keep :math:`\lambda_V |H| < n/2`, the runner reporting an
+error otherwise. For :math:`N` to stay close to Poisson, :math:`\lambda_V |H|` should also remain
+well below :math:`n`, where the truncation at :math:`n` would act.
 
-Measured deviation of ``mondrian/spatialize-v1``
-=================================================
+Measured deviation of Spatialize's Mondrian partition
+=====================================================
 
-Probability that a location at displacement :math:`h` from the centre of the box shares the
-centre's cell, 20 000 trees, :math:`\alpha = 0.8`:
+The table gives the probability that a location at displacement :math:`h` from the centre of the
+box shares the centre's cell, estimated from 20 000 trees with :math:`\alpha = 0.8`.
 
 .. list-table::
    :header-rows: 1
@@ -122,9 +123,9 @@ centre's cell, 20 000 trees, :math:`\alpha = 0.8`:
      - 0.441
      - 0.741
 
-On a square the co-occurrence is 4–21 % below the closed form and depends on direction beyond the
-:math:`\ell_1` distance; on an elongated box the uniform choice of axis makes the partition strongly
-anisotropic. Closed-form scenarios therefore target ``mondrian/book``; run on
-``mondrian/spatialize-v1`` they are **negative controls** (:doc:`statistics`). Changing Spatialize's
-default process would change every existing result, so it is not done; an opt-in profile closer to
-the theory is a possible future addition.
+On a square the co-occurrence lies 4–21 % below the closed form, depending on the direction beyond
+the :math:`\ell_1` distance. On an elongated box the uniform choice of axis makes the partition
+strongly anisotropic. Closed-form scenarios therefore target the theory's Mondrian process, serving
+as negative controls (:doc:`statistics`) when run on Spatialize's Mondrian partition. Changing Spatialize's default
+process would change every existing result, so the default stays, with an opt-in profile closer to
+the theory considered for the future.

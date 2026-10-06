@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 6
+version: 7
 tier: T3
 evaluator: map_visual
 book:
@@ -33,15 +33,15 @@ estimators:
   - {id: krig, encoder: mondrian, rate: 5.0, decoder: kriging,
      params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
   # Poisson–Voronoi intensity 36: the same expected number of cells as the Mondrian estimators.
-  - {id: vor-uniform-idw, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: idw,
+  - {id: vor-uniform-idw, encoder: voronoi, rate: 36.0, decoder: idw,
      params: {exponent: 2.0}, empty_cells: nan}
-  - {id: vor-data-idw, encoder: voronoi/spatialize-v1-data, rate: 36.0, decoder: idw,
+  - {id: vor-data-idw, encoder: voronoi-data, rate: 36.0, decoder: idw,
      params: {exponent: 2.0}, empty_cells: nan}
   # Same decoders as krig/aidw on the uniform Voronoi profile (not in the public API yet: the runner
   # reaches them through libspatialize.run).
-  - {id: vor-uniform-krig, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: kriging,
+  - {id: vor-uniform-krig, encoder: voronoi, rate: 36.0, decoder: kriging,
      params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
-  - {id: vor-uniform-aidw, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: adaptiveidw,
+  - {id: vor-uniform-aidw, encoder: voronoi, rate: 36.0, decoder: adaptiveidw,
      params: {metric: mae, parallelize: true}, empty_cells: nan}
 checks:
   # The same two pre-registered criteria for every estimator:
@@ -154,3 +154,4 @@ provenance:
     below 0.9 like Mondrian IDW (0.85), so the known failures stay with an updated reason; V1
     coherence ratio 0.82 -> 0.64 (the smoothing had inflated it). Thresholds unchanged.
   pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"
+  v7: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"

@@ -193,7 +193,7 @@ class CheckOutcome:
 
     @property
     def ok(self):
-        """Whether the outcome is as expected: PASS, KNOWN or SKIPPED."""
+        """True when the outcome is as expected (PASS, KNOWN or SKIPPED)."""
         return self.status in ("PASS", "KNOWN", "SKIPPED")
 
 
@@ -337,9 +337,9 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
     n_keep = max([int(c.get("members_checked", 0)) for c in s["checks"]] + [0])
 
     def point_maps(est, n_members, rotate_deg=0.0, keep_members=0):
-        """Median maps (and their readings) of an estimator on every field; with ``rotate_deg`` the
-        data and the domain are rotated about the domain centre and the estimator is evaluated at the
-        same physical points (so the maps stay comparable pixel by pixel)."""
+        """Median maps (and their readings) of an estimator on every field. With ``rotate_deg`` the
+        data and the domain are rotated about the domain centre, the estimator being evaluated at the
+        same physical points so that the maps stay comparable pixel by pixel."""
         rows = []
         for k in range(K):
             f = sc.field(k)
@@ -554,7 +554,7 @@ class Report:
 
     @property
     def passed(self):
-        """Whether every outcome is as expected (passed, or a known failure that failed)."""
+        """True when every outcome is as expected (passed, or a known failure that failed)."""
         return all(o.ok for o in self.outcomes)
 
     def table(self):

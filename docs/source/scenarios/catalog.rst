@@ -4,16 +4,16 @@
 Catalogue
 #########
 
-The catalogue is the list of situations Spatialize is held to. It is organised in tiers — the law
-of the partition process (T1), propositions about the estimator (T2) and complete geostatistical
-situations (T3) — plus the visual criteria attached to the scenarios. Every scenario is described in
-full on its tier's page: what it claims and where the claim comes from, the truth, the data, the
-estimators, each pre-registered check with its test family, how its targets are derived, what it
-depends on and, for implemented scenarios, its results and history.
+The catalogue lists the situations Spatialize is held to, organised in three tiers, the law of the
+partition process (T1), propositions about the estimator (T2) and complete geostatistical situations
+(T3), plus the visual criteria attached to the scenarios. Each tier's page describes every scenario
+in full, with what it claims, where the claim comes from, the truth, the data, the estimators, each
+pre-registered check with its test family, how its targets are derived, what it depends on and, for
+implemented scenarios, its results and history.
 
-Each implemented scenario lives in ``spatialize/scenarios/catalog/<id>/``: a ``scenario.yaml``
-descriptor (:doc:`file_format`), its normative definition, and for pinned data ``data/*.npy`` files
-with a ``CHECKSUMS.sha256`` manifest.
+Each implemented scenario lives in ``spatialize/scenarios/catalog/<id>/``, holding its normative
+definition in a ``scenario.yaml`` descriptor (:doc:`file_format`) next to its pinned data,
+``data/*.npy`` files with a ``CHECKSUMS.sha256`` manifest.
 
 .. toctree::
    :maxdepth: 2
@@ -26,14 +26,14 @@ with a ``CHECKSUMS.sha256`` manifest.
 Status of every scenario
 ========================
 
-Every scenario of the specification, with what it needs before it can be implemented. Target
-values taken from examples of the theory are derived independently (and, where possible, computed
-by the evaluator) before a scenario is implemented, because the theory is still a draft.
+The table gives every scenario of the specification, with what it needs before it can be
+implemented. Since the theory is still a draft, target values taken from its examples are derived
+independently before a scenario is implemented, and computed by the evaluator where possible.
 
 - **implemented** — in the catalogue and run on every change;
 - **ready** — needs only new evaluators or generators;
 - **negative control** — its target is the theory's Mondrian process, which Spatialize does not
-  implement (:doc:`encoders`): on Spatialize it can only be a test expected to reject;
+  implement (:doc:`encoders`), so on Spatialize it can only be a test expected to reject;
 - **blocked / partly ready** — needs a feature not yet in Spatialize or an external baseline.
 
 .. list-table::

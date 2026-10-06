@@ -19,7 +19,7 @@ class EstimatorSpec:
     id : str
         Name of the estimator inside its scenario (e.g. ``"idw"``).
     encoder : str
-        Partition profile, e.g. ``"mondrian/spatialize-v1"`` or ``"voronoi/spatialize-v1-uniform"``
+        Partition profile, e.g. ``"mondrian"``, ``"voronoi"`` or ``"voronoi-data"``
         (see the documentation, *Encoder profiles*).
     rate : float or None
         The encoder's rate in the book's terms: the Mondrian rate/budget λ, or the intensity λ_V
@@ -49,7 +49,7 @@ class EstimatorSpec:
 
 @runtime_checkable
 class Runner(Protocol):
-    """What an implementation must provide to be tested by the suite.
+    """Interface an implementation provides to be tested by the suite.
 
     The suite only asks a runner for ensembles; it computes every reading of the law, functional,
     test and decision itself, identically for every implementation. Any object with these members

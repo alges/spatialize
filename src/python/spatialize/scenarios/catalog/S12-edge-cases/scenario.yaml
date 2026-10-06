@@ -1,5 +1,5 @@
 id: S12-edge-cases
-version: 2
+version: 3
 tier: T3
 evaluator: edge_cases
 book:
@@ -30,15 +30,15 @@ estimators:
      params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
   - {id: m-aidw, encoder: mondrian, rate: 2.0, decoder: adaptiveidw,
      params: {metric: mae, parallelize: true}, empty_cells: nan}
-  - {id: vu-idw, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
-  - {id: vu-krig, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: kriging,
+  - {id: vu-idw, encoder: voronoi, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vu-krig, encoder: voronoi, rate: 8.0, decoder: kriging,
      params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
-  - {id: vu-aidw, encoder: voronoi/spatialize-v1-uniform, rate: 8.0, decoder: adaptiveidw,
+  - {id: vu-aidw, encoder: voronoi, rate: 8.0, decoder: adaptiveidw,
      params: {metric: mae, parallelize: true}, empty_cells: nan}
-  - {id: vd-idw, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
-  - {id: vd-krig, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: kriging,
+  - {id: vd-idw, encoder: voronoi-data, rate: 8.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vd-krig, encoder: voronoi-data, rate: 8.0, decoder: kriging,
      params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
-  - {id: vd-aidw, encoder: voronoi/spatialize-v1-data, rate: 8.0, decoder: adaptiveidw,
+  - {id: vd-aidw, encoder: voronoi-data, rate: 8.0, decoder: adaptiveidw,
      params: {metric: mae, parallelize: true}, empty_cells: nan}
 checks:
   - id: e1
@@ -69,3 +69,4 @@ provenance:
   v2: >
     2026-10-06: e4 extended to the Voronoi IDW estimators, excluded in v1 because the public Voronoi
     IDW weighted data by 1/(1+d^p) and did not interpolate exactly; corrected to 1/d^p.
+  v3: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"

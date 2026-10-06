@@ -8,8 +8,8 @@ compiled engine does (e.g. kriging on Voronoi partitions) go through ``libspatia
 report marks them ``[run]``.
 
 Decoder names are spatialize's ``local_interpolator`` names (``"idw"``, ``"kriging"``,
-``"adaptiveidw"``, ...), and a scenario must declare every decoder parameter explicitly (they are
-pre-registered, so no default is filled in here). Rates are translated into spatialize's ``alpha``
+``"adaptiveidw"``, ...). A scenario must declare every decoder parameter explicitly, since the
+parameters are pre-registered and the runner fills in no default. Rates are translated into spatialize's ``alpha``
 by :func:`alpha_from_rate` (Mondrian) and :func:`alpha_from_intensity` (Voronoi).
 """
 import itertools
@@ -20,10 +20,9 @@ from ..protocol import EstimatorSpec
 
 #: Encoder profiles this runner implements: profile -> (spatialize's ``p_process``, ``data_cond``).
 PROFILES = {
-    "mondrian": ("mondrian", True),                      # alias of mondrian/spatialize-v1
-    "mondrian/spatialize-v1": ("mondrian", True),
-    "voronoi/spatialize-v1-uniform": ("voronoi", False),  # nuclei uniform in the box (alpha < 0)
-    "voronoi/spatialize-v1-data": ("voronoi", True),      # nuclei drawn among the samples (alpha >= 0)
+    "mondrian": ("mondrian", True),        # Spatialize's Mondrian partition
+    "voronoi": ("voronoi", False),         # Spatialize's Voronoi, nuclei uniform in the box (alpha < 0)
+    "voronoi-data": ("voronoi", True),     # Spatialize's Voronoi, nuclei among the samples (alpha >= 0)
 }
 
 #: Decoders of the compiled engine's generic entry point ``libspatialize.run``.
@@ -124,7 +123,7 @@ class SpatializeRunner:
         self._lib = libspatialize
 
     def profile(self, encoder):
-        """Canonical encoder profile name (``"mondrian"`` is an alias of ``"mondrian/spatialize-v1"``).
+        """Canonical encoder profile name.
 
         Parameters
         ----------
@@ -135,7 +134,7 @@ class SpatializeRunner:
         -------
         str
         """
-        return "mondrian/spatialize-v1" if encoder == "mondrian" else encoder
+        return encoder
 
     def _operator(self, est):
         """The facade's operator for this estimator, or None when the facade does not provide it."""
@@ -156,7 +155,7 @@ class SpatializeRunner:
         return est.decoder != "adaptiveidw" or len(est.domain) in (2, 3)
 
     def route(self, est):
-        """How the estimator is run.
+        """Path by which the runner reaches the estimator.
 
         Parameters
         ----------
@@ -196,7 +195,7 @@ class SpatializeRunner:
         clash = _RESERVED & set(est.params)
         if clash:
             raise ValueError(f"{est.id}: params may not set {sorted(clash)}")
-        # spatialize-v1 draws the partition on bbox(samples ∪ queries): pin it to the declared domain
+        # Spatialize draws the partition on bbox(samples ∪ queries): pin it to the declared domain
         corners = np.array(list(itertools.product(*est.domain)), np.float32)
         q = np.vstack([np.asarray(queries, np.float32), corners])
         p_process, data_cond = PROFILES[est.encoder]

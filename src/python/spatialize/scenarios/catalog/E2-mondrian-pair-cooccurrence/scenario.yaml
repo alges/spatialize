@@ -1,5 +1,5 @@
 id: E2-mondrian-pair-cooccurrence
-version: 1
+version: 2
 tier: T1
 evaluator: pair_cooccurrence
 book:
@@ -25,8 +25,10 @@ checks:
     delta: {ci: 0.05, full: 0.02}   # minimum detectable effect in a co-occurrence
     n_members: {ci: 3100, full: 19300}   # power ≥ 0.9 at delta, up to 50 tests under Holm (budget.required_n)
     expect:
-      mondrian/book: pass
+      mondrian-theory: pass
       # Negative control: spatialize's current Mondrian draws the cut axis uniformly and always
       # splits the root (not the book's Mondrian process); measured co-occurrence is 4–21 % below the closed form on
       # the unit square. The test must reject it — that proves its power.
-      mondrian/spatialize-v1: reject
+      mondrian: reject
+provenance:
+  v2: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"

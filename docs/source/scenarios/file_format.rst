@@ -4,12 +4,13 @@
 Scenario file reference
 #######################
 
-Each scenario is a directory ``spatialize/scenarios/catalog/<id>/`` holding a ``scenario.yaml``
-descriptor — the normative definition of the scenario — and, for pinned data, ``data/*.npy`` files
-with a ``CHECKSUMS.sha256`` manifest. This page lists every key the descriptor may contain.
+Each scenario occupies a directory ``spatialize/scenarios/catalog/<id>/`` holding a
+``scenario.yaml`` descriptor, the normative definition of the scenario, together with ``data/*.npy``
+files and a ``CHECKSUMS.sha256`` manifest when its data are pinned. The tables below list every key
+the descriptor may contain.
 
-Values that differ between the two modes are written as ``{ci: <value>, full: <value>}``; a plain
-value applies to both.
+Values that differ between the two modes are written as ``{ci: <value>, full: <value>}``, while a
+plain value applies to both.
 
 Top-level keys
 ==============
@@ -85,8 +86,9 @@ Estimators
    * - ``id``
      - Name of the estimator inside the scenario; checks refer to it.
    * - ``encoder``
-     - Partition profile (:doc:`encoders`): ``mondrian`` (alias of ``mondrian/spatialize-v1``),
-       ``voronoi/spatialize-v1-uniform`` or ``voronoi/spatialize-v1-data``.
+     - Partition profile (:doc:`encoders`), one of ``mondrian`` (Spatialize's Mondrian partition),
+       ``voronoi`` (Spatialize's Voronoi partition with uniform nuclei) or ``voronoi-data``
+       (Spatialize's Voronoi partition with nuclei at the data).
    * - ``rate``
      - Mondrian rate :math:`\lambda`, or Voronoi intensity :math:`\lambda_V` per unit volume, on the
        scenario's ``domain``. Never Spatialize's ``alpha``: runners derive their own parameters.
@@ -105,7 +107,7 @@ Estimators
 Checks
 ======
 
-Keys common to every evaluator:
+The following keys are common to every evaluator.
 
 .. list-table::
    :header-rows: 1
@@ -123,8 +125,9 @@ Keys common to every evaluator:
    * - ``estimator`` / ``estimators``
      - The estimator the check reads, or a list of them (one outcome each).
    * - ``expect``
-     - Optional, per encoder profile: ``pass`` (default) or ``reject`` for a negative control,
-       e.g. ``{mondrian/book: pass, mondrian/spatialize-v1: reject}``.
+     - Optional, per encoder profile, ``pass`` (default) or ``reject`` for a negative control, e.g.
+       ``{mondrian-theory: pass, mondrian: reject}``. The profiles ``mondrian-theory`` and
+       ``voronoi-theory`` name the theory's processes, for implementations that provide them.
    * - ``known_failure``
      - Optional reason: the check records a known defect. It is reported ``KNOWN`` while it fails
        and ``XPASS`` — failing the run — once it passes (:doc:`statistics`).
@@ -132,7 +135,8 @@ Keys common to every evaluator:
 Evaluator ``pair_cooccurrence``
 -------------------------------
 
-The partition law read through the estimator (scenario E2): a single datum, empty cells as NaN.
+This evaluator reads the partition law through the estimator (scenario E2), with a single datum and
+empty cells as NaN.
 
 - ``data.datum`` — location of the single datum (value 1).
 - ``data.directions`` — directions of displacement (normalised to unit :math:`\ell_1` length).
@@ -143,7 +147,7 @@ The partition law read through the estimator (scenario E2): a single datum, empt
 Evaluator ``map_visual``
 ------------------------
 
-Visual criteria on median maps over pinned replicate fields (scenario S03).
+This evaluator decides visual criteria on median maps over pinned replicate fields (scenario S03).
 
 - ``truth``: ``generator: sgf_exponential`` with ``a1``, ``a2`` (ranges) and ``theta_deg``.
 - ``data``: ``design`` (``type: uniform``, ``n``), ``grid`` (queries on an ``m``×``m`` grid of cell
@@ -173,7 +177,7 @@ Visual criteria on median maps over pinned replicate fields (scenario S03).
 Evaluator ``edge_cases``
 ------------------------
 
-Almost-sure checks on degenerate designs (scenario S12).
+This evaluator decides almost-sure checks on degenerate designs (scenario S12).
 
 - ``truth``: ``generator: vbm_edge_cases``, ``n_cells``, ``marks: {lognormal: [mu, sigma]}``.
 - ``data``: ``design`` (``n`` points uniform in ``box``), ``duplicates`` (``same_value``,

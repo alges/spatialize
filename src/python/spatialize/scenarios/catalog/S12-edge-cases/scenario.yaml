@@ -1,5 +1,5 @@
 id: S12-edge-cases
-version: 1
+version: 2
 tier: T3
 evaluator: edge_cases
 book:
@@ -63,7 +63,9 @@ checks:
     kind: exact
     family: almost-sure
     tolerance: 1.0e-3               # × data range: float32 linear algebra (kriging) and the 1e-10 guard (adaptive IDW)
-    # not the public Voronoi IDW (vu-idw, vd-idw): its weights 1/(1 + d^p) do not interpolate exactly
-    estimators: [m-idw, m-krig, m-aidw, vu-krig, vu-aidw, vd-krig, vd-aidw]
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
 provenance:
   design: "2026-10-06: checks, tolerances and estimators fixed before the first run"
+  v2: >
+    2026-10-06: e4 extended to the Voronoi IDW estimators, excluded in v1 because the public Voronoi
+    IDW weighted data by 1/(1+d^p) and did not interpolate exactly; corrected to 1/d^p.

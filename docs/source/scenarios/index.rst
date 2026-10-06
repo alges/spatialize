@@ -1,16 +1,32 @@
 .. _scenarios:
 
-#####################################
-Geostatistical test scenarios
-#####################################
+#################
+Conformance Tests
+#################
 
 .. currentmodule:: spatialize.scenarios
 
-``spatialize.scenarios`` is a **conformance suite**: a catalogue of geostatistical situations with
-a known truth, together with the statistical machinery that decides whether an implementation of
-ensemble estimation over random partitions behaves as the theory says it must. Spatialize runs it on
-itself, and any other implementation of the same concepts can run it too, by providing a small
-adapter (a :class:`~spatialize.scenarios.protocol.Runner`).
+Spatialize is not a toy library. It is meant to be used in real work — estimating resources,
+mapping contamination, rainfall or hydrogeological properties, and quantifying how uncertain those
+maps are — where its results feed decisions with real consequences. A practitioner who relies on
+it needs more than examples that run: they need evidence that the estimators behave as the theory
+says they must, on the situations that matter in practice, and that this keeps being true release
+after release.
+
+These conformance tests are that evidence: **the statistical safety signature of Spatialize**.
+Each test is a geostatistical situation with a known truth and a pre-registered acceptance
+criterion, decided by a statistical test with a stated error rate and power. The whole suite runs
+automatically on every change pushed to the development branch, and anyone can run it on their own
+machine with one command. Its findings are public: when
+a test exposed a defect, the defect was fixed and the test kept watch over it; when an estimator
+falls short of a criterion by its nature, the shortfall is recorded as a *known failure* with its
+reason, never hidden by relaxing the criterion.
+
+Technically, ``spatialize.scenarios`` is a **conformance suite**: a catalogue of geostatistical
+situations with a known truth, together with the statistical machinery that decides whether an
+implementation of ensemble estimation over random partitions behaves as the theory says it must.
+Spatialize runs it on itself, and any other implementation of the same concepts can run it too, by
+providing a small adapter (a :class:`~spatialize.scenarios.protocol.Runner`).
 
 How to run the tests
 ====================

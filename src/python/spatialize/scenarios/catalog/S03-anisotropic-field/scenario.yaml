@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 5
+version: 6
 tier: T3
 evaluator: map_visual
 book:
@@ -112,10 +112,10 @@ checks:
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
   - {id: v5-vor-uniform, title: "V5 contrast against the best linear predictor (vor-uniform-idw)", estimator: vor-uniform-idw,
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
-     known_failure: "the public Voronoi IDW weights data by 1/(1+d^p), close to a cell mean on the unit square (contrast ratio about 0.65)"}
+     known_failure: "IDW with exponent 2 is smoother than the best linear predictor on this field (contrast ratio about 0.89)"}
   - {id: v5-vor-data, title: "V5 contrast against the best linear predictor (vor-data-idw)", estimator: vor-data-idw,
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
-     known_failure: "the public Voronoi IDW weights data by 1/(1+d^p), close to a cell mean on the unit square (contrast ratio about 0.65)"}
+     known_failure: "IDW with exponent 2 is smoother than the best linear predictor on this field (contrast ratio about 0.89)"}
   - {id: v5-vor-uniform-krig, title: "V5 contrast against the best linear predictor (vor-uniform-krig)", estimator: vor-uniform-krig,
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
   - {id: v5-vor-uniform-aidw, title: "V5 contrast against the best linear predictor (vor-uniform-aidw)", estimator: vor-uniform-aidw,
@@ -148,4 +148,9 @@ provenance:
     First run (K = 20): power checks and Voronoi kriging/adaptive IDW calibrations pass; v4a-aidw and
     v4c on the public Voronoi IDW lack power (means 0.34 and -0.09, p ≈ 1-2e-3 against Holm levels
     ≈ 2e-4). K raised to 40 (ci and full, user decision); fields 0-19 unchanged; δ unchanged.
+  v6: >
+    2026-10-06: the IDW kernel was corrected (1/d^p everywhere; the public Voronoi IDW used 1/(1+d^p),
+    close to a cell mean). Voronoi IDW maps are no longer smoothed: V5 contrast 0.67 -> 0.89, still
+    below 0.9 like Mondrian IDW (0.85), so the known failures stay with an updated reason; V1
+    coherence ratio 0.82 -> 0.64 (the smoothing had inflated it). Thresholds unchanged.
   pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"

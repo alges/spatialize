@@ -851,7 +851,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         result = esi_griddata(points, values, (grid_x, grid_y),
                               local_interpolator="idw",
-                              n_partitions=100      # overwritten at call
+                              n_partitions=100,     # overwritten at call
                               best_params_found=search_result.best_result())
     """
     log_message(logging.logger.debug(f"searching best params ..."))

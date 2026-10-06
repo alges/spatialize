@@ -87,7 +87,7 @@ class IDWResult(EstimationResult):
 def idw_hparams_search(points, values, xi,
                        k=10,
                        griddata=False,
-                       radius=(0.1, 0.2, 0.5, 0.1, 0.2),
+                       radius=(0.1, 0.2, 0.5),
                        exponent=tuple(np.arange(0.8, 1.0, 0.1)),
                        folding_seed=None,
                        callback=default_singleton_callback
@@ -124,7 +124,7 @@ def idw_hparams_search(points, values, xi,
     radius : tuple of float, optional
         Candidate `radius` values for the grid search -- the maximum
         distance within which neighboring points contribute to an
-        estimate. Default: ``(0.1, 0.2, 0.5, 0.1, 0.2)``.
+        estimate. Default: ``(0.1, 0.2, 0.5)``.
     exponent : tuple of float, optional
         Candidate IDW distance-decay `exponent` values for the grid search.
         Default: ``tuple(np.arange(0.8, 1.0, 0.1))``.

@@ -61,9 +61,9 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
         T estimates for each target location.
 
     """
-    points = np.asarray(points)
-    values = np.asarray(values)
-    xi = np.asarray(xi)
+    points = np.asarray(points, dtype=np.float32)
+    values = np.asarray(values, dtype=np.float32)
+    xi = np.asarray(xi, dtype=np.float32)
 
     interp_type = kwargs["local_interpolator"]
     estimate = lib_spatialize_facade.get_operator(points, interp_type, "estimate", "mondrian")
@@ -298,7 +298,7 @@ class SpatialEntropy:
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
-        print("Generating ESI samples...")
+        log_message(logging.logger.info("generating ESI samples"))
         # Get esi_samples for all points in xi (progress tracked by C++ code)
         esi_samples = _get_esi_estimates(points, values, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
@@ -311,7 +311,7 @@ class SpatialEntropy:
 
         log_message(logging.logger.debug(f'computing entropy using {self.M} partition trees with alpha_m={self.alpha_m}'))
 
-        print("Computing entropy...")
+        log_message(logging.logger.info("computing entropy"))
         # Calculate entropy for each target location with progress tracking
         self.callback(logging.progress.init(len(xi), 1))
 
@@ -638,7 +638,7 @@ class SpatialMutualInformation:
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable U using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
-        print("Generating ESI samples for U...")
+        log_message(logging.logger.info("generating ESI samples for U"))
         # Get ESI estimates for both variables at all target locations (progress tracked by C++ code)
         estimates_u = _get_esi_estimates(points_u, values_u, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
@@ -648,7 +648,7 @@ class SpatialMutualInformation:
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable V using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
-        print("Generating ESI samples for V...")
+        log_message(logging.logger.info("generating ESI samples for V"))
         estimates_v = _get_esi_estimates(points_v, values_v, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
                                          seed=self.seed + 1, callback=self.callback,
@@ -663,7 +663,7 @@ class SpatialMutualInformation:
 
         log_message(logging.logger.debug(f'computing mutual information using {self.M} partition trees with alpha_m={self.alpha_m}'))
 
-        print("Computing mutual information...")
+        log_message(logging.logger.info("computing mutual information"))
         # Calculate MI for each target location with progress tracking
         self.callback(logging.progress.init(len(xi), 1))
 

@@ -681,7 +681,7 @@ def _call_custom_esi(points, values, xi, **kwargs):
         kwargs["seed"] = np.random.randint(1000, 10000)  # generate per-call so each run is independent
 
     if kwargs["best_params_found"] is not None:
-        #seed_before_override = kwargs["seed"]
+        kwargs["best_params_found"] = dict(kwargs["best_params_found"])  # copy to avoid mutating caller's dict
         try:
             best = kwargs["best_params_found"]["n_partitions"]
             log_message(logging.logger.debug(f"best number of partitions found: {best}"))

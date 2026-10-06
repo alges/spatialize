@@ -6,6 +6,7 @@
 #include <utility>
 #include <Eigen/Dense>
 #include "spatialize/abstract_esi.hpp"
+#include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
@@ -76,10 +77,19 @@ namespace sptlz{
     return(result);
   }
 
-  class ESI_Kriging: public ESI {
+  // Ordinary kriging inside a cell with a fixed variogram model.
+  class KrigingDecoder: public Decoder {
     protected:
       int variogram_model; // 1:Spherical 2:Exponetial 3:Cubic 4:Gaussian
       float nugget, range, sill;
+
+    public:
+      KrigingDecoder(int _model, float _nugget, float _range, float _sill){
+        variogram_model = _model;
+        nugget = _nugget;
+        range = _range;
+        sill = _sill;
+      }
 
       std::function<float(float)> variogram(int m, float n, float r, float s){
         float c = static_cast<float>(1.0-nugget);
@@ -219,45 +229,6 @@ namespace sptlz{
         return(result);
       }
 
-    public:
-      ESI_Kriging(std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  float lambda,
-                  int forest_size,
-                  std::vector<std::vector<float>> bbox,
-                  int _model,
-                  float _nugget,
-                  float _range,
-                  float _sill,
-                  std::function<int(std::string)> visitor,
-                  int seed=206936):
-      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
-        class_name = __func__;
-        variogram_model = _model;
-        nugget = _nugget;
-        range = _range;
-        sill = _sill;
-      }
-
-      ESI_Kriging(std::vector<sptlz::MondrianTree*> _mondrian_forest,
-                  std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  int _model,
-                  float _nugget,
-                  float _range,
-                  float _sill,
-                  std::function<int(std::string)> visitor):
-      ESI(_mondrian_forest, _coords, _values, visitor){
-        class_name = __func__;
-        variogram_model = _model;
-        nugget = _nugget;
-        range = _range;
-        sill = _sill;
-      }
-
-
-      ~ESI_Kriging() {}
-
       int get_variogram_model(){
         return(this->variogram_model);
       }
@@ -273,8 +244,25 @@ namespace sptlz{
       float get_sill(){
         return(this->sill);
       }
+  };
 
-
+  class ESI_Kriging: public ESI {
+    public:
+      ESI_Kriging(std::vector<std::vector<float>> _coords,
+                  std::vector<float> _values,
+                  float lambda,
+                  int forest_size,
+                  std::vector<std::vector<float>> bbox,
+                  int _model,
+                  float _nugget,
+                  float _range,
+                  float _sill,
+                  std::function<int(std::string)> visitor,
+                  int seed=206936):
+      ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
+        class_name = __func__;
+        set_decoder(new KrigingDecoder(_model, _nugget, _range, _sill));
+      }
   };
 }
 

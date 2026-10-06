@@ -5,15 +5,28 @@
 #include <cmath>
 #include <functional>
 #include "spatialize/abstract_esi.hpp"
+#include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
-  class CUSTOM_ESI: public ESI {
+  // Decoder defined by user callbacks (per-cell post-creation, estimation, LOO, k-fold).
+  class CustomDecoder: public Decoder {
     protected:
       std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> post_creation;
       std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> estimation_by_leaf;
       std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> loo_by_leaf;
       std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> kfold_by_leaf;
+
+    public:
+      CustomDecoder(  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
+                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
+                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
+                  std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> _kfold){
+        post_creation = _post;
+        estimation_by_leaf = _est;
+        loo_by_leaf = _loo;
+        kfold_by_leaf = _kfold;
+      }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         auto _coords = slice(coords, samples_id);
@@ -38,16 +51,23 @@ namespace sptlz{
         return(result);
       }
 
-      void post_process(){
+      // Computes per-cell parameters with the user's post-creation callback, if any.
+      void fit(std::vector<Partition*> *forest,
+               std::vector<std::vector<float>> *coords,
+               std::vector<float> *values,
+               std::mt19937 &rng,
+               std::function<int(std::string)> visitor,
+               std::string class_name){
 
         if(post_creation == NULL){
             return;
         }
+        auto &mondrian_forest = *forest;
 
         std::vector<std::vector<float>> leaf_coords;
         std::vector<float> leaf_values;
-        sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
-        sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
+        sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(visitor, class_name);
+        sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(visitor);
 
         logger->info("computing cell parameters");
 
@@ -59,8 +79,8 @@ namespace sptlz{
             leaf_coords.clear();
             leaf_values.clear();
             for(int k=0; k<mt->samples_by_leaf.at(j).size(); k++){
-              leaf_coords.push_back(coords.at(mt->samples_by_leaf.at(j).at(k)));
-              leaf_values.push_back(values.at(mt->samples_by_leaf.at(j).at(k)));
+              leaf_coords.push_back(coords->at(mt->samples_by_leaf.at(j).at(k)));
+              leaf_values.push_back(values->at(mt->samples_by_leaf.at(j).at(k)));
             }
             mt->leaf_params.at(j) = post_creation(&leaf_coords, &leaf_values);
             if (PyErr_CheckSignals() != 0)  // check after each leaf (Python callback may be slow)
@@ -77,6 +97,9 @@ namespace sptlz{
         delete progress;
       }
 
+  };
+
+  class CUSTOM_ESI: public ESI {
     public:
       CUSTOM_ESI( std::vector<std::vector<float>> _coords,
                   std::vector<float> _values,
@@ -91,30 +114,8 @@ namespace sptlz{
                   int seed=206936):
       ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         this->class_name = __func__;
-        post_creation = _post;
-        estimation_by_leaf = _est;
-        loo_by_leaf = _loo;
-        kfold_by_leaf = _kfold;
-        post_process();
+        set_decoder(new CustomDecoder(_post, _est, _loo, _kfold));
       }
-
-      CUSTOM_ESI( std::vector<sptlz::MondrianTree*> _mondrian_forest,
-                  std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
-                  std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> _kfold,
-                  std::function<int(std::string)> visitor):
-      ESI(_mondrian_forest, _coords, _values, visitor){
-        this->class_name = __func__;
-        post_creation = _post;
-        estimation_by_leaf = _est;
-        loo_by_leaf = _loo;
-        kfold_by_leaf = _kfold;
-      }
-
-      ~CUSTOM_ESI() {}
   };
 }
 

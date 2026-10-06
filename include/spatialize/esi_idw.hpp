@@ -4,12 +4,19 @@
 #include <stdexcept>
 #include <cmath>
 #include "spatialize/abstract_esi.hpp"
+#include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
-  class ESI_IDW: public ESI {
+  // Inverse distance weighting inside a cell: weights 1/d^p; a query on a datum takes its value.
+  class IDWDecoder: public Decoder {
     protected:
       float exponent;
+
+    public:
+      IDWDecoder(float _exponent){
+        this->exponent = _exponent;
+      }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
@@ -143,6 +150,12 @@ namespace sptlz{
         return(result);
       }
 
+      float get_exponent(){
+        return(this->exponent);
+      }
+  };
+
+  class ESI_IDW: public ESI {
     public:
       ESI_IDW(std::vector<std::vector<float>> _coords,
               std::vector<float> _values, float lambda,
@@ -153,24 +166,7 @@ namespace sptlz{
               int seed=206936):
       ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         this->class_name = __func__;
-        this->exponent = _exponent;
-      }
-
-      ESI_IDW(std::vector<sptlz::MondrianTree*> _mondrian_forest,
-              std::vector<std::vector<float>> _coords,
-              std::vector<float> _values,
-              float _exponent,
-              std::function<int(std::string)> visitor):
-      ESI(_mondrian_forest, _coords, _values, visitor){
-        this->class_name = __func__;
-        this->exponent = _exponent;
-      }
-
-
-      ~ESI_IDW() {}
-
-      float get_exponent(){
-        return(this->exponent);
+        set_decoder(new IDWDecoder(_exponent));
       }
   };
 }

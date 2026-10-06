@@ -10,6 +10,7 @@
 #include <omp.h>
 #endif
 #include "spatialize/abstract_esi.hpp"
+#include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 #include "spatialize/grad_descent.hpp"
 
@@ -123,13 +124,45 @@ namespace sptlz{
       }
   };
 
-  class ADAPTIVE_ESI_IDW: public ESI {
+  // Adaptive IDW: per-cell exponent and anisotropy fitted by leave-one-out (2D and 3D).
+  class AdaptiveIDWDecoder: public Decoder {
     protected:
       int d, k;
       std::string metric;  // "mae" or "mse"
       std::vector<std::vector<float>> param_ranges;
       std::vector<float> steps;
       std::vector<int> ns;
+
+
+    public:
+      AdaptiveIDWDecoder(int dim, std::string _metric="mae"){
+        this->metric = _metric;
+        if(dim==2){
+          this->d = 2;
+          this->param_ranges = {
+            {  0.5f, 10.0f},  // exponent p
+            {-90.0f, 90.0f},  // azimuth φ
+            {  0.1f, 5.0f}   // anisotropy factor a_f
+          };
+          this->steps = {0.5f, 10.0f, 0.2f};
+          this->ns = {19, 18, 25};
+        }else if(dim==3){
+          this->d = 3;
+          this->param_ranges = {
+            {  0.5f, 10.0f},  // exponent p
+            {-90.0f, 90.0f},  // azimuth
+            {-90.0f, 90.0f},  // dip
+            {-90.0f, 90.0f},  // plunge
+            {  0.1f, 5.0f},  // anisotropy ratio 1
+            {  0.1f, 5.0f}   // anisotropy ratio 2
+          };
+          this->steps = {0.5f, 10.0f, 10.0f, 10.0f, 0.2f, 0.2f};
+          this->ns = {19, 18, 18, 18, 25, 25};
+        }else{
+          throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");
+        }
+        this->k = (int)std::ceil(0.1*std::pow(3, this->ns.size()));
+      }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
@@ -314,9 +347,16 @@ namespace sptlz{
         return(result);
       }
 
-      void post_process(){
-        sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(this->callback_visitor, this->class_name);
-        sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(this->callback_visitor);
+      // Fits the per-cell parameters (exponent, anisotropy) of every cell of every tree.
+      void fit(std::vector<Partition*> *forest,
+               std::vector<std::vector<float>> *coords,
+               std::vector<float> *values,
+               std::mt19937 &rng,
+               std::function<int(std::string)> visitor,
+               std::string class_name){
+        auto &mondrian_forest = *forest;
+        sptlz::CallbackLogger *logger = new sptlz::CallbackLogger(visitor, class_name);
+        sptlz::CallbackProgressSender *progress = new sptlz::CallbackProgressSender(visitor);
 
         logger->info("computing optimal parameters");
 
@@ -339,7 +379,7 @@ namespace sptlz{
         std::uniform_int_distribution<unsigned int> uni_int;
         std::vector<unsigned int> tree_seeds(mondrian_forest.size());
         for(size_t i=0; i<mondrian_forest.size(); i++){
-          tree_seeds[i] = uni_int(this->my_rand);
+          tree_seeds[i] = uni_int(rng);
         }
 
         #ifdef _OPENMP
@@ -355,8 +395,8 @@ namespace sptlz{
             std::vector<std::vector<float>> leaf_coords;
             std::vector<float> leaf_values;
             for(int k=0; k<mt->samples_by_leaf.at(j).size(); k++){
-              leaf_coords.push_back(coords.at(mt->samples_by_leaf.at(j).at(k)));
-              leaf_values.push_back(values.at(mt->samples_by_leaf.at(j).at(k)));
+              leaf_coords.push_back(coords->at(mt->samples_by_leaf.at(j).at(k)));
+              leaf_values.push_back(values->at(mt->samples_by_leaf.at(j).at(k)));
             }
 
             mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values, leaf_rand);
@@ -507,7 +547,9 @@ namespace sptlz{
 
         return(centroid);
       }
+  };
 
+  class ADAPTIVE_ESI_IDW: public ESI {
     public:
       ADAPTIVE_ESI_IDW(std::vector<std::vector<float>> _coords,
                        std::vector<float> _values,
@@ -519,41 +561,7 @@ namespace sptlz{
                        std::string _metric="mae"):
       ESI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         this->class_name = __func__;
-        this->metric = _metric;
-        if(_coords.at(0).size()==2){
-          this->d = 2;
-          this->param_ranges = {
-            {  0.5f, 10.0f},  // exponent p
-            {-90.0f, 90.0f},  // azimuth φ
-            {  0.1f, 5.0f}   // anisotropy factor a_f
-          };
-          this->steps = {0.5f, 10.0f, 0.2f};
-          this->ns = {19, 18, 25};
-        }else if(_coords.at(0).size()==3){
-          this->d = 3;
-          this->param_ranges = {
-            {  0.5f, 10.0f},  // exponent p
-            {-90.0f, 90.0f},  // azimuth
-            {-90.0f, 90.0f},  // dip
-            {-90.0f, 90.0f},  // plunge
-            {  0.1f, 5.0f},  // anisotropy ratio 1
-            {  0.1f, 5.0f}   // anisotropy ratio 2
-          };
-          this->steps = {0.5f, 10.0f, 10.0f, 10.0f, 0.2f, 0.2f};
-          this->ns = {19, 18, 18, 18, 25, 25};
-        }else{
-          throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");
-        }
-        this->k = (int)std::ceil(0.1*std::pow(3, this->ns.size()));
-        post_process();
-      }
-
-      ADAPTIVE_ESI_IDW(std::vector<sptlz::MondrianTree*> _mondrian_forest,
-                       std::vector<std::vector<float>> _coords,
-                       std::vector<float> _values,
-                       std::function<int(std::string)> visitor):
-      ESI(_mondrian_forest, _coords, _values, visitor){
-        this->class_name = __func__;
+        set_decoder(new AdaptiveIDWDecoder(static_cast<int>(_coords.at(0).size()), _metric));
       }
   };
 }

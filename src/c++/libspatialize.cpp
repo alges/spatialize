@@ -4,6 +4,7 @@
 #include <iostream>
 #include <tuple>
 #include <optional>
+#include <memory>
 #include "spatialize/nn_idw.hpp"
 #include "spatialize/esi_idw.hpp"
 #include "spatialize/esi_kriging.hpp"
@@ -171,848 +172,233 @@ py::array_t<float> kfold_nn_idw(py::array_t<float> samples, py::array_t<float> v
     return(sptlz::vector_1d_to_ndarray(&r));
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
+// ----------------------------------------------------------------------------------------------
+// Ensemble estimation: one internal engine (any partition × any decoder × estimate/loo/kfold) and
+// thin entry points. The legacy functions keep their names, signatures, validation messages and
+// outputs; `run` exposes the same engine generically.
+// ----------------------------------------------------------------------------------------------
 
+typedef std::tuple<py::object, py::array_t<float>> EsiOutput;
+
+static std::function<int(std::string)> make_visitor(std::optional<py::function> visitor){
+    std::function<int(std::string)> _visitor = [](std::string s)->int{
+      return(0);
+    };
+    if (visitor.has_value()){
+      _visitor = [visitor](std::string s)->int{
+        visitor.value()(s);
+        return(0);
+      };
+    }
+    return(_visitor);
+}
+
+static EsiOutput esi_output(std::vector<std::vector<float>> *r){
+    return(std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(r)));
+}
+
+// samples (n×d), values (n) and queries (m×d) of any dimension d
+static void check_arrays(py::array_t<float> &samples, py::array_t<float> &values, py::array_t<float> &queries, const char *values_msg="[2] values must be a 1 dimension array"){
+    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
     if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
+        throw std::runtime_error(values_msg);
     if (qry_info.ndim != 2)
         throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_IDW* esi = new sptlz::ESI_IDW(smp, val, lambda, forest_size, bbox, exp, _visitor, seed);
-
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+// samples (n×d), values (n) and queries (m×d) of a fixed dimension d
+static void check_arrays_dim(py::array_t<float> &samples, py::array_t<float> &values, py::array_t<float> &queries, int d){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
+    std::string coords = std::to_string(d) + " coordinates";
     if (smp_info.ndim != 2)
         throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_IDW* esi = new sptlz::ESI_IDW(smp, val, lambda, forest_size, bbox, exp, _visitor, seed);
-
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> kfold_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_IDW* esi = new sptlz::ESI_IDW(smp, val, lambda, forest_size, bbox, exp, _visitor, creation_seed);
-
-    auto r = esi->k_fold(k, folding_seed);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> estimation_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
+    if (smp_info.shape[1] != d)
+        throw std::runtime_error("[2] samples must have " + coords);
     if (val_info.ndim != 1)
         throw std::runtime_error("[3] values must be a 1 dimension array");
     if (qry_info.ndim != 2)
         throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, seed);
-
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+    if (qry_info.shape[1] != d)
+        throw std::runtime_error("[5] queries must have " + coords);
 }
 
-std::tuple<py::object, py::array_t<float>> loo_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, seed);
-
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> kfold_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, creation_seed);
-
-    auto r = esi->k_fold(k, folding_seed);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> estimation_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, seed);
-
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> loo_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, seed);
-
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> kfold_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::ESI_Kriging* esi = new sptlz::ESI_Kriging(smp, val, lambda, forest_size, bbox, model, nugget, range, sill, _visitor, creation_seed);
-
-    auto r = esi->k_fold(k, folding_seed);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> estimation_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-
-    sptlz::VORONOI_IDW* voronoi = new sptlz::VORONOI_IDW(smp, val, alpha, forest_size, bbox, exp, _visitor, seed);
-
-    auto r = voronoi->estimate(&qry);
-
-    delete voronoi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> loo_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-
-    sptlz::VORONOI_IDW* voronoi = new sptlz::VORONOI_IDW(smp, val, alpha, forest_size, bbox, exp, _visitor, seed);
-
-    auto r = voronoi->leave_one_out();
-
-    delete voronoi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> kfold_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-
-    sptlz::VORONOI_IDW* voronoi = new sptlz::VORONOI_IDW(smp, val, alpha, forest_size, bbox, exp, _visitor, creation_seed);
-
-    auto r = voronoi->k_fold(k, folding_seed);
-
-    delete voronoi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
+// Restricts OpenMP to one thread while alive unless `parallelize` (restores the count after).
+class OmpThreads {
     #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);  // Disable parallelization
-    }
+    int original_threads;
     #endif
-
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
-
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
+    bool parallelize;
+  public:
+    OmpThreads(bool _parallelize): parallelize(_parallelize){
+        #ifdef _OPENMP
+        original_threads = omp_get_max_threads();
+        if (!parallelize) {
+            omp_set_num_threads(1);
+        }
+        #endif
     }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
-}
-
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
+    ~OmpThreads(){
+        #ifdef _OPENMP
+        if (!parallelize) {
+            omp_set_num_threads(original_threads);
+        }
+        #endif
     }
+};
 
+enum class EsiMethod { ESTIMATE, LOO, KFOLD };
+
+// The engine. Draws the forest ("mondrian": lifetime from alpha and the box of samples ∪ queries;
+// "voronoi": alpha as nuclei rate, sign = data conditioning), fits the decoder (takes ownership)
+// and runs the method. `class_name` names the computation in log messages.
+static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<float>> &smp,
+                                                    std::vector<float> &val,
+                                                    std::vector<std::vector<float>> &qry,
+                                                    const std::string &partition,
+                                                    float alpha, int forest_size, int seed,
+                                                    sptlz::Decoder *decoder,
+                                                    EsiMethod method, int k, int folding_seed,
+                                                    std::function<int(std::string)> visitor,
+                                                    const std::string &class_name){
+    std::unique_ptr<sptlz::Decoder> owned(decoder);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
-    #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);
+    std::unique_ptr<sptlz::Ensemble> ensemble;
+    if (partition == "mondrian"){
+        float lambda = sptlz::bbox_sum_interval(bbox);
+        lambda = 1/(lambda-alpha*lambda);
+        ensemble.reset(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed));
+    }else if (partition == "voronoi"){
+        ensemble.reset(new sptlz::VORONOI(smp, val, alpha, forest_size, bbox, visitor, seed));
+    }else{
+        throw std::runtime_error("unknown partition '" + partition + "' (expected 'mondrian' or 'voronoi')");
     }
-    #endif
+    ensemble->set_class_name(class_name);
+    ensemble->set_decoder(owned.release());
 
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
-
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
+    if (method == EsiMethod::ESTIMATE){
+        return(ensemble->estimate(&qry));
+    }else if (method == EsiMethod::LOO){
+        return(ensemble->leave_one_out());
     }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+    return(ensemble->k_fold(k, folding_seed));
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 2)
-        throw std::runtime_error("[2] samples must have 2 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 2)
-        throw std::runtime_error("[5] queries must have 2 coordinates");
-
+static EsiOutput run_ensemble_py(py::array_t<float> &samples, py::array_t<float> &values, py::array_t<float> &queries,
+                                 const std::string &partition, float alpha, int forest_size, int seed,
+                                 sptlz::Decoder *decoder, EsiMethod method, int k, int folding_seed,
+                                 std::optional<py::function> visitor, const std::string &class_name){
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
-    #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);
-    }
-    #endif
-
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
-
-    auto r = esi->k_fold(k, folding_seed);
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
-    }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+    auto r = run_ensemble(smp, val, qry, partition, alpha, forest_size, seed, decoder, method, k, folding_seed, make_visitor(visitor), class_name);
+    return(esi_output(&r));
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
+/* ESI IDW */
 
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
-    #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);
-    }
-    #endif
-
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
-
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
-    }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+EsiOutput estimation_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, new sptlz::IDWDecoder(exp), EsiMethod::ESTIMATE, 0, 0, visitor, "ESI_IDW"));
 }
 
-std::tuple<py::object, py::array_t<float>> loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
-    #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);
-    }
-    #endif
-
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, seed, metric);
-
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
-    }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+EsiOutput loo_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, new sptlz::IDWDecoder(exp), EsiMethod::LOO, 0, 0, visitor, "ESI_IDW"));
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (smp_info.shape[1] != 3)
-        throw std::runtime_error("[2] samples must have 3 coordinates");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[3] values must be a 1 dimension array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[4] queries must be a 2 dimensions array");
-    if (qry_info.shape[1] != 3)
-        throw std::runtime_error("[5] queries must have 3 coordinates");
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    // Control OpenMP parallelization
-    #ifdef _OPENMP
-    int original_threads = omp_get_max_threads();
-    if (!parallelize) {
-        omp_set_num_threads(1);
-    }
-    #endif
-
-    sptlz::ADAPTIVE_ESI_IDW* esi = new sptlz::ADAPTIVE_ESI_IDW(smp, val, lambda, forest_size, bbox, _visitor, creation_seed, metric);
-
-    auto r = esi->k_fold(k, folding_seed);
-
-    delete esi;
-
-    // Restore original thread count
-    #ifdef _OPENMP
-    if (!parallelize) {
-        omp_set_num_threads(original_threads);
-    }
-    #endif
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+EsiOutput kfold_esi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, creation_seed, new sptlz::IDWDecoder(exp), EsiMethod::KFOLD, k, folding_seed, visitor, "ESI_IDW"));
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function estimation, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
+/* ESI Kriging */
 
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimensions array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]);
+static EsiOutput esi_kriging(int d, EsiMethod method, py::array_t<float> &samples, py::array_t<float> &values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, int k, int folding_seed, py::array_t<float> &queries, std::optional<py::function> visitor){
+    check_arrays_dim(samples, values, queries, d);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, new sptlz::KrigingDecoder(model, nugget, range, sill), method, k, folding_seed, visitor, "ESI_Kriging"));
+}
 
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
+EsiOutput estimation_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(2, EsiMethod::ESTIMATE, samples, values, forest_size, alpha, model, nugget, range, sill, seed, 0, 0, queries, visitor));
+}
 
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
+EsiOutput loo_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(2, EsiMethod::LOO, samples, values, forest_size, alpha, model, nugget, range, sill, seed, 0, 0, queries, visitor));
+}
 
-    std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post = NULL;
+EsiOutput kfold_esi_kriging_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(2, EsiMethod::KFOLD, samples, values, forest_size, alpha, model, nugget, range, sill, creation_seed, k, folding_seed, queries, visitor));
+}
+
+EsiOutput estimation_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(3, EsiMethod::ESTIMATE, samples, values, forest_size, alpha, model, nugget, range, sill, seed, 0, 0, queries, visitor));
+}
+
+EsiOutput loo_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(3, EsiMethod::LOO, samples, values, forest_size, alpha, model, nugget, range, sill, seed, 0, 0, queries, visitor));
+}
+
+EsiOutput kfold_esi_kriging_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int model, float nugget, float range, float sill, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(esi_kriging(3, EsiMethod::KFOLD, samples, values, forest_size, alpha, model, nugget, range, sill, creation_seed, k, folding_seed, queries, visitor));
+}
+
+/* Voronoi IDW (its own IDW kernel, see VoronoiIDWDecoder) */
+
+EsiOutput estimation_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::ESTIMATE, 0, 0, visitor, "VORONOI_IDW"));
+}
+
+EsiOutput loo_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::LOO, 0, 0, visitor, "VORONOI_IDW"));
+}
+
+EsiOutput kfold_voronoi_idw(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, float exp, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    return(run_ensemble_py(samples, values, queries, "voronoi", alpha, forest_size, creation_seed, new sptlz::VoronoiIDWDecoder(exp), EsiMethod::KFOLD, k, folding_seed, visitor, "VORONOI_IDW"));
+}
+
+/* Adaptive ESI IDW */
+
+static EsiOutput adaptive_esi_idw(int d, EsiMethod method, py::array_t<float> &samples, py::array_t<float> &values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> &queries, std::optional<py::function> visitor){
+    check_arrays_dim(samples, values, queries, d);
+    OmpThreads threads(parallelize);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, new sptlz::AdaptiveIDWDecoder(d, metric), method, k, folding_seed, visitor, "ADAPTIVE_ESI_IDW"));
+}
+
+EsiOutput estimation_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(2, EsiMethod::ESTIMATE, samples, values, forest_size, alpha, seed, metric, parallelize, 0, 0, queries, visitor));
+}
+
+EsiOutput loo_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(2, EsiMethod::LOO, samples, values, forest_size, alpha, seed, metric, parallelize, 0, 0, queries, visitor));
+}
+
+EsiOutput kfold_adaptive_esi_idw_2d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(2, EsiMethod::KFOLD, samples, values, forest_size, alpha, creation_seed, metric, parallelize, k, folding_seed, queries, visitor));
+}
+
+EsiOutput estimation_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(3, EsiMethod::ESTIMATE, samples, values, forest_size, alpha, seed, metric, parallelize, 0, 0, queries, visitor));
+}
+
+EsiOutput loo_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, std::string metric, bool parallelize, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(3, EsiMethod::LOO, samples, values, forest_size, alpha, seed, metric, parallelize, 0, 0, queries, visitor));
+}
+
+EsiOutput kfold_adaptive_esi_idw_3d(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, std::string metric, bool parallelize, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> visitor){
+    return(adaptive_esi_idw(3, EsiMethod::KFOLD, samples, values, forest_size, alpha, creation_seed, metric, parallelize, k, folding_seed, queries, visitor));
+}
+
+/* Custom ESI (decoder given by Python callbacks) */
+
+typedef std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> CustomPost;
+
+static CustomPost custom_post(std::optional<py::function> post_creation, int n){
+    CustomPost _post = NULL;
     if (post_creation.has_value()){
       _post = [post_creation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val)->std::vector<float>{
         auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
@@ -1021,134 +407,105 @@ std::tuple<py::object, py::array_t<float>> estimation_custom_esi(py::array_t<flo
         return(sptlz::ndarray_to_vector_1d(&res));
       };
     }
+    return(_post);
+}
 
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::CUSTOM_ESI* esi = new sptlz::CUSTOM_ESI(smp, val, lambda, forest_size, bbox, _post, [estimation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<std::vector<float>>* loc, std::vector<float>* params){
+EsiOutput estimation_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function estimation, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries, "[2] values must be a 1 dimensions array");
+    int n = static_cast<int>(samples.request().shape[1]);
+    auto decoder = new sptlz::CustomDecoder(custom_post(post_creation, n), [estimation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<std::vector<float>>* loc, std::vector<float>* params){
       auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
       auto _val = sptlz::vector_1d_to_ndarray(val);
       auto _loc = sptlz::vector_2d_to_ndarray(loc, n);
       auto _params = sptlz::vector_1d_to_ndarray(params);
       auto res = (py::array_t<float>) estimation(_pos, _val, _loc, _params);
       return(sptlz::ndarray_to_vector_1d(&res));
-    }, NULL, NULL, _visitor, seed);
-    auto r = esi->estimate(&qry);
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+    }, NULL, NULL);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, decoder, EsiMethod::ESTIMATE, 0, 0, visitor, "CUSTOM_ESI"));
 }
 
-std::tuple<py::object, py::array_t<float>> loo_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function loo, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimensions array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]);
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post = NULL;
-    if (post_creation.has_value()){
-      _post = [post_creation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val)->std::vector<float>{
-        auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
-        auto _val = sptlz::vector_1d_to_ndarray(val);
-        auto res = (py::array_t<float>) post_creation.value()(_pos, _val);
-        return(sptlz::ndarray_to_vector_1d(&res));
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::CUSTOM_ESI* esi = new sptlz::CUSTOM_ESI(smp, val, lambda, forest_size, bbox, _post, NULL, [loo, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<float>* params){
+EsiOutput loo_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function loo, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries, "[2] values must be a 1 dimensions array");
+    int n = static_cast<int>(samples.request().shape[1]);
+    auto decoder = new sptlz::CustomDecoder(custom_post(post_creation, n), NULL, [loo, n](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<float>* params){
       auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
       auto _val = sptlz::vector_1d_to_ndarray(val);
       auto _params = sptlz::vector_1d_to_ndarray(params);
       auto res = (py::array_t<float>) loo(_pos, _val, _params);
       return(sptlz::ndarray_to_vector_1d(&res));
-    }, NULL, _visitor, seed);
-    auto r = esi->leave_one_out();
-
-    delete esi;
-
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+    }, NULL);
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, seed, decoder, EsiMethod::LOO, 0, 0, visitor, "CUSTOM_ESI"));
 }
 
-std::tuple<py::object, py::array_t<float>> kfold_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function kfold, std::optional<py::function> visitor){
-    py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
-
-    if (smp_info.ndim != 2)
-        throw std::runtime_error("[1] samples must be a 2 dimensions array");
-    if (val_info.ndim != 1)
-        throw std::runtime_error("[2] values must be a 1 dimensions array");
-    if (qry_info.ndim != 2)
-        throw std::runtime_error("[3] queries must be a 2 dimensions array");
-    int n = static_cast<int>(smp_info.shape[1]);
-
-    auto smp = sptlz::ndarray_to_vector_2d(&samples);
-    auto val = sptlz::ndarray_to_vector_1d(&values);
-    auto qry = sptlz::ndarray_to_vector_2d(&queries);
-
-    std::function<int(std::string)> _visitor = [](std::string s)->int{
-      return(0);
-    };
-    if (visitor.has_value()){
-      _visitor = [visitor](std::string s)->int{
-        visitor.value()(s);
-        return(0);
-      };
-    }
-
-    std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post = NULL;
-    if (post_creation.has_value()){
-      _post = [post_creation, n](std::vector<std::vector<float>>* pos, std::vector<float>* val)->std::vector<float>{
-        auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
-        auto _val = sptlz::vector_1d_to_ndarray(val);
-        auto res = (py::array_t<float>) post_creation.value()(_pos, _val);
-        return(sptlz::ndarray_to_vector_1d(&res));
-      };
-    }
-
-    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
-    lambda = 1/(lambda-alpha*lambda);
-
-    sptlz::CUSTOM_ESI* esi = new sptlz::CUSTOM_ESI(smp, val, lambda, forest_size, bbox, _post, NULL, NULL, [kfold, n](int _k, std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<int>* fld, std::vector<float>* params){
+EsiOutput kfold_custom_esi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int creation_seed, int k, int folding_seed, py::array_t<float> queries, std::optional<py::function> post_creation, py::function kfold, std::optional<py::function> visitor){
+    check_arrays(samples, values, queries, "[2] values must be a 1 dimensions array");
+    int n = static_cast<int>(samples.request().shape[1]);
+    auto decoder = new sptlz::CustomDecoder(custom_post(post_creation, n), NULL, NULL, [kfold, n](int _k, std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<int>* fld, std::vector<float>* params){
       auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
       auto _val = sptlz::vector_1d_to_ndarray(val);
       auto _fld = sptlz::vector_1d_to_ndarray(fld);
       auto _params = sptlz::vector_1d_to_ndarray(params);
       auto res = (py::array_t<float>) kfold(_k, _pos, _val, _fld, _params);
       return(sptlz::ndarray_to_vector_1d(&res));
-    }, _visitor, creation_seed);
-    auto r = esi->k_fold(k, folding_seed);
+    });
+    return(run_ensemble_py(samples, values, queries, "mondrian", alpha, forest_size, creation_seed, decoder, EsiMethod::KFOLD, k, folding_seed, visitor, "CUSTOM_ESI"));
+}
 
-    delete esi;
+/* Generic entry point */
 
-    std::tuple<py::object, py::array_t<float>> out = std::make_tuple(py::cast<py::none>(Py_None), sptlz::vector_2d_to_ndarray(&r));
-    return(out);
+template <typename T>
+static T param_or(const py::dict &params, const char *name, T fallback){
+    return(params.contains(name) ? params[name].cast<T>() : fallback);
+}
+
+template <typename T>
+static T required_param(const py::dict &params, const char *name, const std::string &decoder){
+    if (!params.contains(name))
+        throw std::runtime_error("decoder '" + decoder + "' needs parameter '" + name + "'");
+    return(params[name].cast<T>());
+}
+
+// run(samples, values, queries, partition, alpha, forest_size, seed, decoder, params, method, k,
+//     folding_seed, visitor): any partition ("mondrian", "voronoi") with any decoder ("idw",
+// "kriging", "adaptiveidw"). `params` holds the decoder parameters (idw: exponent; kriging: model
+// (1 spherical, 2 exponential, 3 cubic, 4 gaussian), nugget, range, sill; adaptiveidw: metric,
+// parallelize). method: "estimate" (queries), "loo" or "kfold" (k, folding_seed). Returns
+// (None, array) like the other entry points.
+EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t<float> queries,
+              std::string partition, float alpha, int forest_size, int seed,
+              std::string decoder, py::dict params, std::string method, int k, int folding_seed,
+              std::optional<py::function> visitor){
+    check_arrays(samples, values, queries);
+    int d = static_cast<int>(samples.request().shape[1]);
+    if (d != static_cast<int>(queries.request().shape[1]))
+        throw std::runtime_error("samples and queries must have the same number of coordinates");
+
+    EsiMethod m;
+    if (method == "estimate") m = EsiMethod::ESTIMATE;
+    else if (method == "loo") m = EsiMethod::LOO;
+    else if (method == "kfold") m = EsiMethod::KFOLD;
+    else throw std::runtime_error("unknown method '" + method + "' (expected 'estimate', 'loo' or 'kfold')");
+
+    bool parallelize = false;
+    sptlz::Decoder *dec;
+    if (decoder == "idw"){
+        dec = new sptlz::IDWDecoder(required_param<float>(params, "exponent", decoder));
+    }else if (decoder == "kriging"){
+        dec = new sptlz::KrigingDecoder(required_param<int>(params, "model", decoder),
+                                        required_param<float>(params, "nugget", decoder),
+                                        required_param<float>(params, "range", decoder),
+                                        required_param<float>(params, "sill", decoder));
+    }else if (decoder == "adaptiveidw"){
+        if (d != 2 && d != 3)
+            throw std::runtime_error("decoder 'adaptiveidw' is available for 2 and 3 dimensions only");
+        parallelize = param_or<bool>(params, "parallelize", false);
+        dec = new sptlz::AdaptiveIDWDecoder(d, param_or<std::string>(params, "metric", "mae"));
+    }else{
+        throw std::runtime_error("unknown decoder '" + decoder + "' (expected 'idw', 'kriging' or 'adaptiveidw')");
+    }
+
+    OmpThreads threads(parallelize);
+    return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder));
 }
 
 std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> co_post_creation, py::function co_estimation, std::optional<py::function> ind_post_creation, py::function ind_estimation, py::function ind_aggregation, std::optional<py::function> visitor){
@@ -1487,6 +844,16 @@ PYBIND11_MODULE(libspatialize, m) {
       "kfold_custom_esi",
       &kfold_custom_esi,
       "K-fold validation for Custom ESI"
+    );
+    /* Generic ensemble: any partition with any decoder */
+    m.def(
+      "run",
+      &run,
+      "Ensemble estimation with any partition ('mondrian', 'voronoi') and decoder ('idw', 'kriging', 'adaptiveidw')",
+      py::arg("samples"), py::arg("values"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
+      py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
+      py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,
+      py::arg("visitor") = py::none()
     );
     /* Custom COESI */
     m.def(

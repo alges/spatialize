@@ -4,12 +4,20 @@
 #include <stdexcept>
 #include <cmath>
 #include "spatialize/abstract_voronoi.hpp"
+#include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
-  class VORONOI_IDW: public VORONOI {
+  // IDW as implemented for the Voronoi ensemble: weights 1/(1 + d^p) in estimation too (unlike
+  // IDWDecoder, which uses 1/d^p). Kept separate so existing Voronoi results do not change.
+  class VoronoiIDWDecoder: public Decoder {
     protected:
       float exponent;
+
+    public:
+      VoronoiIDWDecoder(float _exponent){
+        this->exponent = _exponent;
+      }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         std::vector<float> result;
@@ -113,6 +121,12 @@ namespace sptlz{
         return(result);
       }
 
+      float get_exponent(){
+        return(this->exponent);
+      }
+  };
+
+  class VORONOI_IDW: public VORONOI {
     public:
       VORONOI_IDW(std::vector<std::vector<float>> _coords,
                   std::vector<float> _values,
@@ -124,23 +138,7 @@ namespace sptlz{
                   int seed=206936):
       VORONOI(_coords, _values, lambda, forest_size, bbox, visitor, seed){
         class_name = __func__;
-        exponent = _exponent;
-      }
-
-      VORONOI_IDW(std::vector<sptlz::VoronoiTree*> _voronoi_forest,
-                  std::vector<std::vector<float>> _coords,
-                  std::vector<float> _values,
-                  float _exponent,
-                  std::function<int(std::string)> visitor):
-      VORONOI(_voronoi_forest, _coords, _values, visitor){
-        class_name = __func__;
-        exponent = _exponent;
-      }
-      
-      ~VORONOI_IDW() {}
-
-      float get_exponent(){
-        return(this->exponent);
+        set_decoder(new VoronoiIDWDecoder(_exponent));
       }
   };
 }

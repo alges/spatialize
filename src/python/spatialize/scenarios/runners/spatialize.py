@@ -24,6 +24,9 @@ PROFILES = {
     "voronoi/spatialize-v1-data": ("voronoi", True),      # nuclei drawn among the samples (alpha >= 0)
 }
 
+#: Decoders of the compiled engine's generic entry point ``libspatialize.run``.
+_RUN_DECODERS = {"idw", "kriging", "adaptiveidw"}
+
 #: Facade arguments the runner sets itself; scenario ``params`` may not override them.
 _RESERVED = {"alpha", "n_partitions", "seed", "p_process", "local_interpolator", "callback",
              "data_cond"}
@@ -63,14 +66,16 @@ class SpatializeRunner:
         from spatialize import SpatializeError
         from spatialize.gs import lib_spatialize_facade
         from spatialize.gs.esi._main import build_arg_list
+        import libspatialize
         self._error, self._facade, self._build_arg_list = SpatializeError, lib_spatialize_facade, build_arg_list
+        self._lib = libspatialize
 
     def profile(self, encoder):
         """Encoder profile name (``"mondrian"`` is an alias of ``"mondrian/spatialize-v1"``)."""
         return "mondrian/spatialize-v1" if encoder == "mondrian" else encoder
 
     def _operator(self, est):
-        """The facade's operator for this estimator, or None when spatialize does not provide it."""
+        """The facade's operator for this estimator, or None when the facade does not provide it."""
         if est.encoder not in PROFILES or est.empty_cells != "nan":
             return None
         probe = np.zeros((1, len(est.domain)), np.float32)
@@ -79,12 +84,29 @@ class SpatializeRunner:
         except self._error:
             return None
 
+    def _engine_supports(self, est):
+        """Whether the compiled engine's generic entry point ``libspatialize.run`` provides it."""
+        if est.encoder not in PROFILES or est.empty_cells != "nan" or not hasattr(self._lib, "run"):
+            return False
+        if est.decoder not in _RUN_DECODERS:
+            return False
+        return est.decoder != "adaptiveidw" or len(est.domain) in (2, 3)
+
+    def route(self, est):
+        """How the estimator is run: ``"facade"`` (the public API's dispatch, preferred), ``"run"``
+        (``libspatialize.run``, for combinations the public API does not offer yet) or None."""
+        if self._operator(est) is not None:
+            return "facade"
+        if self._engine_supports(est):
+            return "run"
+        return None
+
     def supports(self, est: EstimatorSpec) -> bool:
-        return self._operator(est) is not None
+        return self.route(est) is not None
 
     def members(self, est, samples, values, queries, *, n_members, seed):
-        op = self._operator(est)
-        if op is None:
+        route = self.route(est)
+        if route is None:
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
         clash = _RESERVED & set(est.params)
         if clash:
@@ -100,6 +122,13 @@ class SpatializeRunner:
             if not alpha < 1.0:  # spatialize accepts |alpha| < 1 only: expected nuclei < n/2
                 raise ValueError(f"{est.id}: intensity {est.rate} needs |alpha| = {alpha:.3g} >= 1 with "
                                  f"{len(samples)} samples (spatialize's Voronoi needs λ_V·|H| < n/2)")
+        if route == "facade":
+            out = self._members_facade(est, samples, values, q, alpha, p_process, data_cond, n_members, seed)
+        else:
+            out = self._members_run(est, samples, values, q, alpha, p_process, data_cond, n_members, seed)
+        return np.asarray(out)[: len(queries)]
+
+    def _members_facade(self, est, samples, values, q, alpha, p_process, data_cond, n_members, seed):
         args = dict(est.params, alpha=alpha, n_partitions=int(n_members), seed=int(seed),
                     p_process=p_process, local_interpolator=est.decoder, data_cond=data_cond,
                     callback=None)
@@ -107,5 +136,18 @@ class SpatializeRunner:
             arg_list = self._build_arg_list(samples, values, q, args)
         except KeyError as e:
             raise ValueError(f"{est.id}: decoder '{est.decoder}' needs parameter {e} in the scenario") from None
-        _, out = op(*arg_list)
-        return np.asarray(out)[: len(queries)]
+        _, out = self._operator(est)(*arg_list)
+        return out
+
+    def _members_run(self, est, samples, values, q, alpha, p_process, data_cond, n_members, seed):
+        params = dict(est.params)
+        if est.decoder == "kriging" and isinstance(params.get("model"), str):
+            params["model"] = self._facade.get_kriging_model_number(params["model"])
+        if p_process == "voronoi" and not data_cond:
+            alpha = -alpha  # spatialize's convention: negative alpha = nuclei uniform in the box
+        try:
+            _, out = self._lib.run(np.asarray(samples, np.float32), np.asarray(values, np.float32), q,
+                                   p_process, float(alpha), int(n_members), int(seed), est.decoder, params)
+        except RuntimeError as e:
+            raise ValueError(f"{est.id}: {e}") from None
+        return out

@@ -30,7 +30,7 @@ Expected output (the seed and the p-values change from run to run; the decisions
    ...                                    (one line per check)
    S03-anisotropic-field/v1b-vor-data     one-sided      4.93e-08   0.00033  pass   PASS  — mean=0.8004 ...
 
-   11 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 12345)
+   15 passed, 0 failed, 0 skipped (reproduce with --mode ci --seed 12345)
 
 The command exits with status **0** when every check passed and **1** when any check failed, so
 it can be used directly in scripts and continuous integration.
@@ -77,7 +77,7 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in about a minute on a multi-core machine. Use it on every change.
+       catalogue runs in about a minute and a half on a multi-core machine. Use it on every change.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at
@@ -179,7 +179,7 @@ spatialize) and never changes a decision: figures are for human review only (:do
 
 .. figure:: /_static/scenarios/S03_compare_13.png
    :width: 100%
-   :alt: Truth and the five median maps of S03 on field 13
+   :alt: Truth and the seven median maps of S03 on field 13
 
    ``compare_13.png`` of S03 (``ci`` mode, seed 12345): the truth with its samples and the median
    map of each estimator, on one colour scale; white is the declared orientation, red the measured
@@ -219,7 +219,9 @@ Reading the report
    * - Column
      - Meaning
    * - ``scenario/check``
-     - Scenario identifier and check identifier, as in the scenario's ``scenario.yaml``.
+     - Scenario identifier and check identifier, as in the scenario's ``scenario.yaml``. Spatialize's
+       runner appends ``[run]`` when the estimator is not in the public API yet and was reached
+       through the compiled engine's generic entry point.
    * - ``family``
      - Test family, which fixes the statistic and the pass rule (:doc:`statistics`).
    * - ``p-value``

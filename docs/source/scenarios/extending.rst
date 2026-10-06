@@ -47,11 +47,13 @@ Testing a new spatialize decoder
 ================================
 
 Spatialize's own runner (:class:`~spatialize.scenarios.runners.spatialize.SpatializeRunner`)
-holds no list of decoders: it dispatches through the same operator table and argument builder as
-:func:`~spatialize.gs.esi.esi_griddata`, so it supports exactly the encoder, decoder and dimension
-combinations spatialize supports. Once a new decoder is available in spatialize, a scenario tests
-it by naming it in its ``estimators``, with spatialize's ``local_interpolator`` name and every
-parameter explicit:
+holds no list of decoders. It first dispatches through the same operator table and argument
+builder as :func:`~spatialize.gs.esi.esi_griddata`, so everything the public API offers is tested
+the way users run it. Combinations the public API does not offer yet but the compiled engine does
+(for instance kriging or adaptive IDW on Voronoi partitions) go through the engine's generic entry
+point ``libspatialize.run`` (:doc:`../development/architecture`); the report marks them ``[run]``.
+Once a new decoder is available in spatialize, a scenario tests it by naming it in its
+``estimators``, with spatialize's ``local_interpolator`` name and every parameter explicit:
 
 .. code-block:: yaml
 
@@ -62,7 +64,7 @@ parameter explicit:
 
 Decoder parameters are pre-registered, so the runner fills in no defaults: a missing parameter is
 an error naming it, and parameters the runner sets itself (``alpha``, ``n_partitions``,
-``seed``, ...) cannot be overridden. A combination spatialize does not provide (e.g. kriging in
+``seed``, ...) cannot be overridden. A combination neither path provides (e.g. adaptive IDW in
 4D) is reported as skipped.
 
 Adding a scenario

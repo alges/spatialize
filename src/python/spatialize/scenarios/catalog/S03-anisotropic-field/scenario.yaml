@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 2
+version: 3
 tier: T3
 evaluator: map_visual
 book:
@@ -37,6 +37,12 @@ estimators:
      params: {exponent: 2.0}, empty_cells: nan}
   - {id: vor-data-idw, encoder: voronoi/spatialize-v1-data, rate: 36.0, decoder: idw,
      params: {exponent: 2.0}, empty_cells: nan}
+  # Same decoders as krig/aidw on the uniform Voronoi profile (not in the public API yet: the runner
+  # reaches them through libspatialize.run).
+  - {id: vor-uniform-krig, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
+  - {id: vor-uniform-aidw, encoder: voronoi/spatialize-v1-uniform, rate: 36.0, decoder: adaptiveidw,
+     params: {metric: mae, parallelize: true}, empty_cells: nan}
 checks:
   # The same two pre-registered criteria for every estimator:
   #   v1a — direction visible: |θ(median map) − 30°| < 10° (TOST over the K fields)
@@ -61,6 +67,14 @@ checks:
      family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
   - {id: v1b-vor-data, title: "V1 strength visible (Voronoi data, idw)", estimator: vor-data-idw,
      family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-vor-uniform-krig, title: "V1 direction visible (Voronoi uniform, kriging)", estimator: vor-uniform-krig,
+     family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-vor-uniform-krig, title: "V1 strength visible (Voronoi uniform, kriging)", estimator: vor-uniform-krig,
+     family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v1a-vor-uniform-aidw, title: "V1 direction visible (Voronoi uniform, adaptive idw)", estimator: vor-uniform-aidw,
+     family: equivalence, functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-vor-uniform-aidw, title: "V1 strength visible (Voronoi uniform, adaptive idw)", estimator: vor-uniform-aidw,
+     family: one-sided, functional: coherence_ratio, map: point, min_ratio: 0.5}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
   v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
@@ -71,4 +85,8 @@ provenance:
     First run (ci, K = 12, seed 12345): 11/11 pass, but the Voronoi orientation checks (s.e. ≈ 2°)
     passed close to their Holm levels (p = 2.9e-4 vs 5e-4, 6.9e-4 vs 1e-3), so K was raised to 20
     in ci too — more power, thresholds unchanged.
+  v3: >
+    2026-10-06: kriging and adaptive IDW on the uniform Voronoi profile, reached through
+    libspatialize.run after the encoder/decoder refactor; same pre-registered thresholds, fixed before
+    their first run; data unchanged.
   pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"

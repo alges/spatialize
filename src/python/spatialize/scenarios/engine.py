@@ -127,10 +127,15 @@ class CheckOutcome:
     rejected: bool = False
     passed: Optional[bool] = None
     skipped: str = ""
+    route: str = ""                 # runner-specific path, e.g. spatialize's "facade" or "run"
 
 
 def _mode_value(v, mode):
     return v[mode] if isinstance(v, dict) and mode in v else v
+
+
+def _route(runner, est):
+    return runner.route(est) if hasattr(runner, "route") else ""
 
 
 def _expect(check, profile):
@@ -165,7 +170,7 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
         p_hat = np.isfinite(m).mean(axis=1)
         p0 = np.exp(-est.rate * np.asarray(l1))
         r = families.gof_proportions(p_hat, p0, n)
-        out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile)))
+        out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile), route=_route(runner, est)))
     return out
 
 
@@ -217,7 +222,7 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
             r = families.mean_greater(ratio, check["min_ratio"])
         else:
             raise ValueError(f"unknown functional {check['functional']}")
-        out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile)))
+        out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile), route=_route(runner, est)))
     if save_maps and len(maps_by_est) > 1:
         from .figures import save_comparison
         save_comparison(save_maps, sc.id, maps_by_est, target_theta=s["truth"].get("theta_deg"))
@@ -254,11 +259,12 @@ class Report:
 
     def table(self):
         """Plain-text table of the outcomes, with p-values, Holm levels and decisions."""
-        w = max([len("scenario/check")] + [len(f"{o.scenario}/{o.check}") for o in self.outcomes])
+        names = [f"{o.scenario}/{o.check}" + (f" [{o.route}]" if o.route and o.route != "facade" else "")
+                 for o in self.outcomes]
+        w = max([len("scenario/check")] + [len(n) for n in names])
         lines = [f"runner={self.runner} mode={self.mode} seed={self.seed} α_suite={self.alpha:g} (Holm)",
                  f"{'scenario/check':{w}s}  {'family':12s} {'p-value':>10s} {'level':>9s}  {'expect':6s} result"]
-        for o in self.outcomes:
-            name = f"{o.scenario}/{o.check}"
+        for o, name in zip(self.outcomes, names):
             if o.skipped:
                 lines.append(f"{name:{w}s}  SKIPPED: {o.skipped}")
                 continue

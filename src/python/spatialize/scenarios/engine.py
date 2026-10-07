@@ -8,6 +8,7 @@ test rejects (it proves the test has the power to see a known deviation).
 """
 import hashlib
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -19,6 +20,14 @@ from . import generators
 
 CATALOG = os.path.join(os.path.dirname(__file__), "catalog")
 MODES = ("ci", "full")
+
+# Progress of a run: a callable taking one line of text, set by run() for its duration.
+_progress = None
+
+
+def _say(msg):
+    if _progress is not None:
+        _progress(msg)
 
 
 # ----------------------------------------------------------------------------- loading
@@ -180,6 +189,14 @@ class CheckOutcome:
     skipped: str = ""
     route: str = ""                 # runner-specific path, e.g. spatialize's "facade" or "run"
     known_failure: str = ""         # reason, when the check documents a known defect (like xfail)
+
+    def __post_init__(self):
+        if self.skipped:
+            _say(f"  {self.check}: skipped ({self.skipped})")
+        else:
+            how = "exact" if self.result.family == "almost-sure" else "Holm level set at the end"
+            neg = ", negative control" if self.expect == "reject" else ""
+            _say(f"  {self.check}: p = {self.result.p_value:.3g}  ({self.result.family}{neg}; {how})")
 
     @property
     def status(self):
@@ -346,7 +363,14 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
         data and the domain are rotated about the domain centre, the estimator being evaluated at the
         same physical points so that the maps stay comparable pixel by pixel."""
         rows = []
+        what = f"{est.id}" + (f" rotated {rotate_deg:g}°" if rotate_deg else "")
+        _say(f"  {what}: {K} fields, {n_members} members each")
+        t0 = last = time.monotonic()
         for k in range(K):
+            now = time.monotonic()
+            if k and now - last >= 15.0:
+                _say(f"    {what}: field {k}/{K}, {now - t0:.0f} s")
+                last = now
             f = sc.field(k)
             smp, qry, e = f["samples"], queries, est
             if rotate_deg:
@@ -358,6 +382,7 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
             rows.append(dict(point=point, truth=truth, theta=th, coherence=c, theta_truth=th_t,
                              coherence_truth=c_t, samples=np.asarray(f["samples"]),
                              members=[np.asarray(mem)[:, j].reshape(m_grid, m_grid) for j in range(keep_members)]))
+        _say(f"    {what}: done in {time.monotonic() - t0:.0f} s")
         return rows
 
     def reference(k):
@@ -853,7 +878,8 @@ class Report:
         return "\n".join(lines)
 
 
-def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE, save_maps=None) -> Report:
+def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE, save_maps=None,
+        progress=None) -> Report:
     """Evaluate scenarios with a runner and decide every check under one Holm budget.
 
     Parameters
@@ -873,6 +899,9 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
         Directory where the maps computed by the run are saved for human review: per scenario,
         estimator and field, the arrays (``.npy``) and a figure of truth and map; plus a summary
         figure. Needs matplotlib. Maps never enter the decisions.
+    progress : callable, optional
+        Called with one line of text as the run advances: each scenario, each estimator's maps and
+        each check's p-value before the Holm decision. The command line prints these lines.
 
     Returns
     -------
@@ -888,8 +917,17 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
     elif isinstance(scenarios, dict):
         scenarios = list(scenarios.values())
     rep = Report(runner.name, mode, seed, alpha=alpha)
-    for sc in scenarios:
-        rep.outcomes += EVALUATORS[sc.spec["evaluator"]](sc, runner, mode, seed, save_maps=save_maps)
+    global _progress
+    _progress = progress
+    try:
+        for i, sc in enumerate(scenarios, 1):
+            _say(f"[{i}/{len(scenarios)}] {sc.id} (v{sc.spec.get('version', '?')}, {sc.spec['evaluator']}): "
+                 f"{len(sc.spec.get('estimators', []))} estimators, {len(sc.spec['checks'])} checks")
+            t0 = time.monotonic()
+            rep.outcomes += EVALUATORS[sc.spec["evaluator"]](sc, runner, mode, seed, save_maps=save_maps)
+            _say(f"  {sc.id} done in {time.monotonic() - t0:.0f} s")
+    finally:
+        _progress = None
     # Almost-sure checks are decided exactly (a correct implementation cannot violate them), so they
     # spend none of the error budget: Holm applies to the statistical tests only.
     for o in rep.outcomes:

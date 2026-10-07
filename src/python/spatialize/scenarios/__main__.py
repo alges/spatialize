@@ -42,6 +42,8 @@ def main(argv=None):
                         help=f"family-wise error rate of the run (default {ALPHA_SUITE:g})")
     parser.add_argument("--save-maps", metavar="DIR", default=None,
                         help="save the maps computed by the run (arrays and figures) under DIR")
+    parser.add_argument("--quiet", action="store_true",
+                        help="print only the report, without the progress of the run (on stderr)")
     parser.add_argument("--list", action="store_true", help="list the scenarios and exit")
     parser.add_argument("--version", action="version", version=f"spatialize.scenarios {VERSION}")
     args = parser.parse_args(argv)
@@ -61,8 +63,12 @@ def main(argv=None):
         parser.error("no scenario selected")
 
     from .runners.spatialize import SpatializeRunner  # loads the compiled library
+    if not args.quiet:
+        print(f"seed {args.seed if args.seed is not None else '(fresh, in the report)'}, mode {args.mode}; "
+              "progress on stderr, report at the end", file=sys.stderr, flush=True)
     report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha,
-                 save_maps=args.save_maps)
+                 save_maps=args.save_maps,
+                 progress=None if args.quiet else lambda msg: print(msg, file=sys.stderr, flush=True))
     print(report.table())
     count = {k: sum(1 for o in report.outcomes if o.status == k) for k in ("PASS", "FAIL", "KNOWN", "XPASS", "SKIPPED")}
     known = f", {count['KNOWN']} known failures" if count["KNOWN"] else ""

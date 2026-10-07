@@ -4,87 +4,137 @@
 Spatial distributional estimation
 #################################
 
-The recipe
-==========
+The estimator
+=============
 
-The estimator is simple enough to describe in a sentence. You cut the domain into cells at random,
-fit a cheap local model inside each cell, read off a prediction at every location, and repeat many
-times. After :math:`T` repetitions each location holds not one prediction but :math:`T` of them, one per cut. That cloud is the estimate, a distribution and not a number. Anyone who has met bagging
-in machine learning will recognise the move, an ensemble of cheap models whose spread is kept
-instead of averaged away.
+The estimator cuts the domain into cells at random, fits a cheap model inside each cell, and
+repeats. Two ingredients define it.
 
-The two halves of the recipe carry names that the rest of these pages use.
-
-- The *encoder* is the random partition. It maps a location to the cell it falls in, and so
-  decides which data the local model may use there. Spatialize offers several partition processes
+- The *encoder* is a random partition :math:`\Pi` of the domain, drawn from a partition process
+  :math:`\Pr_\Pi`. Write :math:`C_\Pi(v)` for the cell containing :math:`v`, and
+  :math:`O_\Pi(v) = \{(v_i, z_i) \in O : v_i \in C_\Pi(v)\}` for the data it holds
   (:doc:`encoders`).
-- The *decoder* is the local model. It predicts at a location from the data of its cell alone, by
-  averaging them with some weights or by drawing one of them (:doc:`decoders`).
+- The *decoder* is a local model :math:`g` that predicts at :math:`v` from those data alone
+  (:doc:`decoders`).
 
-Each repetition gives one *member* of the ensemble, a value at every location computed under one
-partition. The members at a location form its *predictive law*.
+Drawing :math:`T` independent partitions :math:`\Pi^{(1)}, \dots, \Pi^{(T)}` gives at every
+location :math:`T` predictions, the *members* of the ensemble,
+
+.. math::
+
+   \hat z^{(t)}(v) = g\big(v;\, O_{\Pi^{(t)}}(v)\big), \qquad t = 1, \dots, T.
+
+The estimate at :math:`v` is their empirical law, the *predictive law*
+
+.. math::
+
+   \hat F_v^{(T)}(z) = \frac{1}{T} \sum_{t=1}^T \mathbf 1\big\{\hat z^{(t)}(v) \le z\big\}.
+
+Each :math:`\hat F_v^{(T)}` is a distribution function by construction, which settles the first
+requirement of :doc:`problem`.
 
 Why the laws fit together
 =========================
 
-The laws at different locations are not computed separately. Two neighbouring locations fall in
-the same cell in most partitions, so they are predicted from almost the same data, while two
-distant locations rarely share a cell. The overlap of the cells from one partition to the next
-ties the predictions at different places together, so the members form a joint law of the field,
-with its own dependence between locations. The probability that a set of locations shares a cell,
-which only depends on the partition process, carries that dependence at every order, pairs, triples
-and beyond, where kriging uses the covariance of pairs alone.
+The members at different locations are computed under the same partitions, so the vector
+:math:`\big(\hat z^{(t)}(v_1), \dots, \hat z^{(t)}(v_N)\big)` is one field drawn under
+:math:`\Pi^{(t)}`, and the :math:`T` of them sample a joint law. Its dependence comes from the
+sharing of cells. The *co-occurrence* of a set of locations :math:`S` is the probability that they
+fall in one cell,
 
-Every law built this way is a proper law, since it is the empirical law of :math:`T` values, so the
-order violations of indicator kriging cannot occur.
+.. math::
 
-Reading the law
-===============
+   e(S) = \Pr_\Pi\big(\text{all of } S \text{ lie in one cell of } \Pi\big),
 
-The law at a location answers many questions, each a different reading of it.
+a property of the partition process alone. Two locations with a high co-occurrence are predicted
+from the same data most of the time, so their members move together, while two locations that
+rarely share a cell are nearly independent. For the Mondrian process of rate :math:`\lambda`, for
+instance,
 
-- Its mean or its median gives a map.
-- A quantile gives a conservative or an optimistic figure.
-- The share of members above a threshold estimates the probability of exceeding it.
-- Two quantiles bound an interval.
+.. math::
 
-Which single number to report depends on what an error costs. Under a squared loss the best report
-is the mean, under an absolute loss the median. When over-predicting costs :math:`c` times as much
-as under-predicting, the best report is the quantile at level :math:`1/(1+c)`, which needs no
-variance and so stays meaningful for heavy-tailed variables, where the mean misleads. Choosing the
-aggregation of the members is choosing that loss.
+   e(\{x, y\}) = \exp\big(-\lambda \lVert x - y \rVert_1\big).
 
-Questions also differ by the object they concern.
+The co-occurrence of pairs plays the role of the covariance, while the co-occurrence of triples and
+larger sets carries the dependence of higher order that a covariance cannot hold. This settles the
+second requirement.
 
-- A question about one location, a probability of exceedance, a quantile, the mass of an interval,
-  is read from the law at that location.
-- A question about the map taken whole, an area above a limit, a grade–tonnage curve, the average
-  over a block, is read from the members, each a whole field under one partition. Assembling it
-  from per-location figures, for instance by averaging the quantiles of the points of a block,
-  assumes that all the locations move together and overstates the risk.
-
-How many partitions
+Readings of the law
 ===================
 
-The number of partitions :math:`T` controls the Monte Carlo error of every reading, which shrinks
-like :math:`T^{-1/2}`. A few hundred partitions usually make it negligible against the error of
-the estimate itself. More partitions do not change what the ensemble estimates, so they cannot
-remove a bias that comes from the partition scale or from the local model.
+Every quantity reported is a functional of the members.
+
+.. math::
+
+   \bar z(v) = \frac1T \sum_t \hat z^{(t)}(v), \qquad
+   \hat q_\alpha(v) = \inf\{z : \hat F_v^{(T)}(z) \ge \alpha\}, \qquad
+   \hat p_t(v) = \frac1T \sum_t \mathbf 1\{\hat z^{(t)}(v) > t\},
+
+the mean, the quantile of level :math:`\alpha` and the probability of exceeding :math:`t`, with
+:math:`[\hat q_{\alpha/2}(v), \hat q_{1-\alpha/2}(v)]` an interval of nominal coverage
+:math:`1-\alpha`.
+
+Which single number to report depends on the cost of an error, the best report being
+
+.. math::
+
+   \hat z^\star(v) = \arg\min_{a} \frac1T \sum_t L\big(a, \hat z^{(t)}(v)\big)
+
+for a loss :math:`L`. A squared loss gives the mean, an absolute loss the median. When
+over-predicting costs :math:`c` times as much as under-predicting,
+
+.. math::
+
+   L(a, z) = c\,(a - z)_+ + (z - a)_+
+   \quad\Longrightarrow\quad
+   \hat z^\star(v) = \hat q_{1/(1+c)}(v),
+
+a quantile, which needs no second moment and so remains meaningful for heavy-tailed variables, where
+the mean misleads. Choosing the aggregation of the members is choosing that loss.
+
+One location against the whole map
+==================================
+
+A question about one location, such as :math:`\hat p_t(v)`, is read from the law at :math:`v`. A
+question about many locations at once is read from the members, each a whole field. The average
+over a block :math:`B` of :math:`m` locations, for instance, has the law of
+
+.. math::
+
+   \bar Z_B^{(t)} = \frac1m \sum_{v \in B} \hat z^{(t)}(v), \qquad t = 1, \dots, T,
+
+whose quantiles are not the averages of the quantiles at the points of :math:`B`. Averaging the
+quantiles assumes that all the locations of the block move together, and overstates the risk of the
+block.
+
+The number of partitions
+========================
+
+Each reading is an average over :math:`T` independent draws of the partition, so its Monte Carlo
+error shrinks as
+
+.. math::
+
+   \operatorname{sd}\big(\bar z(v)\big) = \frac{\sigma_v}{\sqrt T},
+
+with :math:`\sigma_v` the spread of the members at :math:`v`. A few hundred partitions usually make
+it negligible. More partitions do not change what the ensemble estimates, so they cannot remove a
+bias that comes from the partition scale or from the decoder.
 
 What the ensemble converges to
 ==============================
 
-With many partitions and data dense enough for the cells to fill, the ensemble converges to a
-definite law. That law describes how the predictions of this one realisation of the field vary as
-the cells move, not how the field would vary from one realisation to another. In practice the
-spread of the members reflects the partition, so it tends to understate the variability of the
-field near a location. Simulation corrects for it by widening the local laws (:doc:`ess`), and the
-choice of granularity balances the errors it introduces (:doc:`error`).
+As :math:`T \to \infty` the predictive law converges to the law of :math:`g(v; O_\Pi(v))` under
+:math:`\Pi \sim \Pr_\Pi`, with the data held fixed. As the data grow denser, filling the cells, that law converges in turn. Its limit describes how the predictions from this one realisation of the
+field vary as the cells move, not how the field would vary from one realisation to another. In
+practice the spread of the members reflects the partition, so it tends to understate the
+variability of the field near a location. Simulation corrects for it by widening the local laws
+(:doc:`ess`), and the choice of granularity balances the errors involved (:doc:`error`).
 
 In Spatialize
 =============
 
 :func:`~spatialize.gs.esi.esi_griddata` and :func:`~spatialize.gs.esi.esi_nongriddata` compute the
-ensemble, with ``n_partitions`` partitions of granularity ``alpha``. The members are
+ensemble with :math:`T` = ``n_partitions``. The members :math:`\hat z^{(t)}(v)` are
 ``esi_samples()`` of the result, and ``agg_function`` (:doc:`../reference/functions`) chooses the
 reading reported as the estimate.

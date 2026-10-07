@@ -65,7 +65,7 @@ a_2^{-2}) R_\vartheta`, ranges :math:`a_1 = 0.45`, :math:`a_2 = 0.09` and orient
 :math:`\vartheta = 30°`, a 5:1 anisotropy of the kind a variogram is designed to capture.
 
 **Data.** 400 uniformly placed samples and a 40×40 grid of queries (cell centres, row-major), drawn
-jointly by Cholesky factorisation so that samples and truth belong to one realisation. Forty
+jointly by Cholesky factorisation so that samples and truth belong to one realisation. Eighty
 replicate fields are pinned (generator seed 20261005), stored as ``.npy`` with SHA-256 checksums.
 
 **Estimators.** Seven ensembles take part, none of them told about the anisotropy, since the cuts are
@@ -109,7 +109,7 @@ process of rate 5 on the unit square.
 
 **Claim (V1).** The elongation at 30° must nevertheless be clearly visible in each estimator's point
 map. Two pre-registered map functionals (:doc:`visual`), the same for every estimator,
-are computed on each of the :math:`K = 40` fields.
+are computed on each of the :math:`K = 80` fields (the reason for 80 is given under V4).
 
 - **v1a — direction** (equivalence, TOST). The orientation error :math:`\theta(\text{map}) - 30°`
   lies within :math:`\pm 10°`.
@@ -117,7 +117,7 @@ are computed on each of the :math:`K = 40` fields.
   truth, :math:`c(\text{map}) / c(\text{truth}) > 0.5`.
 
 The results below come from ``ci`` mode with seed 12345, as means :math:`\pm` standard errors over
-the 40 fields.
+the 80 fields.
 
 .. list-table::
    :header-rows: 1
@@ -129,40 +129,40 @@ the 40 fields.
      - coherence ratio (v1b)
      - p
    * - ``idw``
-     - :math:`-0.3° \pm 0.5°`
-     - :math:`7.9 \cdot 10^{-23}`
-     - :math:`0.61 \pm 0.012`
-     - :math:`6.4 \cdot 10^{-12}`
+     - :math:`-0.3° \pm 0.4°`
+     - :math:`1.1 \cdot 10^{-42}`
+     - :math:`0.61 \pm 0.009`
+     - :math:`1.1 \cdot 10^{-20}`
    * - ``aidw``
-     - :math:`-1.7° \pm 0.3°`
-     - :math:`5.4 \cdot 10^{-27}`
-     - :math:`0.98 \pm 0.007`
-     - :math:`4.0 \cdot 10^{-43}`
+     - :math:`-1.7° \pm 0.2°`
+     - :math:`6.4 \cdot 10^{-50}`
+     - :math:`0.97 \pm 0.006`
+     - :math:`8.7 \cdot 10^{-78}`
    * - ``krig``
-     - :math:`-0.5° \pm 0.4°`
-     - :math:`8.5 \cdot 10^{-25}`
-     - :math:`0.73 \pm 0.013`
-     - :math:`4.8 \cdot 10^{-21}`
+     - :math:`-0.5° \pm 0.3°`
+     - :math:`1.5 \cdot 10^{-45}`
+     - :math:`0.73 \pm 0.010`
+     - :math:`1.1 \cdot 10^{-37}`
    * - ``vor-uniform-idw``
-     - :math:`-0.5° \pm 0.5°`
-     - :math:`4.8 \cdot 10^{-22}`
-     - :math:`0.64 \pm 0.013`
-     - :math:`3.4 \cdot 10^{-14}`
+     - :math:`-0.5° \pm 0.3°`
+     - :math:`2.2 \cdot 10^{-42}`
+     - :math:`0.64 \pm 0.009`
+     - :math:`5.9 \cdot 10^{-25}`
    * - ``vor-data-idw``
-     - :math:`-0.4° \pm 0.5°`
-     - :math:`1.0 \cdot 10^{-21}`
-     - :math:`0.64 \pm 0.013`
-     - :math:`8.7 \cdot 10^{-14}`
+     - :math:`-0.4° \pm 0.3°`
+     - :math:`2.3 \cdot 10^{-42}`
+     - :math:`0.64 \pm 0.009`
+     - :math:`1.4 \cdot 10^{-24}`
    * - ``vor-uniform-krig``
-     - :math:`-0.4° \pm 0.4°`
-     - :math:`2.4 \cdot 10^{-24}`
-     - :math:`0.73 \pm 0.013`
-     - :math:`1.4 \cdot 10^{-20}`
+     - :math:`-0.4° \pm 0.3°`
+     - :math:`9.3 \cdot 10^{-46}`
+     - :math:`0.73 \pm 0.010`
+     - :math:`4.8 \cdot 10^{-37}`
    * - ``vor-uniform-aidw``
-     - :math:`-1.1° \pm 0.4°`
-     - :math:`1.2 \cdot 10^{-25}`
-     - :math:`0.91 \pm 0.010`
-     - :math:`2.7 \cdot 10^{-34}`
+     - :math:`-1.0° \pm 0.3°`
+     - :math:`2.3 \cdot 10^{-50}`
+     - :math:`0.91 \pm 0.007`
+     - :math:`2.4 \cdot 10^{-65}`
 
 All fourteen checks pass, stably across seeds. With kriging, the partition barely matters for the
 median map, since with about eleven data per cell and a fixed variogram kriging inside a cell comes
@@ -181,7 +181,7 @@ their members differ.
 of each estimator's median map with that of the best linear predictor, simple kriging with the true
 covariance computed from the same data (:doc:`visual`). Check **v5** passes when
 :math:`\mathrm{std}(\text{map}) / \mathrm{std}(\text{reference}) > 0.9`, by a one-sided :math:`t`
-test over the 40 fields, with the threshold fixed before the criterion was first run.
+test over the 80 fields, with the threshold fixed before the criterion was first run.
 
 .. list-table::
    :header-rows: 1
@@ -192,35 +192,35 @@ test over the 40 fields, with the threshold fixed before the criterion was first
      - p
      - result
    * - ``aidw``
-     - :math:`0.96 \pm 0.003`
-     - :math:`6.7 \cdot 10^{-26}`
+     - :math:`0.96 \pm 0.002`
+     - :math:`2.4 \cdot 10^{-48}`
      - pass
    * - ``vor-uniform-aidw``
      - :math:`0.98 \pm 0.002`
-     - :math:`1.7 \cdot 10^{-31}`
+     - :math:`3.1 \cdot 10^{-59}`
      - pass
    * - ``krig``
-     - :math:`0.96 \pm 0.003`
-     - :math:`3.3 \cdot 10^{-23}`
+     - :math:`0.96 \pm 0.002`
+     - :math:`1.0 \cdot 10^{-43}`
      - pass
    * - ``vor-uniform-krig``
-     - :math:`0.96 \pm 0.003`
-     - :math:`1.6 \cdot 10^{-23}`
+     - :math:`0.96 \pm 0.002`
+     - :math:`1.4 \cdot 10^{-44}`
      - pass
    * - ``idw``
-     - :math:`0.85 \pm 0.006`
+     - :math:`0.85 \pm 0.004`
      - 1
      - known failure
    * - ``vor-uniform-idw``
-     - :math:`0.89 \pm 0.005`
-     - 1
+     - :math:`0.895 \pm 0.004`
+     - 0.90
      - known failure
    * - ``vor-data-idw``
-     - :math:`0.89 \pm 0.005`
-     - 1
+     - :math:`0.895 \pm 0.004`
+     - 0.92
      - known failure
 
-IDW with exponent 2 is 11–15 % more washed out than the best linear predictor on this field, on
+IDW with exponent 2 is 10–15 % more washed out than the best linear predictor on this field, on
 Mondrian and on Voronoi partitions alike. The shortfall is recorded as a known failure
 (:doc:`statistics`), leaving the threshold unchanged.
 
@@ -247,33 +247,33 @@ partition (Voronoi). Three checks are pre-registered with :math:`\delta = 0.5` (
      - single members (v4b)
      - p
    * - ``idw``
-     - :math:`0.35 \pm 0.021`
-     - :math:`4.5 \cdot 10^{-9}`
-     - :math:`2.59 \pm 0.091`
-     - :math:`6.1 \cdot 10^{-28}`
+     - :math:`0.34 \pm 0.015`
+     - :math:`1.0 \cdot 10^{-17}`
+     - :math:`2.55 \pm 0.061`
+     - :math:`5.0 \cdot 10^{-56}`
    * - ``krig``
-     - :math:`0.28 \pm 0.020`
-     - :math:`6.2 \cdot 10^{-14}`
-     - :math:`2.88 \pm 0.082`
-     - :math:`2.0 \cdot 10^{-31}`
+     - :math:`0.27 \pm 0.014`
+     - :math:`4.5 \cdot 10^{-27}`
+     - :math:`2.83 \pm 0.054`
+     - :math:`1.9 \cdot 10^{-63}`
    * - ``aidw``
-     - :math:`0.37 \pm 0.028`
-     - :math:`1.8 \cdot 10^{-5}`
-     - :math:`2.04 \pm 0.081`
-     - :math:`5.4 \cdot 10^{-26}`
+     - :math:`0.39 \pm 0.024`
+     - :math:`9.6 \cdot 10^{-6}`
+     - :math:`1.98 \pm 0.059`
+     - :math:`4.3 \cdot 10^{-49}`
    * - ``vor-uniform-idw`` (v4c)
-     - :math:`-0.01 \pm 0.016`
-     - :math:`3.0 \cdot 10^{-29}`
+     - :math:`0.01 \pm 0.011`
+     - :math:`1.2 \cdot 10^{-56}`
      - —
      - —
    * - ``vor-uniform-krig`` (v4c)
-     - :math:`0.01 \pm 0.017`
-     - :math:`8.9 \cdot 10^{-29}`
+     - :math:`-0.02 \pm 0.009`
+     - :math:`8.8 \cdot 10^{-63}`
      - —
      - —
    * - ``vor-uniform-aidw`` (v4c)
-     - :math:`-0.07 \pm 0.021`
-     - :math:`7.7 \cdot 10^{-23}`
+     - :math:`-0.05 \pm 0.020`
+     - :math:`1.3 \cdot 10^{-35}`
      - —
      - —
 
@@ -281,6 +281,46 @@ Single members are strongly axis-locked (+2.0 to +2.9) while the Voronoi control
 test sees what it is meant to see. At :math:`T = 100` the Mondrian medians keep a residual of about
 0.3, roughly a third more energy on the axes than in the rotated run. The residual stays well below a
 small ensemble's and within the pre-registered :math:`\delta`, without vanishing.
+
+**Why 80 fields.** With 40 fields, check v4a on adaptive IDW failed in 4 of 14 runs with different
+seeds, although its mean axis-locking never came near the bound. Over those runs the mean lay
+between 0.34 and 0.41, averaging 0.37, against :math:`\delta = 0.5`. The failures came from the test
+lacking power, not from the estimator. The argument runs as follows.
+
+- The axis-locking of a single field has a standard deviation of about 0.19, so the mean over
+  :math:`K` fields has a standard error of :math:`0.19/\sqrt{K}`.
+- Under Holm, v4a-aidw is tested at a level of about :math:`2.5 \cdot 10^{-4}`, which takes a
+  :math:`t` statistic near 3.7. The check therefore passes only when the mean lies below
+  :math:`0.5 - 3.7 \times 0.19/\sqrt{K}`.
+- The mean itself varies from one run to another, with a standard deviation of 0.025 at
+  :math:`K = 40`, shrinking as :math:`1/\sqrt{K}`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 22 34 34
+
+   * - :math:`K`
+     - standard error
+     - the check passes when the mean is below
+     - expected share of failing runs
+   * - 40
+     - 0.030
+     - 0.386
+     - about 1 in 4 (observed 4 in 14)
+   * - 60
+     - 0.025
+     - 0.409
+     - about 1 in 50
+   * - 80
+     - 0.021
+     - 0.423
+     - about 1 in 1 000
+
+At 40 fields the bound a run must clear sits within the spread of the mean itself, so about one run
+in four fails while the decoder behaves as intended. At 80 fields the bound moves above that spread,
+so a failure becomes a rare event (about 1 in 1 000) that deserves a look. The thresholds and
+:math:`\delta` stay as pre-registered. Only the number of fields grows, the first 40 being the same
+as before. The run time of S03 grows in proportion.
 
 .. note::
 
@@ -295,7 +335,8 @@ small ensemble's and within the pre-registered :math:`\delta`, without vanishing
    smoothing (the Voronoi controls gave the same values), so axis-locking against a rotated run
    replaced it. Its threshold was chosen knowing diagnostic values on 8 fields, and :math:`K` rose to
    40 when two of its checks lacked power at 20. Version 6 records the correction of the IDW kernel
-   (note below), with the thresholds unchanged.
+   (note below), with the thresholds unchanged. Version 8 raised :math:`K` to 80 for the power of
+   v4a on adaptive IDW, as argued under V4.
 
 .. note::
 

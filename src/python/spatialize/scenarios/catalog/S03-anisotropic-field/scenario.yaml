@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 7
+version: 8
 tier: T3
 evaluator: map_visual
 book:
@@ -20,7 +20,7 @@ data:
   design: {type: uniform, n: 400}
   grid: 40                          # queries: 40×40 cell centres, row-major
   mode: pinned                      # data/{samples,values,truth}_<k>.npy, drawn jointly by Cholesky
-  fields: {ci: 40, full: 40}
+  fields: {ci: 80, full: 80}
   generator_seed: 20261005
 estimators_T: {ci: 100, full: 300}
 estimators:
@@ -155,3 +155,12 @@ provenance:
     coherence ratio 0.82 -> 0.64 (the smoothing had inflated it). Thresholds unchanged.
   pending: "add each new decoder (draw, wdraw_idw, wdraw_adaptiveidw, wdraw_kriging) as it lands"
   v7: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"
+  v8: >
+    2026-10-06: K raised from 40 to 80 fields (ci and full, user decision); fields 0-39 unchanged,
+    thresholds and δ unchanged. Reason: v4a-aidw lacked power, failing 4 of 14 runs at K = 40 (seeds
+    101-111, 746237441, 20261006; 31 passed) while adaptive IDW's mean axis lock stayed well below
+    the bound (0.339-0.410, average 0.368, against 0.5). The spread of one field's axis lock is about
+    0.19, so at K = 40 the standard error is 0.030 and a pass at the Holm level (≈ 2.5e-4, t* ≈ 3.8)
+    needs a mean below 0.386, which the seed-to-seed spread of the mean (s.d. 0.025) crosses about
+    one run in four. At K = 80 the standard error is 0.021 and the mean must stay below 0.423, which
+    it crosses about once in a thousand runs. K = 60 would still fail about one run in 50.

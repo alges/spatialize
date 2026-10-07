@@ -2,6 +2,8 @@
 
 The sharpened adaptive decoder reduces to the adaptive one when its two factors are switched off
 (kappa_r = kappa_g = 0); both share the adaptive fit, so the outputs must be the same bits.
+The cells of the data read by ``cells`` are those of the Mondrian trees that
+``get_leaf_for_samples_using_esi`` draws, on which ESMI and the Pareto encoder error were built.
 """
 import os
 import sys
@@ -40,3 +42,20 @@ def test_cells_agree_with_the_estimators_partitions(partition, alpha):
         indicator = (np.arange(len(pts)) == k).astype(np.float32)
         members = LIB.run(pts, indicator, pts, partition, alpha, cases.T, cases.SEED, "cellmean", {})[1]
         assert np.array_equal(same[k], members > 0)
+
+
+def _canonical(labels):
+    """Labels renumbered by first appearance in each column, so equal groupings give equal arrays."""
+    out = np.empty_like(labels)
+    for t in range(labels.shape[1]):
+        seen = {}
+        out[:, t] = [seen.setdefault(x, len(seen)) for x in labels[:, t]]
+    return out
+
+
+@pytest.mark.parametrize("ds", ["2d", "3d"])
+def test_cells_group_the_data_as_the_mondrian_leaf_function(ds):
+    s, _, _ = DATA[ds]
+    leaf = np.asarray(LIB.get_leaf_for_samples_using_esi(s, cases.T, cases.ALPHA, None, cases.SEED))
+    labels = np.asarray(LIB.cells(s, s, "mondrian", cases.ALPHA, cases.T, cases.SEED))
+    assert np.array_equal(_canonical(leaf), _canonical(labels))

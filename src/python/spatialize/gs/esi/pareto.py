@@ -22,12 +22,11 @@ esi_pareto_optimization
 
 from __future__ import annotations
 
-import warnings
 import numpy as np
 from itertools import permutations, product
 
 import spatialize.gs.esi.scorefunction as sf
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, _domain_corners, with_more_decoders
+from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 from spatialize.gs.esi._main import build_arg_list
 from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
@@ -65,7 +64,9 @@ class EmpiricalRobustnessBound:
     Parameters
     ----------
     n_partitions, alpha, local_interpolator, p_process, seed
-        ESI encoder parameters.
+        ESI encoder parameters. ε̂ is computed on the partitions of ``p_process``.
+    data_cond : bool
+        For Voronoi, whether the nuclei are drawn among the data (default) or uniformly.
     pair_strategy : str
         ``"max_min"`` (default) or ``"exhaustive"``.
     point_model_name : str
@@ -88,11 +89,13 @@ class EmpiricalRobustnessBound:
         nan_model_name: str = "ignore",
         support_sample_size: int = 500,
         interp_kwargs: dict | None = None,
+        data_cond: bool = True,
     ) -> None:
         self.n_partitions       = n_partitions
         self.alpha              = alpha
         self.local_interpolator = local_interpolator
         self.p_process          = p_process
+        self.data_cond          = data_cond
         self.seed               = seed
         self.pair_strategy      = pair_strategy
         self.support_sample_size = support_sample_size
@@ -115,25 +118,18 @@ class EmpiricalRobustnessBound:
         values = np.asarray(values, dtype=np.float32)
 
         # Step 1 — LOO predictive distributions as ESI sample vectors.
-        # Algorithm 1 is restricted to Mondrian partitions: Step 2 uses
-        # get_leaf_for_samples_using_esi which is Mondrian-only.  Voronoi
-        # support would require a dedicated cell-assignment API for Voronoi
-        # partitions that does not yet exist in libspatialize.
         loo_fn = lib_spatialize_facade.get_operator(
-            points, self.local_interpolator, "loo", partitioning_process.MONDRIAN
+            points, self.local_interpolator, "loo", self.p_process
         )
         params = self._build_params()
         l_args = build_arg_list(points, values, points, params)
         _, self.esi_samples = loo_fn(*l_args)          # shape (n, T)
 
-        # Step 2 — spatial encoder cell assignments, on the partitions of step 1: with a session
-        # domain, its corners join the samples (the trees do not depend on the samples) and their
-        # rows are dropped
-        corners = _domain_corners(points.shape[1])
-        located = points if corners is None else np.vstack([points, corners])
-        self.leaf_indexes = lib_spatialize_facade.get_leaf_for_samples_using_esi(
-            located, self.n_partitions, self.alpha, None, self.seed
-        )[:len(points)]  # shape (n, T)
+        # Step 2 — the cell of each datum in each partition of step 1 (same partition, alpha as
+        # passed to the engine, size and seed; the facade applies the session domain)
+        self.leaf_indexes = lib_spatialize_facade.cells(
+            points, points, self.p_process, l_args[3], self.n_partitions, self.seed
+        )  # shape (n, T)
 
         # Step 3 — pre-fit one density model per training point (fit once, reuse).
         # Each point's KDE is fitted exactly once here; the inner loop then calls
@@ -167,19 +163,15 @@ class EmpiricalRobustnessBound:
     # ------------------------------------------------------------------
 
     def _build_params(self) -> dict:
-        """Build the params dict for ``build_arg_list``.
-
-        Algorithm 1 is Mondrian-only: the robustness bound is always computed
-        under Mondrian partitions regardless of ``self.p_process``.
-        """
+        """Build the params dict for ``build_arg_list``."""
         defaults = dict(_INTERP_DEFAULTS.get(self.local_interpolator, {}))
         defaults.update(self.interp_kwargs)
         return {
             "n_partitions":       self.n_partitions,
             "alpha":              self.alpha,
             "local_interpolator": self.local_interpolator,
-            "p_process":          partitioning_process.MONDRIAN,
-            "data_cond":          True,
+            "p_process":          self.p_process,
+            "data_cond":          self.data_cond,
             "seed":               self.seed,
             "callback":           singleton_null_callback,
             **defaults,
@@ -249,6 +241,8 @@ class ParetoOptimizer:
     p_process : str
         Partitioning process used for both the encoder (robustness bound) and
         decoder (CV) steps.
+    data_cond : bool
+        For Voronoi, whether the nuclei are drawn among the data (default) or uniformly.
     scoring : callable
         Decoder scoring function with signature
         ``(true_values, esi_samples) → float``.
@@ -279,6 +273,7 @@ class ParetoOptimizer:
         param_grid: dict,
         local_interpolator: str = "idw",
         p_process: str = partitioning_process.MONDRIAN,
+        data_cond: bool       = True,
         scoring               = sf.neg_log_likelihood,
         k                     = 5,
         seed: int             = 0,
@@ -290,18 +285,10 @@ class ParetoOptimizer:
         fixed_interp_kwargs: dict | None = None,
         callback              = None,
     ) -> None:
-        if p_process != partitioning_process.MONDRIAN:
-            warnings.warn(
-                f"p_process='{p_process}' is not supported for the robustness bound (ε̂): "
-                "it is always computed under the default Mondrian partition.  Only the CV "
-                "decoder step uses the specified p_process.",
-                UserWarning,
-                stacklevel=2,
-            )
-
         self.param_grid          = param_grid
         self.local_interpolator  = local_interpolator
         self.p_process           = p_process
+        self.data_cond           = data_cond
         self.scoring             = scoring
         self.k                   = k
         self.seed                = seed
@@ -371,6 +358,7 @@ class ParetoOptimizer:
                 alpha               = alpha,
                 local_interpolator  = self.local_interpolator,
                 p_process           = self.p_process,
+                data_cond           = self.data_cond,
                 seed                = self.seed,
                 pair_strategy       = self.pair_strategy,
                 point_model_name    = self.point_model_name,
@@ -422,7 +410,7 @@ class ParetoOptimizer:
             "alpha":              alpha,
             "local_interpolator": self.local_interpolator,
             "p_process":          self.p_process,
-            "data_cond":          True,
+            "data_cond":          self.data_cond,
             "seed":               self.seed,
             "callback":           singleton_null_callback,
             **defaults,

@@ -116,7 +116,9 @@ In Spatialize
 :func:`~spatialize.gs.esi.esi_hparams_search` searches by cross-validation alone, over
 ``n_partitions``, ``alpha`` and the decoder's parameters, with k-fold or leave-one-out.
 :func:`~spatialize.gs.esi.esi_pareto_hparams_search` estimates :math:`\hat\varepsilon` and the risk for
-each configuration and returns the frontier. Its ``best_result`` reads the frontier by lowest
+each configuration and returns the frontier. Both are computed on the partitions of the chosen
+``p_process``, Mondrian or Voronoi, the cells of the data being those returned by
+:func:`~spatialize.gs.partitions.cell_labels`. Its ``best_result`` reads the frontier by lowest
 decoder error (``"min_decoder"``) or by knee (``"knee"``), while ``best_for_tau`` picks the best
 configuration under a level :math:`\tau` (:doc:`../reference/selection`). The scores are in
 :mod:`spatialize.gs.esi.scorefunction`.

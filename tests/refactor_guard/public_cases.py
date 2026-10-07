@@ -71,13 +71,17 @@ def public_cases():
                                                     range=[0.3], sill=[1.0]))
     add("esi_hparams_search_voronoi", "2d", search("idw", K, exponent=[EXP], p_process="voronoi"))
 
-    def pareto(s, v, q):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            r = esi_pareto_hparams_search(s, v, local_interpolator="idw", n_partitions=[30], alpha=[ALPHA],
-                                          exponent=[EXP], k=K, seed=SEED, folding_seed=FSEED, **NULL)
-        return {"errors": np.array([[x["epsilon"], x["decoder_error"]] for x in r.all_results])}
-    add("esi_pareto_hparams_search", "2d", pareto)
+    def pareto(**kw):
+        def fn(s, v, q):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = esi_pareto_hparams_search(s, v, local_interpolator="idw", n_partitions=[30], alpha=[ALPHA],
+                                              exponent=[EXP], k=K, seed=SEED, folding_seed=FSEED, **kw, **NULL)
+            return {"errors": np.array([[x["epsilon"], x["decoder_error"]] for x in r.all_results])}
+        return fn
+    add("esi_pareto_hparams_search", "2d", pareto())
+    # the encoder error on a Voronoi partition, possible since it reads the cells through cells()
+    add("esi_pareto_hparams_search_voronoi", "2d", pareto(p_process="voronoi", data_cond=False))
 
     def spa(s, v, q):
         r = cv_sample_pred_posterior(s, v, q, local_interpolator="idw", exponent=EXP, k=K, n_partitions=T,

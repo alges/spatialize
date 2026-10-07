@@ -1084,10 +1084,10 @@ def esi_griddata(points, values, xi, **kwargs):
 
     Notes
     -----
-    Not every local interpolator is available at every dimensionality:
-    2D data supports IDW, Kriging, Adaptive IDW, and Voronoi partitioning;
-    3D data supports IDW, Kriging, and Adaptive IDW (Mondrian partitioning
-    only); 4D and 5D data support IDW only.
+    Every partition works in any dimension, as do the decoders, except the
+    adaptive ones (``"adaptiveidw"``, ``"sharpidw"`` and their weighted
+    draws), which work in one, two and three dimensions.
+    :func:`spatialize.gs.supports` tells whether a combination is available.
 
     See Also
     --------
@@ -1244,10 +1244,10 @@ def esi_nongriddata(points, values, xi, **kwargs):
 
     Notes
     -----
-    Not every local interpolator is available at every dimensionality:
-    2D data supports IDW, Kriging, Adaptive IDW, and Voronoi partitioning;
-    3D data supports IDW, Kriging, and Adaptive IDW (Mondrian partitioning
-    only); 4D and 5D data support IDW only.
+    Every partition works in any dimension, as do the decoders, except the
+    adaptive ones (``"adaptiveidw"``, ``"sharpidw"`` and their weighted
+    draws), which work in one, two and three dimensions.
+    :func:`spatialize.gs.supports` tells whether a combination is available.
 
     See Also
     --------
@@ -1264,6 +1264,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
     pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
     common_args={
         "p_process":            partitioning_process.MONDRIAN,
+        "data_cond":            True,
         "scoring":              sf.neg_log_likelihood,
         "k":                    5,
         "n_partitions":         [100, 200, 300],
@@ -1305,7 +1306,11 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         Any of those of :func:`esi_griddata` (default ``"idw"``).
     p_process : str, optional
         Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
-        or ``"voronoi"``.
+        or ``"voronoi"``. Both errors, ε̂ and R_CV, are computed on its
+        partitions.
+    data_cond : bool, optional
+        For ``"voronoi"``, whether the nuclei are drawn among the data
+        (default ``True``) or uniformly in the box.
     scoring : str or callable, optional
         Decoder scoring function: ``"nll"`` (default), ``"crps"``,
         ``"rmse"``, ``"mae"``, or any callable
@@ -1397,6 +1402,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         param_grid          = param_grid,
         local_interpolator  = kwargs["local_interpolator"],
         p_process           = kwargs["p_process"],
+        data_cond           = kwargs["data_cond"],
         scoring             = kwargs["scoring"],
         k                   = kwargs["k"],
         seed                = kwargs["seed"],

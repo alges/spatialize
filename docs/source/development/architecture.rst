@@ -196,7 +196,9 @@ Adding a decoder
 ================
 
 1. Subclass ``Decoder`` in its own file under ``include/spatialize/decoders/``, implementing
-   ``leaf_estimation``, ``leaf_loo`` and ``leaf_kfold`` on the samples of one cell. Implement ``fit``
+   ``leaf_estimation``, ``leaf_loo`` and ``leaf_kfold`` on the samples of one cell. Each call also
+   receives a ``CellContext`` with the tree, the cell and the run's seed, from which a decoder that
+   draws derives its random numbers. Implement ``fit``
    if the decoder needs per-cell parameters, storing them in ``partition->leaf_params``, and draw
    any randomness from the generator passed to ``fit`` only. The ``leaf_*`` methods run on several
    cells at once, so they must not modify shared state. A decoder that cannot meet this overrides

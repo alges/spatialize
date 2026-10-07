@@ -49,7 +49,7 @@ namespace sptlz{
         this->exponent = _exponent;
       }
 
-      std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
+      std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result;
 
         if(samples_id->size()==0){
@@ -63,7 +63,7 @@ namespace sptlz{
         return(result);
       }
 
-      std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params){
+      std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result;
 
         if((samples_id->size()==0) || (samples_id->size()==1)){
@@ -84,7 +84,7 @@ namespace sptlz{
         return(result);
       }
 
-      std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *folds, std::vector<int> *samples_id, std::vector<float> *params){
+      std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *folds, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result(samples_id->size());
 
         if((samples_id->size()==0) || (samples_id->size()==1)){

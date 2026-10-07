@@ -9,6 +9,15 @@
 #include "spatialize/partition.hpp"
 
 namespace sptlz{
+	// Where a decoder is called: the tree and the cell of the ensemble, and the run's seed. Decoders
+	// that draw use them to derive their random numbers, so that a draw depends neither on the
+	// number of threads nor on the other queries.
+	struct CellContext {
+		int tree;
+		int cell;
+		unsigned int seed;
+	};
+
 	// Local interpolator applied inside one cell (the "decoder"). It never sees the partition
 	// process: the ensemble hands it the samples of a cell and the locations to predict there.
 	class Decoder {
@@ -28,15 +37,15 @@ namespace sptlz{
 			                 std::function<int(std::string)> visitor,
 			                 std::string class_name){}
 
-			virtual std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
+			virtual std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
 				throw std::runtime_error("must override");
 			}
 
-			virtual std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params){
+			virtual std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
 				throw std::runtime_error("must override");
 			}
 
-			virtual std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *fold, std::vector<int> *samples_id, std::vector<float> *params){
+			virtual std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *fold, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
 				throw std::runtime_error("must override");
 			}
 	};

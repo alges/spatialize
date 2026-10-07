@@ -31,6 +31,7 @@ namespace sptlz{
 			std::vector<std::vector<float>> coords;
 			std::vector<float> values;
 			std::mt19937 my_rand;
+			unsigned int seed;        // the run's seed, handed to the decoders (CellContext)
 			sptlz::Decoder *decoder;
 			bool estimate_log_debug;  // log "computing estimates" at debug level (Voronoi) instead of info
 
@@ -42,6 +43,7 @@ namespace sptlz{
 				this->class_name = __func__;
 				this->callback_visitor = visitor;
 				this->my_rand = std::mt19937(seed);
+				this->seed = static_cast<unsigned int>(seed);
 				this->coords = _coords;
 				this->values = _values;
 				this->decoder = NULL;
@@ -181,7 +183,7 @@ namespace sptlz{
 						if(mt->samples_by_leaf.at(j).size()==0){
 							continue;
 						}
-						auto predictions = decoder->leaf_estimation(&coords, &values, &(mt->samples_by_leaf.at(j)), locations, &(locations_by_leaf.at(j)), &(mt->leaf_params.at(j)));
+						auto predictions = decoder->leaf_estimation(&coords, &values, &(mt->samples_by_leaf.at(j)), locations, &(locations_by_leaf.at(j)), &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed});
 						for(size_t k=0; k<locations_by_leaf.at(j).size(); k++){
 							results.at(locations_by_leaf.at(j).at(k)).at(i) = predictions.at(k);
 						}
@@ -210,7 +212,7 @@ namespace sptlz{
 					auto mt = forest.at(i);
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
 						if(mt->samples_by_leaf.at(j).size()!=0){
-							auto predictions = decoder->leaf_loo(&coords, &values, &(mt->samples_by_leaf.at(j)), &(mt->leaf_params.at(j)));
+							auto predictions = decoder->leaf_loo(&coords, &values, &(mt->samples_by_leaf.at(j)), &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed});
 							for(size_t k=0; k<mt->samples_by_leaf.at(j).size(); k++){
 								results.at(mt->samples_by_leaf.at(j).at(k)).at(i) = predictions.at(k);
 							}
@@ -243,7 +245,7 @@ namespace sptlz{
 					auto mt = forest.at(i);
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
 						if(mt->samples_by_leaf.at(j).size()!=0){
-							auto predictions = decoder->leaf_kfold(k, &coords, &values, &folds, &(mt->samples_by_leaf.at(j)), &(mt->leaf_params.at(j)));
+							auto predictions = decoder->leaf_kfold(k, &coords, &values, &folds, &(mt->samples_by_leaf.at(j)), &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed});
 							for(size_t l=0; l<mt->samples_by_leaf.at(j).size(); l++){
 								results.at(mt->samples_by_leaf.at(j).at(l)).at(i) = predictions.at(l);
 							}

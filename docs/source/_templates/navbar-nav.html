@@ -6,7 +6,7 @@
   all 16 example notebooks, which flooded the header with an unreadable
   link list. Overriding this template (mirrored in docs/_templates/ of
   spatialize-examples) drops the toctree-derived links and replaces them
-  with exactly four: Home + Documentation + Conformance Tests (this site, via `pathto()` so
+  with exactly five: Home + Theory + API Reference + Conformance Tests (this site, via `pathto()` so
   they resolve correctly from any page depth and stay on this site/host
   when browsing locally or on a PR preview) and Examples (a genuinely
   different Sphinx project/host — a subproject on RTD — so it must be a
@@ -20,8 +20,13 @@
       </a>
     </li>
     <li class="nav-item">
+      <a class="nav-link nav-internal" href="{{ pathto('theory/index') }}">
+        Theory
+      </a>
+    </li>
+    <li class="nav-item">
       <a class="nav-link nav-internal" href="{{ pathto('reference/index') }}">
-        Documentation
+        API Reference
       </a>
     </li>
     <li class="nav-item">

@@ -59,13 +59,19 @@ used by adaptive IDW.
 From Python to C++
 ==================
 
+The compiled extension declares what it offers in a *catalogue* (``src/c++/registry.hpp``), where
+every partition and decoder is registered once, with the dimensions it supports and its
+parameters. ``libspatialize.catalog()`` returns it as plain Python data, and the facade between
+the Python API and the extension (``spatialize/gs/__init__.py``) is built from it, so a partition
+or decoder registered in C++ needs no second list in Python.
+
 1. A public function (``esi_griddata``, ``esi_nongriddata``, the hyperparameter searches, ...)
-   resolves its defaults and calls ``lib_spatialize_facade.get_operator``
-   (``spatialize/gs/__init__.py``), which picks a compiled entry point from
-   ``function_hash_map[dimension][partition + interpolator][estimate | loo | kfold]``.
-2. ``build_arg_list`` (``spatialize/gs/esi/_main.py``) builds its positional arguments, all
-   ``float32``.
-3. The entry point (e.g. ``estimation_esi_idw``) validates the arrays, then calls the internal engine
+   resolves its defaults and calls ``lib_spatialize_facade.get_operator``, which checks the
+   partition, the decoder and the dimension against the catalogue.
+2. ``build_arg_list`` (``spatialize/gs/esi/_main.py``) builds the positional arguments, all
+   ``float32``, which the operator maps onto ``libspatialize.run``, applying the session settings
+   (:mod:`spatialize.session`).
+3. ``run`` validates the arrays and the parameters, then calls the internal engine
    ``run_ensemble``, which proceeds in four stages.
 
    - It computes the box of samples and queries and, for Mondrian, the lifetime
@@ -75,73 +81,68 @@ From Python to C++
    - It runs estimation, leave-one-out or k-fold, returning ``(None, members)`` with one column per
      partition.
 
-Every estimation entry point goes through ``run_ensemble``, so all of them share one implementation
-of the loop, the partitions and the decoders.
-
 The generic entry point ``libspatialize.run``
 =============================================
 
-``libspatialize.run`` exposes the engine directly, for any partition and decoder.
+``libspatialize.run`` exposes the engine directly, for any partition and decoder of the catalogue.
 
 .. code-block:: python
 
    import libspatialize as lib
 
    _, members = lib.run(samples, values, queries,            # float32 arrays
-                        partition="voronoi", alpha=0.5,       # "mondrian" | "mondrian-raw" | "voronoi"
+                        partition="voronoi", alpha=0.5,       # a partition of lib.catalog()
                         forest_size=300, seed=42,
-                        decoder="kriging",                    # "idw" | "kriging" | "adaptiveidw"
-                        params={"model": 2, "nugget": 0.0, "range": 0.3, "sill": 1.0},
+                        decoder="kriging",                    # a decoder of lib.catalog()
+                        params={"model": "exponential", "nugget": 0.0, "range": 0.3, "sill": 1.0},
                         method="estimate")                    # "estimate" | "loo" | "kfold"
 
-- ``params`` holds the decoder's parameters, ``exponent`` for ``idw``, then ``model``
-  (1 spherical, 2 exponential, 3 cubic, 4 gaussian), ``nugget``, ``range`` and ``sill`` for
-  ``kriging``, and ``metric`` (``"mae"`` or ``"mse"``) with ``parallelize`` for ``adaptiveidw``. A
-  missing required parameter raises an error.
+- ``params`` holds the decoder's parameters as the catalogue lists them. A missing required
+  parameter, an unknown one or an unsupported dimension raises an error.
 - ``alpha`` keeps its meaning from the public API, the normalised granularity above for Mondrian and
   the nuclei rate for Voronoi, where negative values place the nuclei uniformly in the box instead of
   at sample locations.
 - ``method="kfold"`` uses ``k`` and ``folding_seed``.
 
-As a low-level function it applies no defaults, returning raw members. For every combination that
-also has a dedicated entry point, it returns exactly the same numbers given the same arguments. The
-public Python API uses it only for ``p_process="mondrian-raw"``, which has no dedicated entry point.
+As a low-level function it applies neither defaults nor session settings, returning raw members.
+``lib_spatialize_facade.run`` is the same call within the session settings.
 
 Supported combinations
 ======================
 
+Every partition works with every decoder, in the dimensions both support.
+
 .. list-table::
    :header-rows: 1
-   :widths: 20 20 30 30
+   :widths: 22 18 60
 
-   * - Partition
-     - Decoder
-     - Public API (``local_interpolator``, dimensions)
-     - ``libspatialize.run``
-   * - Mondrian
-     - IDW
-     - ``idw``, 2–5D
-     - any dimension
-   * - Mondrian
-     - kriging
-     - ``kriging``, 2–3D
-     - any dimension
-   * - Mondrian
-     - adaptive IDW
-     - ``adaptiveidw``, 2–3D
-     - 2–3D
-   * - Voronoi
-     - IDW
-     - ``idw`` with ``p_process="voronoi"``, 2D
-     - any dimension
-   * - Voronoi
-     - kriging, adaptive IDW
-     - —
-     - as for Mondrian
-   * - Mondrian, theory's process
-     - IDW, kriging, adaptive IDW
-     - ``p_process="mondrian-raw"``, through ``run``, in the dimensions of the default Mondrian
-     - as for Mondrian
+   * - Catalogue name
+     - Dimensions
+     - Role
+   * - ``mondrian``
+     - 1 or more
+     - Spatialize's Mondrian partition (the default)
+   * - ``mondrian-raw``
+     - 1 or more
+     - the theory's Mondrian process (opt-in)
+   * - ``voronoi``
+     - 1 or more
+     - Voronoi partition, nuclei among the samples or uniform in the box
+   * - ``idw``
+     - 1 or more
+     - inverse distance weighting
+   * - ``kriging``
+     - 1 or more
+     - ordinary kriging with a fixed variogram
+   * - ``adaptiveidw``
+     - 2 or 3
+     - IDW with exponent and anisotropy fitted in each cell
+   * - ``custom``
+     - 1 or more
+     - Python callables on each cell (categorical ESI and user decoders)
+
+The public functions offer every combination except ``custom``, which categorical ESI uses. Plain
+IDW (``spatialize.gs.idw``) is a separate engine, outside the catalogue.
 
 Changes of results
 ==================
@@ -196,8 +197,8 @@ Adding a decoder
    any randomness from the generator passed to ``fit`` only. The ``leaf_*`` methods run on several
    cells at once, so they must not modify shared state. A decoder that cannot meet this overrides
    ``thread_safe()`` to return false.
-2. Register it in ``run`` (``src/c++/libspatialize.cpp``) with its parameters.
-3. Test it with the conformance scenarios, which reach any decoder the facade or ``run`` knows
-   (:doc:`testing`).
-4. Expose it in the Python facade (``function_hash_map``, ``build_arg_list``, defaults of the public
-   functions), then document it.
+2. Register it in the catalogue (``src/c++/registry.hpp``), with its dimensions, its parameters and
+   a factory. ``run``, the facade and the scenario runner then know it.
+3. Test it with the conformance scenarios, by naming it in a scenario's estimators (:doc:`testing`).
+4. Give it a place in the public functions' argument lists (``build_arg_list`` and the defaults of
+   ``signature_overload``), then document it.

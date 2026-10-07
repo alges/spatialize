@@ -51,13 +51,12 @@ Testing a new spatialize decoder
 ================================
 
 Spatialize's own runner (:class:`~spatialize.scenarios.runners.spatialize.SpatializeRunner`)
-holds no list of decoders. It first dispatches through the same operator table and argument builder
-as :func:`~spatialize.gs.esi.esi_griddata`, so everything the public API offers is tested the way
-users run it. Combinations the compiled engine offers before the public API does (for instance
-kriging or adaptive IDW on Voronoi partitions) go through the engine's generic entry point
-``libspatialize.run`` (:doc:`../development/architecture`), marked ``[run]`` in the report. Once a
-new decoder is available in Spatialize, a scenario tests it by naming it in its ``estimators`` with
-Spatialize's ``local_interpolator`` name and every parameter explicit, as below.
+holds no list of decoders or partitions. It asks the facade between Python and C++ which
+combinations the compiled extension's catalogue offers in a dimension
+(:doc:`../development/architecture`), then computes the members through that same facade, so every
+partition and decoder is tested the way users run it. A decoder registered in the catalogue is
+available to the scenarios at once. A scenario tests it by naming it in its ``estimators`` with its
+catalogue name and every parameter explicit, as below.
 
 .. code-block:: yaml
 

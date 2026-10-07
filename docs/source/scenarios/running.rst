@@ -219,9 +219,9 @@ Reading the report
    * - Column
      - Meaning
    * - ``scenario/check``
-     - Scenario identifier and check identifier, as in the scenario's ``scenario.yaml``. Spatialize's
-       runner appends ``[run]`` when the estimator is not in the public API yet and was reached
-       through the compiled engine's generic entry point.
+     - Scenario identifier and check identifier, as in the scenario's ``scenario.yaml``. A runner
+       may append the route by which it reached the estimator, in brackets. Spatialize's runner
+       has a single route and appends nothing.
    * - ``family``
      - Test family, which fixes the statistic and the pass rule (:doc:`statistics`).
    * - ``p-value``

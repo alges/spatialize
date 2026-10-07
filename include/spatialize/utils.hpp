@@ -102,7 +102,7 @@ namespace sptlz{
         // if new position is in place and not all zero (no movement, same point) calculate and refresh best candidate
         if(!from_top && !all_zero){
           value = func->eval(new_pos);
-          if(best_candidate.size()==0 || value<best_candidate.at(3)){
+          if(best_candidate.size()==0 || value<best_candidate.at(n)){
             best_candidate = {};
             for(int i=0; i<n; i++){
               best_candidate.push_back(new_pos.at(i));

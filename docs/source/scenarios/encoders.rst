@@ -25,7 +25,8 @@ the theory from the processes actually implemented.
      - Spatialize's current Mondrian partition. It always splits the root box, choosing the cut axis uniformly
        among the dimensions. A child's time is its parent's plus
        :math:`\mathrm{Exp}(\mu(\text{child}))`, with splitting continuing while the time stays
-       below :math:`\lambda`. The box is the bounding box of samples and queries.
+       below :math:`\lambda`. The box is the bounding box of samples and queries, or the session
+       domain when one is set (:doc:`../reference/session`).
    * - the theory's Poisson–Voronoi partition
      - The Poisson–Voronoi partition of intensity :math:`\lambda_V`, as defined in the theory. Its
        generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit volume,

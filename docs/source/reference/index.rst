@@ -29,4 +29,5 @@ Python API
    viz
    data
    result
+   session
    scenarios

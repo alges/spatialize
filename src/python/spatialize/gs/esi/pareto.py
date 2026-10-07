@@ -31,7 +31,7 @@ from spatialize.gs import lib_spatialize_facade, partitioning_process, local_int
 from spatialize.gs.esi._main import build_arg_list
 from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
-from spatialize import logging
+from spatialize import logging, session
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +126,14 @@ class EmpiricalRobustnessBound:
         l_args = build_arg_list(points, values, points, params)
         _, self.esi_samples = loo_fn(*l_args)          # shape (n, T)
 
-        # Step 2 — spatial encoder cell assignments
+        # Step 2 — spatial encoder cell assignments, on the partitions of step 1: with a session
+        # domain, its corners join the samples (the trees do not depend on the samples) and their
+        # rows are dropped
+        corners = session._domain_corners(points.shape[1])
+        located = points if corners is None else np.vstack([points, corners])
         self.leaf_indexes = lib_spatialize_facade.get_leaf_for_samples_using_esi(
-            points, self.n_partitions, self.alpha, None, self.seed
-        )  # shape (n, T)
+            located, self.n_partitions, self.alpha, None, self.seed
+        )[:len(points)]  # shape (n, T)
 
         # Step 3 — pre-fit one density model per training point (fit once, reuse).
         # Each point's KDE is fitted exactly once here; the inner loop then calls

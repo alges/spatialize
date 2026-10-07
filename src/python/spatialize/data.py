@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from spatialize import EstimationResult, logging, SpatializeError
+from spatialize import EstimationResult, logging, SpatializeError, session
 from spatialize.gs.esi import ESIResult
 from spatialize.gs.ess import ESSResult
 from spatialize.logging import log_message
@@ -92,7 +92,12 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
                                 original_shape=meta_data['original_shape'],
                                 xi=xi, points=points, values=values)
 
+    # results saved before session settings existed were computed with the defaults
+    effective_config = dict(session._DEFAULTS, **meta_data.get('effective_config', {}))
+    if effective_config['domain'] is not None:
+        effective_config['domain'] = tuple(tuple(b) for b in effective_config['domain'])
     esi_result = ESIResult(estimation, esi_samples,
+                           effective_config=effective_config,
                            griddata=meta_data['griddata'],
                            original_shape=meta_data['original_shape'],
                            xi=xi, points=points, values=values)
@@ -215,6 +220,7 @@ def save_result(result_dir_path, result):
         columns = [f"es{i}" for i in range(est_result.esi_samples(raw=True).shape[1])]
         pd.DataFrame(est_result.esi_samples(raw=True)).to_csv(fn, index=False, header=columns)
         meta_data['n_esi_samples'] = len(columns)
+        meta_data['effective_config'] = est_result.effective_config
 
     if isinstance(result, ESSResult):
         # save the simulations

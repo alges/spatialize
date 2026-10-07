@@ -113,9 +113,10 @@ other queries (e.g. a small grid, then a large one extending beyond the data).
 
 - *two-sample* (Kolmogorov–Smirnov) between the two laws at the location.
 
-Spatialize draws its partitions on the box of data *and queries*, so its law depends on the other
-queries, which makes the test expected to reject. It serves as a negative control for the test
-itself, documenting a property of Spatialize's current partitions (:doc:`encoders`).
+By default Spatialize draws its partitions on the box of data *and queries*, so its law depends on
+the other queries, which makes the test expected to reject. That run serves as a negative control
+for the test itself (:doc:`encoders`). With a session domain (:doc:`../reference/session`) the box is
+fixed, so the same test is expected to pass.
 
 .. _scenario-P7:
 

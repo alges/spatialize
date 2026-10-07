@@ -1,6 +1,8 @@
 import libspatialize as lsp
 
-from spatialize import SpatializeError, logging
+import numpy as np
+
+from spatialize import SpatializeError, logging, session
 from spatialize._util import in_notebook
 from spatialize.logging import log_message
 
@@ -83,7 +85,7 @@ class lib_spatialize_facade:
 
     @classmethod
     def get_custom_esi_operator(cls):
-        return cls.custom_esi
+        return _in_session_domain(cls.custom_esi, "estimate", queries_at=-4)
 
     @classmethod
     def get_operator(cls, points, local_interpolator, operation, partitioning_process):
@@ -102,7 +104,10 @@ class lib_spatialize_facade:
                                   f"{str(d).upper()}-D data")
 
         log_message(logging.logger.debug(f"esi operation: {operation}; local operator: {operator}"))
-        return lib_spatialize_facade.function_hash_map[d][operator][operation]
+        function = lib_spatialize_facade.function_hash_map[d][operator][operation]
+        if operator == PLAINIDW:  # no partitions, so no domain
+            return function
+        return _in_session_domain(function, operation, queries_at=-2)
 
     @classmethod
     def get_kriging_model_number(cls, model):
@@ -126,3 +131,31 @@ class lib_spatialize_facade:
                 return partitioning_process + local_interpolator
 
         raise SpatializeError(f"Backend '{backend}' not implemented for local interpolator '{local_interpolator}'")
+
+
+def _in_session_domain(function, operation, queries_at):
+    """Wrap a compiled entry point so that its partitions are drawn on the session domain.
+
+    The engine draws the partitions on the box of the samples and the queries. Adding the two
+    opposite corners of the domain to the queries makes that box equal to the domain; the rows of
+    the corners are then removed from an estimation's output. Without a session domain the entry
+    point is called unchanged.
+    """
+    def call(*args):
+        samples = args[0]
+        corners = session._domain_corners(int(np.shape(samples)[1]))
+        if corners is None:
+            return function(*args)
+        args = list(args)
+        queries = np.asarray(args[queries_at], dtype=np.float32)
+        session._check_inside(corners, "data", samples)
+        session._check_inside(corners, "queries", queries)
+        args[queries_at] = np.vstack([queries, corners])
+        estimation, members = function(*args)
+        if operation == "estimate":
+            members = members[:-2]
+            if estimation is not None:
+                estimation = estimation[:-2]
+        return estimation, members
+
+    return call

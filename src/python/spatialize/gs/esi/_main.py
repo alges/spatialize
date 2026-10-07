@@ -6,7 +6,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.model_selection import ParameterGrid
 
-from spatialize import SpatializeError, logging, GridSearchResult, EstimationResult
+from spatialize import SpatializeError, logging, session, GridSearchResult, EstimationResult
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
 import spatialize.gs.esi.scorefunction as sf
@@ -404,6 +404,10 @@ class ESIResult(EstimationResult):
         ensemble widening against a spatial target variance.
     values : array_like, optional
         The original observed sample values, used together with `points`.
+    effective_config : dict, optional
+        The session settings the result was computed with (see
+        :mod:`spatialize.session`). Default: the settings in effect when the
+        result is created.
 
     Attributes
     ----------
@@ -415,9 +419,11 @@ class ESIResult(EstimationResult):
         The original observed sample locations, if provided.
     values : array_like or None
         The original observed sample values, if provided.
+    effective_config : dict
+        The session settings the result was computed with.
     """
     def __init__(self, estimation, esi_samples, griddata=False, original_shape=None, xi=None,
-                 points=None, values=None):
+                 points=None, values=None, effective_config=None):
         """Initialize the result with an aggregated estimate and its ESI samples.
 
         See the class docstring for parameter descriptions.
@@ -425,6 +431,8 @@ class ESIResult(EstimationResult):
         super().__init__(estimation, griddata, original_shape, xi=xi, points=points, values=values)
         self._esi_samples = esi_samples
         self._precision = None
+        self.effective_config = (session.effective_config() if effective_config is None
+                                 else dict(effective_config))
         # query coordinates flattened to line up 1:1 with `esi_samples` rows, regardless of
         # whether `xi` is grid-shaped -- used to calibrate ensemble widening
         if xi is None:

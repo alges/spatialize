@@ -23,6 +23,8 @@ Spatialize is tested in three layers, each answering a different question.
      - Did an internal change alter any output, even by one bit?
      - ``tests/refactor_guard``
 
+``make test`` runs the three layers in that order, stopping at the first that fails.
+
 Building for tests
 ==================
 

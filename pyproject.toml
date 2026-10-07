@@ -4,12 +4,19 @@ dynamic = ["dependencies", "version"]
 authors = [{ name = "ALGES Lab", email = "contacto@alges.cl"}]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+    "Programming Language :: C++",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
 ]
 description = "Spatialize: A Python wrapper for C++ ESI library"
 keywords = ['ESI ensemble spatial interpolation']
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+evaluation = ["pykrige", "geopandas", "seaborn"]   # baselines, maps and plots in spatialize.evaluation
+scenarios = ["PyYAML"]                             # spatialize.scenarios (conformance suite)
 
 [project.urls]
 Repository = "https://github.com/alges/spatialize"
@@ -18,11 +25,6 @@ Repository = "https://github.com/alges/spatialize"
 requires = [
     "setuptools",
     "wheel",
-    "Cython",
-    "numpy>= 1.8.0",
-    "tqdm",
-    "matplotlib",
-    "rich",
     "pybind11[global]"
 ]
 build-backend = "setuptools.build_meta"

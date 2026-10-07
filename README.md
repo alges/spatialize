@@ -29,7 +29,7 @@ pip install spatialize
 ```
 
 ### System Requirements
-- Python 3.8+
+- Python 3.10+
 - Compatible with Linux, macOS, and Windows
 
 ### Dependencies

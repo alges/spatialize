@@ -6,6 +6,5 @@ rich
 tqdm
 matplotlib
 opencv-python
-setuptools
 numba
-pybind11[global]
+joblib

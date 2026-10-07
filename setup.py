@@ -5,8 +5,9 @@ import sys
 from setuptools import setup, find_packages #, Extension
 from pybind11.setup_helpers import Pybind11Extension
 
-with open(os.path.join(os.path.dirname(__file__), 'requirements.txt')) as reqh:
-    install_requires = reqh.readlines()
+# the version lives in one place, the package's _version.py
+with open(os.path.join(os.path.dirname(__file__), 'src', 'python', 'spatialize', '_version.py')) as vh:
+    version = vh.read().split('=')[1].strip().strip('"\'')
 
 libsptlzsrc = os.path.join('src', 'c++', 'libspatialize.cpp')
 macros = [('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')]
@@ -62,7 +63,7 @@ libspatialize_extensions = [
 if __name__ == '__main__':
     setup(
         name='spatialize',
-        version='1.2.0',
+        version=version,
         author='ALGES Laboratory',
         author_email='dev@alges.cl',
         description='Python Library for Generative Geostatistics and Spatial Analysis',
@@ -75,6 +76,4 @@ if __name__ == '__main__':
         packages=find_packages(os.path.join('src', 'python'), exclude=[".DS_Store", "__pycache__"]),
         include_package_data=True,
         scripts=[],
-        install_requires=install_requires,
-        extras_require={'scenarios': ['PyYAML']},  # spatialize.scenarios (conformance suite)
     )

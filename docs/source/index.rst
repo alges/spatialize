@@ -36,7 +36,10 @@ Installation
 
    pip install spatialize
 
-Python 3.8+ is required. Spatialize is tested on Linux, macOS, and Windows.
+Python 3.10+ is required. Spatialize is tested on Linux, macOS, and Windows. Two optional extras
+add the dependencies of the baselines and plots in :mod:`spatialize.evaluation`
+(``pip install spatialize[evaluation]``) and of the conformance tests
+(``pip install spatialize[scenarios]``).
 
 .. _getting-started:
 

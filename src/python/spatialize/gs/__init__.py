@@ -222,6 +222,26 @@ class lib_spatialize_facade:
         return _in_session_domain(call, method, queries_at=2)(samples, values, queries)
 
     @classmethod
+    def cells(cls, samples, queries, partition, alpha, n_partitions, seed):
+        """The cell of each query in each partition, within the session settings.
+
+        Returns an int array of shape (queries, n_partitions); two queries share a cell of
+        partition t exactly when their labels in column t are equal, -1 marking a query outside the
+        box. The partitions are those ``run`` draws with the same arguments.
+        """
+        samples = np.asarray(samples, np.float32)
+        queries = np.asarray(queries, np.float32)
+        d = int(samples.shape[1])
+        _check("Partitioning process", _PARTITIONS, partition, d)
+        corners = _domain_corners(d)
+        if corners is not None:
+            _check_inside(corners, "data", samples)
+            _check_inside(corners, "queries", queries)
+            queries = np.vstack([queries, corners])
+        labels = lsp.cells(samples, queries, partition, float(alpha), int(n_partitions), int(seed), _num_threads())
+        return labels[:-2] if corners is not None else labels
+
+    @classmethod
     def get_kriging_model_number(cls, model):
         """The number of a variogram model (1 spherical, 2 exponential, 3 cubic, 4 gaussian)."""
         choices = next(p for p in _DECODERS["kriging"]["params"] if p["name"] == "model")["choices"]

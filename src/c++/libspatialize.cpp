@@ -322,6 +322,30 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
     return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder));
 }
 
+// cells(samples, queries, partition, alpha, forest_size, seed, num_threads): the cell of every
+// query in each of the forest_size partitions that run draws with the same arguments (the box of
+// samples ∪ queries, the same seed), as an int array of shape (queries, forest_size). Two queries
+// share a cell of partition t exactly when their labels in column t are equal.
+py::array_t<int> cells(py::array_t<float> samples, py::array_t<float> queries, std::string partition,
+                       float alpha, int forest_size, int seed, int num_threads){
+    py::buffer_info smp_info = samples.request(), qry_info = queries.request();
+    if (smp_info.ndim != 2 || qry_info.ndim != 2)
+        throw std::runtime_error("samples and queries must be 2 dimensions arrays");
+    int d = static_cast<int>(smp_info.shape[1]);
+    if (d != static_cast<int>(qry_info.shape[1]))
+        throw std::runtime_error("samples and queries must have the same number of coordinates");
+    auto &ps = registry::find(registry::partitions(), partition, "partition");
+    registry::check_dim("partition", partition, ps.min_dim, ps.max_dim, d);
+    auto smp = sptlz::ndarray_to_vector_2d(&samples);
+    auto qry = sptlz::ndarray_to_vector_2d(&queries);
+    std::vector<float> val(smp.size(), 0.0f);
+    auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
+    OmpThreads threads(num_threads);
+    std::unique_ptr<sptlz::Ensemble> ensemble(ps.make(smp, val, bbox, alpha, forest_size, seed, make_visitor(std::nullopt)));
+    auto r = ensemble->cells_of(&qry);
+    return(sptlz::vector_2d_to_ndarray(&r));
+}
+
 std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> co_post_creation, py::function co_estimation, std::optional<py::function> ind_post_creation, py::function ind_estimation, py::function ind_aggregation, std::optional<py::function> visitor){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
 
@@ -558,6 +582,13 @@ PYBIND11_MODULE(libspatialize, m) {
       py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
       py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,
       py::arg("visitor") = py::none(), py::arg("num_threads") = 0
+    );
+    m.def(
+      "cells",
+      &cells,
+      "The cell of every query in each partition run draws with the same arguments",
+      py::arg("samples"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
+      py::arg("forest_size"), py::arg("seed"), py::arg("num_threads") = 0
     );
     m.def(
       "build_info",

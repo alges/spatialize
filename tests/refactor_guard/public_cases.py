@@ -98,6 +98,11 @@ def public_cases():
                 "samples": np.asarray(r.esi_samples(raw=True)).astype(str)}
     add("cat_esi_nongriddata", "2d", cat)
 
+    from spatialize.gs.partitions import cell_labels, partition_law
+    for proc, a in (("mondrian", ALPHA), ("mondrian-raw", ALPHA), ("voronoi", 0.5)):
+        add(f"cell_labels_{proc}", "2d", lambda s, v, q, proc=proc, a=a: {
+            "labels": cell_labels(s, q[:30], p_process=proc, alpha=a, n_partitions=T, seed=SEED).astype(np.int64)})
+
     add("idw_nongriddata", "2d", lambda s, v, q: {"estimation": np.asarray(
         idw_nongriddata(s, v, q, radius=0.3, exponent=EXP, **NULL).estimation(), dtype=np.float64)})
     add("idw_hparams_search", "2d", lambda s, v, q: _frame(idw_hparams_search(

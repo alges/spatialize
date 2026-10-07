@@ -23,6 +23,12 @@ pointer to the :doc:`../theory/index` page that explains the method behind it.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Encoders
+
+   partitions
+
+.. toctree::
+   :maxdepth: 2
    :caption: Choosing a model
 
    selection

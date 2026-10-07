@@ -105,6 +105,8 @@ The generic entry point ``libspatialize.run``
 - ``method="kfold"`` uses ``k`` and ``folding_seed``.
 
 As a low-level function it applies neither defaults nor session settings, returning raw members.
+``libspatialize.cells`` draws the same partitions for the same arguments and returns the cell of
+every query in each of them, which :mod:`spatialize.gs.partitions` reads.
 ``lib_spatialize_facade.run`` is the same call within the session settings.
 
 Supported combinations

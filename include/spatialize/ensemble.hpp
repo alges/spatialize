@@ -73,6 +73,23 @@ namespace sptlz{
 				return(static_cast<int>(this->forest.size()));
 			}
 
+			// The cell of every location in every tree, [location][tree], -1 outside the box. Cell
+			// labels are local to a tree, so two locations share a cell of tree t exactly when their
+			// labels in column t are equal.
+			std::vector<std::vector<int>> cells_of(std::vector<std::vector<float>> *locations){
+				int n = static_cast<int>(forest.size());
+				std::vector<std::vector<int>> result(locations->size(), std::vector<int>(n, -1));
+				#ifdef _OPENMP
+				#pragma omp parallel for schedule(dynamic, 1)
+				#endif
+				for(int t=0; t<n; t++){
+					for(size_t j=0; j<locations->size(); j++){
+						result[j][t] = forest.at(t)->search_leaf(locations->at(j));
+					}
+				}
+				return(result);
+			}
+
 			// name used in log messages
 			void set_class_name(std::string _class_name){
 				this->class_name = _class_name;

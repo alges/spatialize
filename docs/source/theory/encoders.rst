@@ -141,5 +141,7 @@ In Spatialize
 
 The public functions take ``p_process``, ``alpha`` and, for Voronoi, ``data_cond``
 (:func:`~spatialize.gs.esi.esi_griddata`). A fixed domain is a session setting
-(:mod:`spatialize.session`). The conformance tests measure the co-occurrence of each process against
+(:mod:`spatialize.session`). The partitions can be studied on their own, through the cells of given
+locations, the co-occurrence of sets and the law of groupings, together with the closed forms above
+(:doc:`../reference/partitions`). The conformance tests measure the co-occurrence of each process against
 these laws (:doc:`../scenarios/encoders`).

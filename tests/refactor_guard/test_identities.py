@@ -26,3 +26,17 @@ def test_sharpidw_without_its_factors_is_adaptiveidw(ds, method):
     adaptive = LIB.run(*args, "adaptiveidw", {}, *tail)[1]
     sharp = LIB.run(*args, "sharpidw", {"kappa_r": 0.0, "kappa_g": 0.0}, *tail)[1]
     assert sl.bitwise_equal(np.asarray(sharp), np.asarray(adaptive))
+
+
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.6), ("mondrian-raw", 0.6), ("voronoi", 0.5), ("voronoi", -0.5)])
+def test_cells_agree_with_the_estimators_partitions(partition, alpha):
+    """libspatialize.cells labels the partitions run draws: two locations share a cell exactly when
+    the cell mean of the indicator of one is positive at the other, under the same seed."""
+    s, _, _ = DATA["2d"]
+    pts = s[:15]
+    labels = LIB.cells(pts, pts, partition, alpha, cases.T, cases.SEED)
+    same = labels[:, None, :] == labels[None, :, :]
+    for k in range(len(pts)):
+        indicator = (np.arange(len(pts)) == k).astype(np.float32)
+        members = LIB.run(pts, indicator, pts, partition, alpha, cases.T, cases.SEED, "cellmean", {})[1]
+        assert np.array_equal(same[k], members > 0)

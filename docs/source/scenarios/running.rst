@@ -23,15 +23,20 @@ output looks like this.
 .. code-block:: text
 
    runner=spatialize mode=ci seed=12345 α_suite=0.001 (Holm)
-   scenario/check                                    family          p-value     level  expect result
-   E2-mondrian-pair-cooccurrence/c1                  gof-closed     2.43e-87   3.2e-05  reject PASS  — k=8 N=3100 ...
-   S03-anisotropic-field/v1a                         equivalence    7.86e-23   7.1e-05  pass   PASS  — mean=-0.3027 se=0.472 ...
-   S03-anisotropic-field/v1b                         one-sided      6.41e-12   0.00017  pass   PASS  — mean=0.6097 se=0.0116 ...
-   ...                                               (one line per check)
-   S03-anisotropic-field/v5-idw                      one-sided             1     0.001  pass   KNOWN  — mean=0.8461 se=0.00607 ...
-   S12-edge-cases/e4-m-aidw                          almost-sure           1     exact  pass   PASS  — 0 violations ...
+   scenario/check                                  family          p-value     level  expect result
+   E2-mondrian-pair-cooccurrence/c1-idw            gof-closed     2.43e-87   1.4e-05  reject PASS  — k=8 N=3100 ...
+   S03-anisotropic-field/v1a                       equivalence    1.09e-42   2.3e-05  pass   PASS  — mean=-0.2803 se=0.351 ...
+   S03-anisotropic-field/v1b                       one-sided      1.07e-20   3.3e-05  pass   PASS  — mean=0.6084 se=0.00868 ...
+   ...                                             (one line per check)
+   S03-anisotropic-field/v5-idw                    one-sided             1   0.00033  pass   KNOWN  — mean=0.8512 se=0.00422 ...
+   S12-edge-cases/e4-m-aidw                        almost-sure           1     exact  pass   PASS  — 0 violations ...
 
-   61 passed, 0 failed, 3 known failures, 0 skipped (reproduce with --mode ci --seed 12345)
+   161 passed, 0 failed, 6 known failures, 0 skipped (reproduce with --mode ci --seed 12345)
+
+While it runs, the command prints its progress on the error stream: each scenario as it starts,
+each estimator of a map scenario with the field it has reached, and the p-value of each check as soon
+as it is computed. The decisions come at the end, once Holm's procedure has set the levels.
+``--quiet`` turns the progress off.
 
 The command exits with status **0** when every check passed (recorded known failures included, see
 :doc:`statistics`) and **1** when any check failed, so it can be used directly in scripts and
@@ -69,7 +74,8 @@ From the command line
 .. code-block:: text
 
    python -m spatialize.scenarios [--mode {ci,full}] [--seed N] [--tier {T1,T2,T3}]
-                                  [--id SCENARIO ...] [--alpha A] [--list] [--version]
+                                  [--id SCENARIO ...] [--alpha A] [--save-maps DIR] [--quiet]
+                                  [--list] [--version]
 
 .. list-table::
    :header-rows: 1
@@ -79,7 +85,7 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in about six minutes on a multi-core machine. Use it on every change.
+       catalogue runs in about twenty minutes on a multi-core machine. Use it on every change.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at
@@ -98,6 +104,8 @@ From the command line
    * - ``--save-maps DIR``
      - Save the maps computed by the run (arrays and figures) under ``DIR`` for human review; see
        :ref:`scenarios-maps`. Does not change any decision.
+   * - ``--quiet``
+     - Print only the report, without the progress of the run.
    * - ``--list``
      - List the scenarios and their checks, and exit.
 

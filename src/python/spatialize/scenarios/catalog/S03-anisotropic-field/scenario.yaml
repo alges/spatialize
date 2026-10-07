@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 9
+version: 10
 tier: T3
 evaluator: map_visual
 book:
@@ -43,6 +43,16 @@ estimators:
      params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
   - {id: vor-uniform-aidw, encoder: voronoi, rate: 36.0, decoder: adaptiveidw,
      params: {metric: mae}, empty_cells: nan}
+  # The decoders of phase 2 on the Mondrian partition (v10).
+  - {id: sharp, encoder: mondrian, rate: 5.0, decoder: sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: wdraw-aidw, encoder: mondrian, rate: 5.0, decoder: wdraw_adaptiveidw, params: {metric: mae}, empty_cells: nan}
+  - {id: wdraw-sharp, encoder: mondrian, rate: 5.0, decoder: wdraw_sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: wdraw-idw, encoder: mondrian, rate: 5.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: wdraw-krig, encoder: mondrian, rate: 5.0, decoder: wdraw_kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0, negative_weights: clip}, empty_cells: nan}
+  - {id: draw, encoder: mondrian, rate: 5.0, decoder: draw, params: {}, empty_cells: nan}
 checks:
   # The same two pre-registered criteria for every estimator:
   #   v1a — direction visible: |θ(median map) − 30°| < 10° (TOST over the K fields)
@@ -120,6 +130,62 @@ checks:
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
   - {id: v5-vor-uniform-aidw, title: "V5 contrast against the best linear predictor (vor-uniform-aidw)", estimator: vor-uniform-aidw,
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  # Phase 2 decoders (v10): V1 and V5 with the pre-registered thresholds, V4 for the sharpened map.
+  - {id: v1a-sharp, title: "V1 direction visible (sharpened adaptive idw)", estimator: sharp, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-sharp, title: "V1 strength visible (sharpened adaptive idw)", estimator: sharp, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v5-sharp, title: "V5 contrast against the best linear predictor (sharpened adaptive idw)", estimator: sharp,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v1a-wdraw-aidw, title: "V1 direction visible (weighted draw, adaptive)", estimator: wdraw-aidw, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-wdraw-aidw, title: "V1 strength visible (weighted draw, adaptive)", estimator: wdraw-aidw, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v5-wdraw-aidw, title: "V5 contrast against the best linear predictor (weighted draw, adaptive)", estimator: wdraw-aidw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v1a-wdraw-sharp, title: "V1 direction visible (weighted draw, sharpened)", estimator: wdraw-sharp, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-wdraw-sharp, title: "V1 strength visible (weighted draw, sharpened)", estimator: wdraw-sharp, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v5-wdraw-sharp, title: "V5 contrast against the best linear predictor (weighted draw, sharpened)", estimator: wdraw-sharp,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v1a-wdraw-idw, title: "V1 direction visible (weighted draw, idw)", estimator: wdraw-idw, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-wdraw-idw, title: "V1 strength visible (weighted draw, idw)", estimator: wdraw-idw, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v5-wdraw-idw, title: "V5 contrast against the best linear predictor (weighted draw, idw)", estimator: wdraw-idw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v1a-wdraw-krig, title: "V1 direction visible (weighted draw, kriging)", estimator: wdraw-krig, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-wdraw-krig, title: "V1 strength visible (weighted draw, kriging)", estimator: wdraw-krig, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5}
+  - {id: v5-wdraw-krig, title: "V5 contrast against the best linear predictor (weighted draw, kriging)", estimator: wdraw-krig,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9}
+  - {id: v1a-draw, title: "V1 direction visible (uniform draw)", estimator: draw, family: equivalence,
+     functional: orientation, map: point, margin_deg: 10.0}
+  - {id: v1b-draw, title: "V1 strength visible (uniform draw)", estimator: draw, family: one-sided,
+     functional: coherence_ratio, map: point, min_ratio: 0.5,
+     known_failure: "the uniform draw is built for coverage, not for a map: its median map is close to a cell median (coherence ratio about 0.41)"}
+  - {id: v5-draw, title: "V5 contrast against the best linear predictor (uniform draw)", estimator: draw,
+     family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
+     known_failure: "the uniform draw is built for coverage, not for a map: its median map is washed out (contrast ratio about 0.55)"}
+  - {id: v4a-sharp, title: "V4 blocks averaged away (sharpened)", estimator: sharp, family: one-sided,
+     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5,
+     known_failure: "sharpening keeps more of each member's blocks (axis-locking about 0.46, against 0.39 for aidw), too close to the bound for 80 fields to separate"}
+  - {id: v4b-sharp, title: "V4 power check: single members are axis-locked (sharpened)", estimator: sharp,
+     family: one-sided, functional: axis_lock_members, map: member, rotation_deg: 45.0, members_checked: 5,
+     min_value: 0.0}
+  # Decoder ordering (the theory's comparison of four decoders): coverage of a 90 % interval read from
+  # the ensemble alone grows from the averaged to the sharpened decoder, to the weighted draw and to the
+  # uniform draw; the sharpened map is more accurate than the adaptive one. Paired over the K fields.
+  - {id: order-cov-sharp, title: "coverage: sharpened above adaptive", estimator: sharp, against: aidw,
+     family: paired-relation, functional: paired_relation, metric: coverage, better: greater}
+  - {id: order-cov-wdraw, title: "coverage: weighted draw above sharpened", estimator: wdraw-aidw, against: sharp,
+     family: paired-relation, functional: paired_relation, metric: coverage, better: greater}
+  - {id: order-cov-draw, title: "coverage: uniform draw above weighted draw", estimator: draw, against: wdraw-aidw,
+     family: paired-relation, functional: paired_relation, metric: coverage, better: greater}
+  - {id: order-rmse-sharp, title: "error: sharpened map below adaptive", estimator: sharp, against: aidw,
+     family: paired-relation, functional: paired_relation, metric: rmse, better: less}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
   v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
@@ -165,3 +231,10 @@ provenance:
     one run in four. At K = 80 the standard error is 0.021 and the mean must stay below 0.423, which
     it crosses about once in a thousand runs. K = 60 would still fail about one run in 50.
   v9: "2026-10-07: parameter parallelize removed from the adaptive IDW estimators (Spatialize runs in parallel through its session settings); results unchanged"
+  v10: >
+    2026-10-07: the decoders of phase 2 on the Mondrian partition (sharpened adaptive IDW, the weighted
+    draws with adaptive, sharpened, IDW and kriging weights, the uniform draw), with V1 and V5 at the
+    pre-registered thresholds and V4 for the sharpened map, and four paired checks of the theory's
+    decoder ordering (coverage and map error); all fixed before their first run. The first run
+    (seed 12345) failed three of them, recorded as known failures with the thresholds unchanged:
+    the uniform draw's map on V1b and V5, and V4a on the sharpened map.

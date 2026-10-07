@@ -325,7 +325,10 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
     - ``axis_lock_members`` — the same for single members, mean over ``members_checked`` members per
       field, above ``min_value`` (V4 power check);
     - ``contrast_ratio_reference`` — standard deviation of the map over that of simple kriging with
-      the true covariance, above ``min_ratio`` (V5).
+      the true covariance, above ``min_ratio`` (V5);
+    - ``paired_relation`` — the estimator beats ``against`` field by field on ``metric``, either
+      ``coverage`` (share of the grid inside the members' 90 % interval) or ``rmse`` (error of the
+      median map), in the direction ``better`` (paired t-test).
 
     Reads ``data.grid``, ``data.fields``, ``estimators_T``, ``truth`` and, per check, the keys
     above plus ``estimator``, ``expect`` and ``known_failure``.
@@ -375,12 +378,18 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
             smp, qry, e = f["samples"], queries, est
             if rotate_deg:
                 smp, qry, e = _rotated(est, f["samples"], queries, rotate_deg)
-            mem = runner.members(e, smp, f["values"], qry, n_members=n_members, seed=seed + k)
+            mem = np.asarray(runner.members(e, smp, f["values"], qry, n_members=n_members, seed=seed + k), float)
             point = np.nanmedian(mem, axis=1).reshape(m_grid, m_grid)
             truth = f["truth"].reshape(m_grid, m_grid)
+            # coverage of the 90 % interval read from the members, and error of the median map
+            lo90, hi90 = np.nanquantile(mem, 0.05, axis=1), np.nanquantile(mem, 0.95, axis=1)
+            tv = np.asarray(f["truth"], float).ravel()
+            ok = np.isfinite(lo90)
+            coverage = float(np.mean((tv[ok] >= lo90[ok]) & (tv[ok] <= hi90[ok])))
+            rmse = float(np.sqrt(np.nanmean((point.ravel() - tv) ** 2)))
             (th, c), (th_t, c_t) = maps.orientation_coherence(point), maps.orientation_coherence(truth)
             rows.append(dict(point=point, truth=truth, theta=th, coherence=c, theta_truth=th_t,
-                             coherence_truth=c_t, samples=np.asarray(f["samples"]),
+                             coherence_truth=c_t, samples=np.asarray(f["samples"]), coverage=coverage, rmse=rmse,
                              members=[np.asarray(mem)[:, j].reshape(m_grid, m_grid) for j in range(keep_members)]))
         _say(f"    {what}: done in {time.monotonic() - t0:.0f} s")
         return rows
@@ -432,6 +441,13 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
                 r = families.mean_greater(lock, check["min_value"])
             else:
                 r = families.tost_mean(lock, -check["margin"], check["margin"])
+        elif fn == "paired_relation":
+            other = sc.estimator(next(e for e in s["estimators"] if e["id"] == check["against"]))
+            if other.id not in est_cache:
+                est_cache[other.id] = point_maps(other, T, keep_members=n_keep)
+            metric = check["metric"]
+            r = families.paired_relation([row[metric] for row in rows], [row[metric] for row in est_cache[other.id]],
+                                         better=check["better"])
         elif fn == "contrast_ratio_reference":
             ratio = [float(np.nanstd(r["point"]) / np.std(reference(k))) for k, r in enumerate(rows)]
             r = families.mean_greater(ratio, check["min_ratio"])

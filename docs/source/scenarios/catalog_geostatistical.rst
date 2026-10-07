@@ -54,7 +54,8 @@ S02 — Where more partitions stop helping
 S03 — Anisotropic field
 =======================
 
-:Status: **implemented** (visual criteria V1, V4 and V5, with further checks planned below)
+:Status: **implemented** (visual criteria V1, V4 and V5 and the ordering of the decoders, with further
+   checks planned below)
 :Evaluator: ``map_visual``
 
 **Source.** The theory's worked example of an anisotropic stationary Gaussian field.
@@ -68,8 +69,8 @@ a_2^{-2}) R_\vartheta`, ranges :math:`a_1 = 0.45`, :math:`a_2 = 0.09` and orient
 jointly by Cholesky factorisation so that samples and truth belong to one realisation. Eighty
 replicate fields are pinned (generator seed 20261005), stored as ``.npy`` with SHA-256 checksums.
 
-**Estimators.** Seven ensembles take part, none of them told about the anisotropy, since the cuts are
-axis-aligned or Voronoi cells while the decoders are isotropic. They use :math:`T = 100` members in
+**Estimators.** Thirteen ensembles take part, none of them told about the anisotropy, since the cuts
+are axis-aligned or Voronoi cells while the decoders are isotropic. They use :math:`T = 100` members in
 ``ci`` and 300 in ``full``, the point map being the median of the members at each location.
 
 .. list-table::
@@ -102,10 +103,32 @@ axis-aligned or Voronoi cells while the decoders are isotropic. They use :math:`
    * - ``vor-uniform-aidw``
      - Voronoi, uniform nuclei, :math:`\lambda_V = 36`
      - adaptive IDW, as ``aidw`` (through the generic engine entry point)
+   * - ``sharp``
+     - Mondrian, :math:`\lambda = 5`
+     - sharpened adaptive IDW, metric MAE, :math:`\kappa_r = 1.5`, :math:`\kappa_g = 0.2`,
+       :math:`\varrho_{\max} = 3`
+   * - ``wdraw-idw``
+     - Mondrian, :math:`\lambda = 5`
+     - weighted draw with the IDW weights, exponent 2
+   * - ``wdraw-krig``
+     - Mondrian, :math:`\lambda = 5`
+     - weighted draw with the kriging weights of ``krig``, negative weights clipped
+   * - ``wdraw-aidw``
+     - Mondrian, :math:`\lambda = 5`
+     - weighted draw with the adaptive IDW weights, metric MAE
+   * - ``wdraw-sharp``
+     - Mondrian, :math:`\lambda = 5`
+     - weighted draw with the sharpened weights, as ``sharp``
+   * - ``draw``
+     - Mondrian, :math:`\lambda = 5`
+     - uniform draw
 
 The Voronoi intensity gives the same expected number of cells as the Mondrian rate, since
 :math:`\lambda_V |H| = 36 = (1 + \lambda)^2`, the expected number of cells of the theory's Mondrian
-process of rate 5 on the unit square.
+process of rate 5 on the unit square. The last six estimators hold the decoders of
+:doc:`../theory/decoders` that average with sharper weights or draw one datum of the cell. They
+share the partitions of the first three for the same seed, so their comparison with those isolates
+the decoder.
 
 **Claim (V1).** The elongation at 30° must nevertheless be clearly visible in each estimator's point
 map. Two pre-registered map functionals (:doc:`visual`), the same for every estimator,
@@ -163,8 +186,47 @@ the 80 fields.
      - :math:`2.3 \cdot 10^{-50}`
      - :math:`0.91 \pm 0.007`
      - :math:`2.4 \cdot 10^{-65}`
+   * - ``sharp``
+     - :math:`-1.7° \pm 0.2°`
+     - :math:`1.5 \cdot 10^{-49}`
+     - :math:`0.98 \pm 0.006`
+     - :math:`1.9 \cdot 10^{-79}`
+   * - ``wdraw-idw``
+     - :math:`-1.0° \pm 0.4°`
+     - :math:`4.3 \cdot 10^{-39}`
+     - :math:`0.57 \pm 0.009`
+     - :math:`1.7 \cdot 10^{-11}`
+   * - ``wdraw-krig``
+     - :math:`-1.2° \pm 0.3°`
+     - :math:`4.4 \cdot 10^{-41}`
+     - :math:`0.61 \pm 0.009`
+     - :math:`4.7 \cdot 10^{-20}`
+   * - ``wdraw-aidw``
+     - :math:`-1.8° \pm 0.2°`
+     - :math:`7.2 \cdot 10^{-49}`
+     - :math:`0.87 \pm 0.007`
+     - :math:`3.7 \cdot 10^{-65}`
+   * - ``wdraw-sharp``
+     - :math:`-1.8° \pm 0.2°`
+     - :math:`2.4 \cdot 10^{-49}`
+     - :math:`0.89 \pm 0.006`
+     - :math:`8.1 \cdot 10^{-70}`
+   * - ``draw``
+     - :math:`-5.0° \pm 1.2°`
+     - :math:`3.7 \cdot 10^{-5}`
+     - :math:`0.41 \pm 0.016`
+     - 1 (known failure)
 
-All fourteen checks pass, stably across seeds. With kriging, the partition barely matters for the
+Every estimator finds the direction. All the strength checks pass except the uniform draw's, stably
+across seeds for the first seven. The sharpened decoder gives the most coherent map of the scenario.
+A weighted draw loses some coherence against the averaging decoder whose weights it borrows, 0.87
+against 0.97 with the adaptive weights, since each member holds observed values only. The uniform
+draw keeps the direction, although less precisely, while its strength falls below the bound. Its
+median at a location is close to the median of the cell's data, so the map follows the cells more
+than the field. The decoder is built for intervals, not for a map (:doc:`../theory/decoders`), so
+the failure is recorded as a known one. The threshold stays unchanged.
+
+With kriging, the partition barely matters for the
 median map, since with about eleven data per cell and a fixed variogram kriging inside a cell comes
 close to global kriging. The Mondrian and Voronoi median maps correlate at 0.999 on a field, although
 their members differ.
@@ -219,10 +281,41 @@ test over the 80 fields, with the threshold fixed before the criterion was first
      - :math:`0.895 \pm 0.004`
      - 0.92
      - known failure
+   * - ``sharp``
+     - :math:`0.98 \pm 0.002`
+     - :math:`1.3 \cdot 10^{-59}`
+     - pass
+   * - ``wdraw-idw``
+     - :math:`0.95 \pm 0.003`
+     - :math:`3.0 \cdot 10^{-34}`
+     - pass
+   * - ``wdraw-krig``
+     - :math:`1.00 \pm 0.002`
+     - :math:`2.9 \cdot 10^{-58}`
+     - pass
+   * - ``wdraw-aidw``
+     - :math:`1.01 \pm 0.002`
+     - :math:`1.2 \cdot 10^{-68}`
+     - pass
+   * - ``wdraw-sharp``
+     - :math:`1.03 \pm 0.002`
+     - :math:`6.1 \cdot 10^{-72}`
+     - pass
+   * - ``draw``
+     - :math:`0.55 \pm 0.010`
+     - 1
+     - known failure
 
 IDW with exponent 2 is 10–15 % more washed out than the best linear predictor on this field, on
 Mondrian and on Voronoi partitions alike. The shortfall is recorded as a known failure
 (:doc:`statistics`), leaving the threshold unchanged.
+
+A weighted draw restores the contrast its averaging decoder loses. With the IDW weights the ratio
+rises from 0.85 to 0.95, enough to pass, and with the adaptive or sharpened weights the median map is
+as contrasted as the reference. A draw returns observed values, so the median of the members keeps
+the spread of the data where an average shrinks it. The uniform draw ignores the position of the
+location inside its cell, which washes its map out to half the reference's contrast, a second face of
+the failure seen under V1.
 
 **Mondrian blocks averaged away (V4).** Each ensemble member of a Mondrian estimator consists of
 axis-aligned blocks, which the median of many members should not keep. V4 measures *axis-locking*,
@@ -261,6 +354,11 @@ partition (Voronoi). Three checks are pre-registered with :math:`\delta = 0.5` (
      - :math:`9.6 \cdot 10^{-6}`
      - :math:`1.98 \pm 0.059`
      - :math:`4.3 \cdot 10^{-49}`
+   * - ``sharp``
+     - :math:`0.46 \pm 0.027`
+     - 0.05 (known failure)
+     - :math:`2.06 \pm 0.058`
+     - :math:`1.3 \cdot 10^{-50}`
    * - ``vor-uniform-idw`` (v4c)
      - :math:`0.01 \pm 0.011`
      - :math:`1.2 \cdot 10^{-56}`
@@ -281,6 +379,12 @@ Single members are strongly axis-locked (+2.0 to +2.9) while the Voronoi control
 test sees what it is meant to see. At :math:`T = 100` the Mondrian medians keep a residual of about
 0.3, roughly a third more energy on the axes than in the rotated run. The residual stays well below a
 small ensemble's and within the pre-registered :math:`\delta`, without vanishing.
+
+The sharpened decoder keeps more of the blocks, 0.46 against 0.39 for adaptive IDW. Sharpening raises
+the exponent where the cell's data change fast, so each member follows its own cell's data more
+closely, which makes the jumps at the cell boundaries larger. The mean stays below :math:`\delta`, but too
+close to it for 80 fields to tell the two apart, the check needing a mean below about 0.40 to pass.
+It is recorded as a known failure, with :math:`\delta` unchanged.
 
 **Why 80 fields.** With 40 fields, check v4a on adaptive IDW failed in 4 of 14 runs with different
 seeds, although its mean axis-locking never came near the bound. Over those runs the mean lay
@@ -322,6 +426,89 @@ so a failure becomes a rare event (about 1 in 1 000) that deserves a look. The t
 :math:`\delta` stay as pre-registered. Only the number of fields grows, the first 40 being the same
 as before. The run time of S03 grows in proportion.
 
+**The order of the decoders.** The decoders differ less in the map than in what the ensemble says
+about its own error. At each grid point the members give an interval from their 5 % and 95 %
+quantiles, of nominal coverage 90 %. Its actual coverage is the share of the grid where the truth lies
+inside, computed on each field. The error of the median map is its RMSE against the truth. The theory
+orders four decoders that share one partition, from the averaged adaptive decoder through its
+sharpened form and the weighted draw to the uniform draw, each covering more than the one before. It
+also expects the sharpened map to be the more accurate of the two averaging ones. Four paired checks,
+field by field over the 80 fields, test these relations
+(:func:`~spatialize.scenarios.stats.families.paired_relation`).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 26 20 24
+
+   * - check
+     - mean paired difference
+     - p
+     - result
+   * - coverage, ``sharp`` above ``aidw``
+     - :math:`+0.069 \pm 0.001`
+     - :math:`2.1 \cdot 10^{-71}`
+     - pass
+   * - coverage, ``wdraw-aidw`` above ``sharp``
+     - :math:`+0.095 \pm 0.002`
+     - :math:`2.7 \cdot 10^{-59}`
+     - pass
+   * - coverage, ``draw`` above ``wdraw-aidw``
+     - :math:`+0.138 \pm 0.002`
+     - :math:`2.1 \cdot 10^{-72}`
+     - pass
+   * - RMSE, ``sharp`` below ``aidw``
+     - :math:`-0.0043 \pm 0.0005`
+     - :math:`1.9 \cdot 10^{-14}`
+     - pass
+
+The coverage and the error of every Mondrian estimator, read with the same seeds, place the checks
+in context.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - estimator
+     - coverage of the 90 % interval
+     - RMSE of the median map
+   * - ``idw``
+     - :math:`0.46 \pm 0.003`
+     - :math:`0.500 \pm 0.003`
+   * - ``krig``
+     - :math:`0.47 \pm 0.003`
+     - :math:`0.462 \pm 0.002`
+   * - ``aidw``
+     - :math:`0.61 \pm 0.003`
+     - :math:`0.436 \pm 0.002`
+   * - ``sharp``
+     - :math:`0.68 \pm 0.003`
+     - :math:`0.432 \pm 0.002`
+   * - ``wdraw-krig``
+     - :math:`0.74 \pm 0.003`
+     - :math:`0.515 \pm 0.003`
+   * - ``wdraw-aidw``
+     - :math:`0.78 \pm 0.002`
+     - :math:`0.470 \pm 0.002`
+   * - ``wdraw-idw``
+     - :math:`0.80 \pm 0.002`
+     - :math:`0.520 \pm 0.003`
+   * - ``wdraw-sharp``
+     - :math:`0.84 \pm 0.002`
+     - :math:`0.468 \pm 0.002`
+   * - ``draw``
+     - :math:`0.91 \pm 0.002`
+     - :math:`0.697 \pm 0.007`
+
+An averaging decoder sees only the variation between cells (:doc:`../theory/esi`), so its intervals
+miss the truth more than half the time with IDW or kriging. Adapting the weights to the cell widens
+them a little, sharpening a little more. A weighted draw restores most of the variation within the
+cell, at the cost of a slightly worse median map, the uniform draw reaching the nominal 90 % with a
+map far less accurate. The ordering holds by wide margins, so the theory's comparison carries over to
+this field. Among the weighted draws, ``wdraw-idw`` covers slightly more than ``wdraw-aidw``, which
+suggests that the adaptive fit concentrates the weights more than exponent 2 does. The sharpened weights cover most of all while keeping the median map of the adaptive
+draw. No decoder gives both the best map and nominal intervals, which is why the choice follows the
+purpose (:doc:`../theory/decoders`).
+
 .. note::
 
    **History.** The first version of S03 had only ``idw`` and :math:`K = 6` fields, with v1b passing
@@ -336,7 +523,9 @@ as before. The run time of S03 grows in proportion.
    replaced it. Its threshold was chosen knowing diagnostic values on 8 fields, and :math:`K` rose to
    40 when two of its checks lacked power at 20. Version 6 records the correction of the IDW kernel
    (note below), with the thresholds unchanged. Version 8 raised :math:`K` to 80 for the power of
-   v4a on adaptive IDW, as argued under V4.
+   v4a on adaptive IDW, as argued under V4. Version 10 added the sharpened and drawing decoders with
+   V1 and V5 at the same thresholds, V4 for the sharpened map and the four ordering checks, all fixed
+   before their first run. That run failed three of them, recorded as known failures.
 
 .. note::
 
@@ -354,8 +543,6 @@ they need become available.
   a lower RMSE than every ensemble estimator (needs an ordinary-kriging baseline).
 - *paired-relation*. The coverage of widened prediction intervals is at least that of raw ensemble
   intervals.
-- *paired-relation*. Weighted-draw estimators cover better than averaging ones (needs the draw
-  decoders).
 - visual **V2**: the coherence of the ensemble map exceeds that of ordinary kriging with a fitted
   isotropic variogram, which blurs the short axis (needs the kriging baseline).
 - visual **V3**: the anisotropy is present in single members and simulated fields, not only in the

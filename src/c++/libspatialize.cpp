@@ -252,7 +252,7 @@ class OmpThreads {
 enum class EsiMethod { ESTIMATE, LOO, KFOLD };
 
 // The engine. Draws the forest ("mondrian": lifetime from alpha and the box of samples ∪ queries;
-// "voronoi": alpha as nuclei rate, sign = data conditioning), fits the decoder (takes ownership)
+// "mondrian-raw": the same lifetime with the theory's Mondrian process; "voronoi": alpha as nuclei rate, sign = data conditioning), fits the decoder (takes ownership)
 // and runs the method. `class_name` names the computation in log messages.
 static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<float>> &smp,
                                                     std::vector<float> &val,
@@ -266,14 +266,14 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
     std::unique_ptr<sptlz::Decoder> owned(decoder);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     std::unique_ptr<sptlz::Ensemble> ensemble;
-    if (partition == "mondrian"){
+    if (partition == "mondrian" || partition == "mondrian-raw"){
         float lambda = sptlz::bbox_sum_interval(bbox);
         lambda = 1/(lambda-alpha*lambda);
-        ensemble.reset(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed));
+        ensemble.reset(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, partition == "mondrian-raw"));
     }else if (partition == "voronoi"){
         ensemble.reset(new sptlz::VORONOI(smp, val, alpha, forest_size, bbox, visitor, seed));
     }else{
-        throw std::runtime_error("unknown partition '" + partition + "' (expected 'mondrian' or 'voronoi')");
+        throw std::runtime_error("unknown partition '" + partition + "' (expected 'mondrian', 'mondrian-raw' or 'voronoi')");
     }
     ensemble->set_class_name(class_name);
     ensemble->set_decoder(owned.release());
@@ -850,7 +850,7 @@ PYBIND11_MODULE(libspatialize, m) {
     m.def(
       "run",
       &run,
-      "Ensemble estimation with any partition ('mondrian', 'voronoi') and decoder ('idw', 'kriging', 'adaptiveidw')",
+      "Ensemble estimation with any partition ('mondrian', 'mondrian-raw', 'voronoi') and decoder ('idw', 'kriging', 'adaptiveidw')",
       py::arg("samples"), py::arg("values"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
       py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
       py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,

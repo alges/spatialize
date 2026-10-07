@@ -20,10 +20,12 @@ the theory from the processes actually implemented.
        exceeds the remaining budget the box becomes a cell. Otherwise it cuts an axis chosen with
        probability proportional to its side length, at a uniform position, recursing with budget
        :math:`\lambda - E`. Its co-occurrence is
-       :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`.
+       :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`. Spatialize implements it as the
+       opt-in partition ``p_process="mondrian-raw"``, on the same box as its default Mondrian
+       partition (profile ``mondrian-theory`` in the scenario files).
    * - Spatialize's Mondrian partition
-     - Spatialize's current Mondrian partition. It always splits the root box, choosing the cut axis uniformly
-       among the dimensions. A child's time is its parent's plus
+     - Spatialize's default Mondrian partition (``p_process="mondrian"``). It always splits the root
+       box, choosing the cut axis uniformly among the dimensions. A child's time is its parent's plus
        :math:`\mathrm{Exp}(\mu(\text{child}))`, with splitting continuing while the time stays
        below :math:`\lambda`. The box is the bounding box of samples and queries, or the session
        domain when one is set (:doc:`../reference/session`).
@@ -127,6 +129,7 @@ box shares the centre's cell, estimated from 20 000 trees with :math:`\alpha = 0
 On a square the co-occurrence lies 4–21 % below the closed form, depending on the direction beyond
 the :math:`\ell_1` distance. On an elongated box the uniform choice of axis makes the partition
 strongly anisotropic. Closed-form scenarios therefore target the theory's Mondrian process, serving
-as negative controls (:doc:`statistics`) when run on Spatialize's Mondrian partition. Changing Spatialize's default
-process would change every existing result, so the default stays, with an opt-in profile closer to
-the theory considered for the future.
+as negative controls (:doc:`statistics`) when run on Spatialize's default Mondrian partition.
+Changing the default would change every existing result, so it stays. The theory's process is
+available instead as the opt-in partition ``"mondrian-raw"``, whose co-occurrence matches the closed
+form in the same measurement on both boxes, in every direction (:math:`|z| < 2` over 20 000 trees).

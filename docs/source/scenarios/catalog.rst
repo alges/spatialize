@@ -32,8 +32,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
 
 - **implemented** — in the catalogue and run on every change;
 - **ready** — needs only new evaluators or generators;
-- **negative control** — its target is the theory's Mondrian process, which Spatialize does not
-  implement (:doc:`encoders`), so on Spatialize it can only be a test expected to reject;
+- **negative control** — its target needs a process Spatialize does not implement, so on Spatialize
+  it can only be a test expected to reject;
 - **blocked / partly ready** — needs a feature not yet in Spatialize or an external baseline.
 
 .. list-table::
@@ -50,24 +50,24 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - 
    * - :ref:`E1 <scenario-E1>`
      - exact law of the partition of four points on a line
-     - negative control
-     - targets on the theory's Mondrian; derive the exact law independently
+     - ready
+     - an evaluator (ordinary check on ``"mondrian-raw"``, negative control on the default Mondrian)
    * - :ref:`E2 <scenario-E2>`
      - pair co-occurrence of the Mondrian process
      - **implemented**
      - —
    * - :ref:`E3 <scenario-E3>`
      - co-occurrence of three points
-     - negative control
-     - as E2; adds little until a profile closer to the theory exists
+     - ready
+     - an evaluator (profiles as for E2)
    * - :ref:`E4 <scenario-E4>`
      - Poisson–Voronoi co-occurrence (isotropy in 2D, decay in 1D)
      - needs a reading method
      - a single datum gives a single Voronoi nucleus, so E2's reading does not apply
    * - :ref:`E5 <scenario-E5>`
      - fourth joint cumulant of a block-mark field on a line
-     - negative control
-     - targets on the theory's Mondrian; derive the value independently
+     - ready
+     - a block-mark generator on ``"mondrian-raw"``, with the value derived independently
    * - :ref:`E6 <scenario-E6>`
      - conditional covariance under one uniform cut
      - negative control

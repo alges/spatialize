@@ -33,8 +33,8 @@ class ESIGridSearchResult(GridSearchResult):
         ``n_partitions``, ``alpha``, ``exponent``) and a
         ``local_interpolator`` column.
     p_process : str
-        Partitioning process used during the search, ``"mondrian"`` or
-        ``"voronoi"``.
+        Partitioning process used during the search, ``"mondrian"``,
+        ``"mondrian-raw"`` or ``"voronoi"``.
 
     Attributes
     ----------
@@ -127,8 +127,8 @@ class ESIParetoResult:
             (float). Typically produced by
             :func:`esi_pareto_hparams_search`.
         p_process : str
-            Partitioning process used during optimisation, ``"mondrian"``
-            or ``"voronoi"``.
+            Partitioning process used during optimisation, ``"mondrian"``,
+            ``"mondrian-raw"`` or ``"voronoi"``.
         local_interpolator : str
             Local interpolator used during optimisation, ``"idw"``,
             ``"kriging"``, or ``"adaptiveidw"``.
@@ -783,7 +783,8 @@ def esi_hparams_search(points, values, xi, **kwargs):
     griddata : bool, optional
         Whether `xi` is grid-shaped (see `xi` above). Default: ``False``.
     p_process : str, optional
-        Partitioning process: ``"mondrian"`` (default) or ``"voronoi"``.
+        Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
+        or ``"voronoi"`` (see :func:`esi_griddata`).
     data_cond : list of bool, optional
         Whether to condition the partitioning process on the data samples;
         only used when `p_process` is ``"voronoi"``. Default: ``[True,
@@ -999,9 +1000,14 @@ def esi_griddata(points, values, xi, **kwargs):
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
          Number of spatial partitions in the ensemble. Default: ``500``.
-    p_process : {"mondrian", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
          Spatial partitioning process used to build the ensemble. Default:
-         ``"mondrian"``.
+         ``"mondrian"``. ``"mondrian-raw"`` is the Mondrian process of the
+         theory. Unlike ``"mondrian"``, it may leave the whole box as a single
+         cell, choosing the axis of each cut with probability proportional to
+         its side length. Its partitions follow the closed-form laws of the
+         theory for the same ``alpha``, e.g. two locations share a cell with
+         probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
     data_cond : bool, optional
          Whether to condition the partitioning process on the sample
          points. Valid only when ``p_process="voronoi"``. Default: ``True``.
@@ -1136,9 +1142,14 @@ def esi_nongriddata(points, values, xi, **kwargs):
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
          Number of spatial partitions in the ensemble. Default: ``500``.
-    p_process : {"mondrian", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
          Spatial partitioning process used to build the ensemble. Default:
-         ``"mondrian"``.
+         ``"mondrian"``. ``"mondrian-raw"`` is the Mondrian process of the
+         theory. Unlike ``"mondrian"``, it may leave the whole box as a single
+         cell, choosing the axis of each cut with probability proportional to
+         its side length. Its partitions follow the closed-form laws of the
+         theory for the same ``alpha``, e.g. two locations share a cell with
+         probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
     data_cond : bool, optional
          Whether to condition the partitioning process on the sample
          points. Valid only when ``p_process="voronoi"``. Default: ``True``.
@@ -1264,7 +1275,8 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     local_interpolator : str, optional
         ``"idw"`` (default), ``"kriging"``, or ``"adaptiveidw"``.
     p_process : str, optional
-        Partitioning process.  Default: ``"mondrian"``.
+        Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
+        or ``"voronoi"``.
     scoring : str or callable, optional
         Decoder scoring function: ``"nll"`` (default), ``"crps"``,
         ``"rmse"``, ``"mae"``, or any callable

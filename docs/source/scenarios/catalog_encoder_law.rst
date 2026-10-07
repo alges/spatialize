@@ -6,10 +6,11 @@ T1 — Encoder law
 
 Scenarios of tier T1 test the law of the partition process itself, through the probability that
 locations share a cell, the law of the partition of a few points and the joint moments of block-mark
-fields built on it. Their targets are closed forms of the theory's processes. Spatialize's Mondrian
-process differs from the theory's (:doc:`encoders`), so on Spatialize the Mondrian scenarios can only
-be *negative controls*, tests expected to reject, which show that the test can see a deviation of
-that size. For any implementation of the theory's processes they become ordinary checks.
+fields built on it. Their targets are closed forms of the theory's processes. Spatialize's default
+Mondrian partition differs from the theory's process (:doc:`encoders`), so on it the Mondrian
+scenarios are *negative controls*, tests expected to reject, which show that the test can see a
+deviation of that size. On Spatialize's opt-in partition ``"mondrian-raw"``, which implements the
+theory's process, they are ordinary checks.
 
 Every target value below follows from the definitions, independently of the examples in the theory,
 which is still a draft.
@@ -19,7 +20,7 @@ which is still a draft.
 E1 — Partition law of four points on a line
 ===========================================
 
-:Status: negative control (not yet implemented)
+:Status: ready (not yet implemented)
 :Source in the theory: worked example of the partition induced on a few points by Poisson cuts
 :Claim: the probabilities of all the ways four points on a line can be grouped into cells.
 
@@ -75,8 +76,8 @@ The seven other set partitions of four points (e.g. {1,3}{2,4}) are impossible.
 <scenario-E2>`, placing one datum at a time with empty cells as NaN and recording which queries share
 its cell.
 
-**Depends on.** An ordinary pass needs an implementation of the theory's Mondrian process. On
-Spatialize, whose root cell is always split, the scenario is a negative control.
+**Profiles.** The scenario is an ordinary check on ``"mondrian-raw"``, the theory's process. On
+Spatialize's default Mondrian partition, whose root cell is always split, it is a negative control.
 
 .. _scenario-E2:
 
@@ -108,9 +109,13 @@ diagonal (with :math:`\ell_1`-normalised steps) give :math:`k = 8` proportions, 
 form. It uses :math:`N = 3\,100` members in ``ci`` (:math:`\delta = 0.05`) and :math:`19\,300` in
 ``full`` (:math:`\delta = 0.02`), which give power 0.9 at :math:`\delta` for up to 50 tests under Holm.
 
-**Expectation per profile.** An implementation of the theory's Mondrian process should pass, while
-Spatialize's Mondrian partition should reject, making the check a negative control. Spatialize's Mondrian
-deviates from the theory's process by design (:doc:`encoders`), by 4–21 % on the unit square. The
+**Estimators.** The check reads two estimators with the IDW decoder, ``idw-theory`` on the
+theory's Mondrian process (Spatialize's ``"mondrian-raw"``) and ``idw`` on Spatialize's default
+Mondrian partition.
+
+**Expectation per profile.** The theory's process should pass, while Spatialize's default Mondrian
+partition should reject, making that outcome a negative control. The default partition deviates
+from the theory's process by design (:doc:`encoders`), by 4–21 % on the unit square. The
 test sees the deviation with :math:`p \approx 10^{-87}` in ``ci``, its largest :math:`|z| = 9.6`
 falling at displacement 0.2 along the diagonal (:math:`\hat p = 0.463` against :math:`0.549`), and
 with :math:`|z| \approx 27` in ``full``. A test unable to reject here would lack the power its passes
@@ -121,7 +126,7 @@ elsewhere claim.
 E3 — Co-occurrence of three points
 ==================================
 
-:Status: negative control (not yet implemented)
+:Status: ready (not yet implemented)
 :Source in the theory: co-occurrence of a set of locations under the Mondrian process
 :Claim: the probability that a set :math:`S` of locations lies in one cell is
   :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`, the sum running over the coordinates.
@@ -139,8 +144,8 @@ form, which reduces to E2 for two points.
 - *gof-closed* per triple shape, read as in E2 with one datum and queries at the other two points, a
   member being finite at both exactly when the three share a cell.
 
-On Spatialize it adds little to E2, its value lying in testing implementations of the theory's
-process.
+Beyond E2, it tests the process on sets of more than two locations, on ``"mondrian-raw"`` as an
+ordinary check and on the default Mondrian partition as a negative control.
 
 .. _scenario-E4:
 
@@ -171,7 +176,7 @@ asks whether two given locations fall in the cell of the same nucleus, has to be
 E5 — Fourth joint cumulant of a block-mark field
 ================================================
 
-:Status: negative control (not yet implemented)
+:Status: ready (not yet implemented)
 :Source in the theory: higher-order cumulants of block-mark fields
 :Claim: for four equally spaced points on a line, the fourth joint cumulant of a block-mark field
   with Gaussian marks has a closed form in the spacing.

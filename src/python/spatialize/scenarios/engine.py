@@ -242,7 +242,7 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
     \rVert_1)` by :func:`~spatialize.scenarios.stats.families.gof_proportions`.
 
     Reads ``data.datum``, ``data.directions``, ``data.displacements`` and, per check,
-    ``estimator``, ``n_members`` (per mode) and ``expect``.
+    ``estimator`` or ``estimators``, ``n_members`` (per mode) and ``expect``.
 
     Parameters
     ----------
@@ -261,27 +261,32 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
     s = sc.spec
     centre = np.asarray(s["data"]["datum"], float)
     hs = np.asarray(s["data"]["displacements"], float)
+    q, l1 = [], []
+    for d in s["data"]["directions"]:
+        u = np.asarray(d, float); u = u / np.abs(u).sum()
+        for h in hs:
+            q.append(centre + h * u); l1.append(h)
+    q = np.asarray(q, np.float32)
     out = []
     for check in s["checks"]:
-        est = sc.estimator(next(e for e in s["estimators"] if e["id"] == check["estimator"]))
-        profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
-        title = f"{check['title']} [{profile}]"
-        if not runner.supports(est):
-            out.append(CheckOutcome(sc.id, check["id"], title, families.TestResult("gof-closed", np.nan, 1.0, "not_reject"),
-                                    skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
-            continue
-        q, l1 = [], []
-        for d in s["data"]["directions"]:
-            u = np.asarray(d, float); u = u / np.abs(u).sum()
-            for h in hs:
-                q.append(centre + h * u); l1.append(h)
-        q = np.asarray(q, np.float32)
-        n = int(_mode_value(check["n_members"], mode))
-        m = runner.members(est, centre[None, :].astype(np.float32), np.ones(1, np.float32), q, n_members=n, seed=seed)
-        p_hat = np.isfinite(m).mean(axis=1)
-        p0 = np.exp(-est.rate * np.asarray(l1))
-        r = families.gof_proportions(p_hat, p0, n)
-        out.append(CheckOutcome(sc.id, check["id"], title, r, expect=_expect(check, profile), route=_route(runner, est), known_failure=check.get("known_failure", "")))
+        eids = check["estimators"] if "estimators" in check else [check["estimator"]]
+        for eid in eids:
+            est = sc.estimator(next(e for e in s["estimators"] if e["id"] == eid))
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            if "estimators" in check:
+                cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            else:
+                cid, title = check["id"], f"{check['title']} [{profile}]"
+            if not runner.supports(est):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult("gof-closed", np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+                continue
+            n = int(_mode_value(check["n_members"], mode))
+            m = runner.members(est, centre[None, :].astype(np.float32), np.ones(1, np.float32), q, n_members=n, seed=seed)
+            p_hat = np.isfinite(m).mean(axis=1)
+            p0 = np.exp(-est.rate * np.asarray(l1))
+            r = families.gof_proportions(p_hat, p0, n)
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est), known_failure=check.get("known_failure", "")))
     return out
 
 

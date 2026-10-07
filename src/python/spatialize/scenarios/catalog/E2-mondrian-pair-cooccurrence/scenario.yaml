@@ -1,5 +1,5 @@
 id: E2-mondrian-pair-cooccurrence
-version: 2
+version: 3
 tier: T1
 evaluator: pair_cooccurrence
 book:
@@ -17,18 +17,20 @@ data:
   displacements: [0.05, 0.1, 0.2, 0.3]
 estimators:
   - {id: idw, encoder: mondrian, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw-theory, encoder: mondrian-theory, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
 checks:
   - id: c1
     title: "pair co-occurrence = exp(−λ‖h‖₁)"
-    estimator: idw
+    estimators: [idw, idw-theory]
     family: gof-closed
     delta: {ci: 0.05, full: 0.02}   # minimum detectable effect in a co-occurrence
     n_members: {ci: 3100, full: 19300}   # power ≥ 0.9 at delta, up to 50 tests under Holm (budget.required_n)
     expect:
       mondrian-theory: pass
-      # Negative control: spatialize's current Mondrian draws the cut axis uniformly and always
+      # Negative control: spatialize's default Mondrian draws the cut axis uniformly and always
       # splits the root (not the book's Mondrian process); measured co-occurrence is 4–21 % below the closed form on
       # the unit square. The test must reject it — that proves its power.
       mondrian: reject
 provenance:
   v2: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"
+  v3: "2026-10-06: estimator idw-theory on the theory's Mondrian process (spatialize's p_process='mondrian-raw'); c1 now reads both estimators, the default Mondrian remaining the negative control"

@@ -293,9 +293,8 @@ class ParetoOptimizer:
         if p_process != partitioning_process.MONDRIAN:
             warnings.warn(
                 f"p_process='{p_process}' is not supported for the robustness bound (ε̂): "
-                "Algorithm 1 requires Mondrian partitions and ε̂ will always be computed "
-                "under Mondrian.  Only the CV decoder step uses the specified p_process.  "
-                "Voronoi support for ε̂ is not yet implemented.",
+                "it is always computed under the default Mondrian partition.  Only the CV "
+                "decoder step uses the specified p_process.",
                 UserWarning,
                 stacklevel=2,
             )

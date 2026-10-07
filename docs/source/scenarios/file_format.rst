@@ -86,9 +86,10 @@ Estimators
    * - ``id``
      - Name of the estimator inside the scenario; checks refer to it.
    * - ``encoder``
-     - Partition profile (:doc:`encoders`), one of ``mondrian`` (Spatialize's Mondrian partition),
-       ``voronoi`` (Spatialize's Voronoi partition with uniform nuclei) or ``voronoi-data``
-       (Spatialize's Voronoi partition with nuclei at the data).
+     - Partition profile (:doc:`encoders`), one of ``mondrian`` (Spatialize's default Mondrian
+       partition), ``mondrian-theory`` (the theory's Mondrian process, Spatialize's
+       ``"mondrian-raw"``), ``voronoi`` (Spatialize's Voronoi partition with uniform nuclei) or
+       ``voronoi-data`` (Spatialize's Voronoi partition with nuclei at the data).
    * - ``rate``
      - Mondrian rate :math:`\lambda`, or Voronoi intensity :math:`\lambda_V` per unit volume, on the
        scenario's ``domain``. Never Spatialize's ``alpha``: runners derive their own parameters.
@@ -127,7 +128,8 @@ The following keys are common to every evaluator.
    * - ``expect``
      - Optional, per encoder profile, ``pass`` (default) or ``reject`` for a negative control, e.g.
        ``{mondrian-theory: pass, mondrian: reject}``. The profiles ``mondrian-theory`` and
-       ``voronoi-theory`` name the theory's processes, for implementations that provide them.
+       ``voronoi-theory`` name the theory's processes. Spatialize provides the first as
+       ``"mondrian-raw"``.
    * - ``known_failure``
      - Optional reason: the check records a known defect. It is reported ``KNOWN`` while it fails
        and ``XPASS`` — failing the run — once it passes (:doc:`statistics`).
@@ -141,8 +143,8 @@ empty cells as NaN.
 - ``data.datum`` — location of the single datum (value 1).
 - ``data.directions`` — directions of displacement (normalised to unit :math:`\ell_1` length).
 - ``data.displacements`` — distances from the datum.
-- per check: ``n_members`` (per mode) and ``delta`` (per mode, the minimum detectable effect the
-  sample size was chosen for).
+- per check: ``estimator`` or ``estimators``, ``n_members`` (per mode) and ``delta`` (per mode,
+  the minimum detectable effect the sample size was chosen for).
 
 Evaluator ``map_visual``
 ------------------------

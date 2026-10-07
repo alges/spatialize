@@ -21,6 +21,7 @@ from ..protocol import EstimatorSpec
 #: Encoder profiles this runner implements: profile -> (spatialize's ``p_process``, ``data_cond``).
 PROFILES = {
     "mondrian": ("mondrian", True),        # Spatialize's Mondrian partition
+    "mondrian-theory": ("mondrian-raw", True),  # the theory's Mondrian process (p_process="mondrian-raw")
     "voronoi": ("voronoi", False),         # Spatialize's Voronoi, nuclei uniform in the box (alpha < 0)
     "voronoi-data": ("voronoi", True),     # Spatialize's Voronoi, nuclei among the samples (alpha >= 0)
 }
@@ -199,7 +200,7 @@ class SpatializeRunner:
         corners = np.array(list(itertools.product(*est.domain)), np.float32)
         q = np.vstack([np.asarray(queries, np.float32), corners])
         p_process, data_cond = PROFILES[est.encoder]
-        if p_process == "mondrian":
+        if p_process.startswith("mondrian"):
             alpha = alpha_from_rate(est.rate, est.domain)
         else:
             alpha = alpha_from_intensity(est.rate, est.domain, len(samples))

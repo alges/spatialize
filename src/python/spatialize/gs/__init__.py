@@ -14,6 +14,11 @@ class local_interpolator:
 
 class partitioning_process:
     [MONDRIAN, VORONOI] = ["mondrian", "voronoi"]
+    MONDRIAN_RAW = "mondrian-raw"  # the theory's Mondrian process (opt-in)
+
+
+# aliases for the functions whose parameters shadow the class names
+_LI, _PP = local_interpolator, partitioning_process
 
 
 PLAIN_INTERPOLATOR = "plain"
@@ -94,6 +99,16 @@ class lib_spatialize_facade:
         if d not in lib_spatialize_facade.function_hash_map:
             raise SpatializeError(f"Points dimension must be in {list(lib_spatialize_facade.function_hash_map.keys())}")
 
+        if partitioning_process == _PP.MONDRIAN_RAW:
+            # no dedicated entry points: the same combinations as the default Mondrian, through run
+            mondrian = lib_spatialize_facade.raw_operator(local_interpolator, _PP.MONDRIAN)
+            if mondrian not in lib_spatialize_facade.function_hash_map[d]:
+                raise SpatializeError(f"Local interpolator '{local_interpolator}' not supported for "
+                                      f"{str(d).upper()}-D data")
+            log_message(logging.logger.debug(f"esi operation: {operation}; partition: mondrian-raw"))
+            return _in_session_domain(_through_run("mondrian-raw", local_interpolator, operation),
+                                      operation, queries_at=-2)
+
         operator = lib_spatialize_facade.raw_operator(local_interpolator, partitioning_process)
 
         if operator not in lib_spatialize_facade.function_hash_map[d]:
@@ -159,3 +174,31 @@ def _in_session_domain(function, operation, queries_at):
         return estimation, members
 
     return call
+
+
+def _through_run(partition, local_interpolator, operation):
+    """An entry point with the legacy argument list, ``[samples, values, n_partitions, alpha,
+    <decoder arguments, seed>, (k, folding_seed,) queries, callback]``, computed by ``run``."""
+    def call(*args):
+        samples, values, n_partitions, alpha = args[:4]
+        queries, visitor = args[-2], args[-1]
+        rest = list(args[4:-2])
+        k = folding_seed = 0
+        if operation == "kfold":
+            k, folding_seed = rest[-2:]
+            rest = rest[:-2]
+        if local_interpolator == _LI.IDW:
+            exponent, seed = rest
+            params = {"exponent": exponent}
+        elif local_interpolator == _LI.KRIGING:
+            model, nugget, range_, sill, seed = rest
+            params = {"model": model, "nugget": nugget, "range": range_, "sill": sill}
+        else:
+            seed, metric, parallelize = rest
+            params = {"metric": metric, "parallelize": parallelize}
+        return lsp.run(np.asarray(samples, np.float32), np.asarray(values, np.float32),
+                       np.asarray(queries, np.float32), partition, float(alpha), int(n_partitions), int(seed),
+                       local_interpolator, params, operation, int(k), int(folding_seed), visitor)
+
+    return call
+

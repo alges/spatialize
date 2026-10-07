@@ -28,7 +28,7 @@ location form the estimator's predictive law there.
      - C++
      - Header
    * - one partition
-     - ``Partition`` (``MondrianTree``, ``VoronoiTree``)
+     - ``Partition`` (``MondrianTree``, with or without ``raw``, and ``VoronoiTree``)
      - ``partition.hpp``, ``partitions/mondrian.hpp``, ``partitions/voronoi.hpp``
    * - local interpolator
      - ``Decoder`` (``IDWDecoder``, ``KrigingDecoder``, ``AdaptiveIDWDecoder``, ``CustomDecoder``)
@@ -88,7 +88,7 @@ The generic entry point ``libspatialize.run``
    import libspatialize as lib
 
    _, members = lib.run(samples, values, queries,            # float32 arrays
-                        partition="voronoi", alpha=0.5,       # "mondrian" | "voronoi"
+                        partition="voronoi", alpha=0.5,       # "mondrian" | "mondrian-raw" | "voronoi"
                         forest_size=300, seed=42,
                         decoder="kriging",                    # "idw" | "kriging" | "adaptiveidw"
                         params={"model": 2, "nugget": 0.0, "range": 0.3, "sill": 1.0},
@@ -105,7 +105,7 @@ The generic entry point ``libspatialize.run``
 
 As a low-level function it applies no defaults, returning raw members. For every combination that
 also has a dedicated entry point, it returns exactly the same numbers given the same arguments. The
-public Python API does not use it yet.
+public Python API uses it only for ``p_process="mondrian-raw"``, which has no dedicated entry point.
 
 Supported combinations
 ======================
@@ -137,6 +137,10 @@ Supported combinations
    * - Voronoi
      - kriging, adaptive IDW
      - —
+     - as for Mondrian
+   * - Mondrian, theory's process
+     - IDW, kriging, adaptive IDW
+     - ``p_process="mondrian-raw"``, through ``run``, in the dimensions of the default Mondrian
      - as for Mondrian
 
 Changes of results

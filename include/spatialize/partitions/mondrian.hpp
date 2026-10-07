@@ -182,7 +182,11 @@ namespace sptlz{
 			std::vector<MondrianNode*> leaves;
 			int ndim;
 
-			MondrianTree(std::vector<std::vector<float>> *coords, float lambda, std::vector<std::vector<float>> bbox, int seed=206936){
+			// With `raw`, the tree is the Mondrian process of the theory: the root also draws its split
+			// time Exp(mu(H)) against the lifetime, and the cut axis is chosen with probability
+			// proportional to its side. Without it (the default), the root always splits and the axis is
+			// uniform among the dimensions.
+			MondrianTree(std::vector<std::vector<float>> *coords, float lambda, std::vector<std::vector<float>> bbox, int seed=206936, bool raw=false){
 				ndim = (int) bbox.size();
 				std::mt19937 my_rand(seed);
 				std::uniform_int_distribution<int> uni_int(0, ndim-1);
@@ -198,7 +202,12 @@ namespace sptlz{
 
 				root = cur_node;
 
-				if(lambda>0){
+				if(raw){
+					exp_float.param(std::exponential_distribution<float>::param_type(bbox_sum_interval(bbox)));
+					root->tau = exp_float(my_rand);
+				}
+
+				if(lambda>0 && root->tau < lambda){
 					// there is lifetime so it COULD be splitted
 					bft.push(cur_node);
 				}
@@ -214,7 +223,17 @@ namespace sptlz{
 						// get the bounding box for the node
 						cur_bbox = cur_node->bbox;
 						// select the component (axis) to make the cut
-						cur_node->axis = uni_int(my_rand);
+						if(raw){
+							// side lengths as weights: the first axis whose cumulative side exceeds u*mu(H)
+							float u = uni_float(my_rand) * bbox_sum_interval(cur_bbox), acc = 0;
+							cur_node->axis = ndim-1;
+							for(int a=0; a<ndim; a++){
+								acc += cur_bbox[a][1] - cur_bbox[a][0];
+								if(u < acc){ cur_node->axis = a; break; }
+							}
+						}else{
+							cur_node->axis = uni_int(my_rand);
+						}
 						// the cut will MIN + (MAX-MIN) * random(0,1)
 						cur_node->cut = cur_bbox[cur_node->axis][0] + (cur_bbox[cur_node->axis][1] - cur_bbox[cur_node->axis][0]) * uni_float(my_rand); // CHANGE FOR RANDOM_UNI_FLOAT(0,1)
 
@@ -328,13 +347,14 @@ namespace sptlz{
 			    int forest_size,
 			    std::vector<std::vector<float>> bbox,
 			    std::function<int(std::string)> visitor,
-			    int seed=206936):
+			    int seed=206936,
+			    bool raw=false):
 			Ensemble(_coords, _values, visitor, seed){
 				this->class_name = __func__;
 				std::uniform_int_distribution<int> uni_int;
 
 				for(int i=0; i<forest_size; i++){
-					forest.push_back(new sptlz::MondrianTree(&coords, lambda, bbox, uni_int(my_rand)));
+					forest.push_back(new sptlz::MondrianTree(&coords, lambda, bbox, uni_int(my_rand), raw));
 				}
 			}
 

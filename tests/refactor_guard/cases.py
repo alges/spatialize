@@ -78,8 +78,7 @@ KRIG = dict(model=2, nugget=0.1, range=0.3, sill=1.0)
 def cases(lib):
     """(name, dataset key, callable(samples, values, queries) -> output) for every exported function.
 
-    parallelize=False for the adaptive decoder: True crashes today (pending bug #1) and OpenMP
-    reductions would make results depend on thread scheduling.
+    The adaptive decoder runs with parallelize=False, which gives the same numbers as True.
     """
     m, n_, r_, s_ = KRIG["model"], KRIG["nugget"], KRIG["range"], KRIG["sill"]
     c = []
@@ -92,28 +91,24 @@ def cases(lib):
     add("loo_nn_idw", "2d", lambda s, v, q: lib.loo_nn_idw(s, v, 0.3, EXP, None))
     add("kfold_nn_idw", "2d", lambda s, v, q: lib.kfold_nn_idw(s, v, 0.3, EXP, K, FSEED, None))
 
-    add("estimation_esi_idw", "2d", lambda s, v, q: lib.estimation_esi_idw(s, v, T, ALPHA, EXP, SEED, q, None))
-    add("loo_esi_idw", "2d", lambda s, v, q: lib.loo_esi_idw(s, v, T, ALPHA, EXP, SEED, q, None))
-    add("kfold_esi_idw", "2d", lambda s, v, q: lib.kfold_esi_idw(s, v, T, ALPHA, EXP, SEED, K, FSEED, q, None))
-
-    for d in ("2d", "3d"):
-        add(f"estimation_esi_kriging_{d}", d, lambda s, v, q, d=d: getattr(lib, f"estimation_esi_kriging_{d}")(s, v, T, ALPHA, m, n_, r_, s_, SEED, q, None))
-        add(f"loo_esi_kriging_{d}", d, lambda s, v, q, d=d: getattr(lib, f"loo_esi_kriging_{d}")(s, v, T, ALPHA, m, n_, r_, s_, SEED, q, None))
-        add(f"kfold_esi_kriging_{d}", d, lambda s, v, q, d=d: getattr(lib, f"kfold_esi_kriging_{d}")(s, v, T, ALPHA, m, n_, r_, s_, SEED, K, FSEED, q, None))
-
-    for tag, a in (("dc", 0.5), ("nodc", -0.5)):          # data-conditioned / not (sign of alpha)
-        add(f"estimation_voronoi_idw_{tag}", "2d", lambda s, v, q, a=a: lib.estimation_voronoi_idw(s, v, T, a, EXP, SEED, q, None))
-        add(f"loo_voronoi_idw_{tag}", "2d", lambda s, v, q, a=a: lib.loo_voronoi_idw(s, v, T, a, EXP, SEED, q, None))
-        add(f"kfold_voronoi_idw_{tag}", "2d", lambda s, v, q, a=a: lib.kfold_voronoi_idw(s, v, T, a, EXP, SEED, K, FSEED, q, None))
-
-    for d in ("2d", "3d"):
-        add(f"estimation_adaptive_esi_idw_{d}", d, lambda s, v, q, d=d: getattr(lib, f"estimation_adaptive_esi_idw_{d}")(s, v, T_ADAPTIVE, ALPHA, SEED, "mae", False, q, None))
-        add(f"loo_adaptive_esi_idw_{d}", d, lambda s, v, q, d=d: getattr(lib, f"loo_adaptive_esi_idw_{d}")(s, v, T_ADAPTIVE, ALPHA, SEED, "mae", False, q, None))
-        add(f"kfold_adaptive_esi_idw_{d}", d, lambda s, v, q, d=d: getattr(lib, f"kfold_adaptive_esi_idw_{d}")(s, v, T_ADAPTIVE, ALPHA, SEED, "mae", False, K, FSEED, q, None))
-
-    add("estimation_custom_esi", "2d", lambda s, v, q: lib.estimation_custom_esi(s, v, T, ALPHA, SEED, q, _post_creation, _estimation, None))
-    add("loo_custom_esi", "2d", lambda s, v, q: lib.loo_custom_esi(s, v, T, ALPHA, SEED, q, _post_creation, _loo, None))
-    add("kfold_custom_esi", "2d", lambda s, v, q: lib.kfold_custom_esi(s, v, T, ALPHA, SEED, K, FSEED, q, _post_creation, _kfold, None))
+    # The ensemble cases go through libspatialize.run. They keep the names, and the snapshots, of the
+    # dedicated entry points they replaced (removed 2026-10-07), which run reproduces bit for bit.
+    def run(partition, alpha, forest_size, decoder, params, method):
+        return lambda s, v, q: lib.run(s, v, q, partition, alpha, forest_size, SEED, decoder, params, method, K, FSEED)
+    custom = {"estimate": dict(post_creation=_post_creation, estimation=_estimation),
+              "loo": dict(post_creation=_post_creation, loo=_loo),
+              "kfold": dict(post_creation=_post_creation, kfold=_kfold)}
+    krig = dict(model=m, nugget=n_, range=r_, sill=s_)
+    for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
+        add(f"{pre}_esi_idw", "2d", run("mondrian", ALPHA, T, "idw", {"exponent": EXP}, method))
+        for d in ("2d", "3d"):
+            add(f"{pre}_esi_kriging_{d}", d, run("mondrian", ALPHA, T, "kriging", krig, method))
+        for tag, a in (("dc", 0.5), ("nodc", -0.5)):      # data-conditioned / not (sign of alpha)
+            add(f"{pre}_voronoi_idw_{tag}", "2d", run("voronoi", a, T, "idw", {"exponent": EXP}, method))
+        for d in ("2d", "3d"):
+            add(f"{pre}_adaptive_esi_idw_{d}", d, run("mondrian", ALPHA, T_ADAPTIVE, "adaptiveidw",
+                                                      {"metric": "mae", "parallelize": False}, method))
+        add(f"{pre}_custom_esi", "2d", run("mondrian", ALPHA, T, "custom", custom[method], method))
 
     # co-estimation: two variables observed at the same locations (3D samples array: variables x n x d)
     co = lambda s, v: (np.stack([s, s]), np.stack([v, np.log(v)]).astype(np.float32))

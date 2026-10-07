@@ -671,7 +671,7 @@ class CatESIGridSearchResult(GridSearchResult):
 )
 def _call_custom_esi(points, values, xi, **kwargs):
     """
-    Core call to ``libspatialize.estimation_custom_esi``.
+    Core call to ``libspatialize.run`` with the custom decoder.
 
     Handles encoding of string categories to integer codes, builds
     classifier callbacks, calls C++, decodes results, and applies
@@ -694,9 +694,6 @@ def _call_custom_esi(points, values, xi, **kwargs):
                 kwargs[k] = kwargs["best_params_found"][k]
             except KeyError:
                 pass
-
-    #if kwargs.get("callback") is not singleton_null_callback:
-    #    log_message(logging.logger.debug(f"calling estimation_custom_esi with kwargs: {kwargs}"))
 
     # Encode values to integer codes (handles both numeric and string labels)
     encoded_values, _, code_to_cat = _make_encoder(values)

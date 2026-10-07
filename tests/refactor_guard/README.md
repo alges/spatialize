@@ -13,13 +13,17 @@ produced them.
   commit *before* the refactor.
 
 ## Cases
-`cases.py` calls the 29 legacy exported functions (Voronoi in both modes → 32 cases) on two small
-Voronoi block-mark fields (one lognormal mark per Voronoi cell): 80 samples, a 15×15 grid in 2D and 60 queries in 3D,
-lognormal marks, 12 cells. Inputs are stored inside each snapshot, so the test does not depend on
-numpy's RNG. Custom-ESI bindings use the cell-mean decoder written in Python. The adaptive
-decoder runs with `parallelize=False` (parallel runs give the same numbers since the 2026-10-05
-GIL fix). The generic `libspatialize.run` is not snapshotted: it is checked against the legacy
-functions, which it must reproduce bit for bit.
+`cases.py` has 32 cases on two small Voronoi block-mark fields (one lognormal mark per Voronoi
+cell): 80 samples, a 15×15 grid in 2D and 60 queries in 3D, 12 cells. Inputs are stored inside each
+snapshot, so the test does not depend on numpy's RNG.
+
+- The 24 ensemble cases (every decoder on Mondrian and Voronoi, estimation, LOO and k-fold) call
+  `libspatialize.run`. They keep the names and the snapshots of the dedicated entry points they
+  replaced (`estimation_esi_idw`, ...; removed 2026-10-07), which `run` reproduced bit for bit.
+- The custom decoder is the cell mean written in Python; the adaptive decoder runs with
+  `parallelize=False` (the same numbers as with threads).
+- The other cases call the remaining exported functions: the partitions, plain IDW and
+  co-estimation.
 
 `public_cases.py` adds 20 cases named `api.*` on the public Python API above the extension
 (`esi_*`, the hyperparameter searches, Pareto, SPA, spatial entropy, cat_esi, plain IDW), every

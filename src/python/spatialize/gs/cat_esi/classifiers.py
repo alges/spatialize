@@ -7,7 +7,7 @@ Provides:
 
 The public entry point is ``get_classifier_fns(classifier, **kwargs)``,
 which returns the ``(set_cell_params_fn, classifier_fn)`` pair expected
-by ``libspatialize.estimation_custom_esi``.
+by ``libspatialize.run`` with the custom decoder.
 """
 
 #import logging as _logging

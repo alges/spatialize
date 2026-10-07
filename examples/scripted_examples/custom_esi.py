@@ -85,12 +85,11 @@ exponent = 2.0
 
 # pure C++ implementation
 print("running pure c++ esi idw:")
-est1 = lsp.estimation_esi_idw(
-    points,
-    values,
-    n_partitions, alpha, exponent, 206936,
-    xi,
-    default_singleton_callback
+est1 = lsp.run(
+    points, values, xi,
+    "mondrian", alpha, n_partitions, 206936,
+    "idw", {"exponent": exponent},
+    visitor=default_singleton_callback
 )
 
 esi_result1 = ESIResult(np.nanmean(est1[1], axis=1), est1[1], False, None, xi)
@@ -105,14 +104,11 @@ params_aniso = np.array([exponent, 1.0, 1.0])  # anisotropic with all ones scali
 def set_cell_params(cell_points, cell_values):
     return params_aniso
 
-est2 = lsp.estimation_custom_esi(
-    points,
-    values,
-    n_partitions, alpha, 206936,
-    xi,
-    set_cell_params,
-    idw_local_interpolator_anisotropic,
-    default_singleton_callback
+est2 = lsp.run(
+    points, values, xi,
+    "mondrian", alpha, n_partitions, 206936,
+    "custom", {"post_creation": set_cell_params, "estimation": idw_local_interpolator_anisotropic},
+    visitor=default_singleton_callback
 )
 
 esi_result2 = ESIResult(np.nanmean(est2[1], axis=1), est2[1], False, None, xi)

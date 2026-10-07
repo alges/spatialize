@@ -20,7 +20,8 @@ which is still a draft.
 E1 — Partition law of four points on a line
 ===========================================
 
-:Status: ready (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``partition_law``
 :Source in the theory: worked example of the partition induced on a few points by Poisson cuts
 :Claim: the probabilities of all the ways four points on a line can be grouped into cells.
 
@@ -68,13 +69,19 @@ The seven other set partitions of four points (e.g. {1,3}{2,4}) are impossible.
 
 **Checks.**
 
-- *gof-closed* (G-test) of the observed frequencies of the eight interval groupings over :math:`N`
-  partition draws, sized for power 0.9 at the declared minimum detectable effect.
+- *gof-closed*. The Pearson statistic of the observed frequencies of the eight interval groupings
+  against :math:`N` times their probabilities, referred to :math:`\chi^2_7`, with :math:`N = 5\,000`
+  partitions in ``ci`` and :math:`20\,000` in ``full``.
 - *almost-sure*. No non-interval grouping is ever observed.
 
-**Reading.** The partition of the points is read through the estimator as in :ref:`E2
-<scenario-E2>`, placing one datum at a time with empty cells as NaN and recording which queries share
-its cell.
+**Reading.** The suite sees ensembles, never partitions. With the four points as data, the
+``cellmean`` decoder run on the indicator of point :math:`a` returns, at each of the four points,
+:math:`1/n_C` when the point shares :math:`a`'s cell :math:`C` and 0 otherwise. Four runs with one seed
+see the same partitions, so they give, partition by partition, which points share a cell.
+
+**Results.** On seeds 1 to 3 the theory's process passes (p between 0.2 and 0.97) while the default
+Mondrian rejects with :math:`\chi^2` near 500 on 7 degrees of freedom. Both only ever group the
+points into intervals.
 
 **Profiles.** The scenario is an ordinary check on ``"mondrian-raw"``, the theory's process. On
 Spatialize's default Mondrian partition, whose root cell is always split, it is a negative control.
@@ -126,14 +133,15 @@ elsewhere claim.
 E3 — Co-occurrence of three points
 ==================================
 
-:Status: ready (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``partition_law``
 :Source in the theory: co-occurrence of a set of locations under the Mondrian process
 :Claim: the probability that a set :math:`S` of locations lies in one cell is
   :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`, the sum running over the coordinates.
 
-**Setup.** Two dimensions, with Mondrian rate :math:`\lambda` on the unit square and triples of
-locations around the centre in several shapes (collinear along an axis, along the diagonal,
-triangles).
+**Setup.** Two dimensions, with Mondrian rate :math:`\lambda = 3` on the unit square and five
+triples around the centre, collinear along an axis, collinear along the diagonal, two triangles and a
+small right angle.
 
 **Target.** The set :math:`S` stays in one cell when no cut falls inside the box it spans. Cuts on
 coordinate :math:`c` fall in that box at rate :math:`\lambda\, \mathrm{range}_c(S)`, hence the closed
@@ -141,8 +149,12 @@ form, which reduces to E2 for two points.
 
 **Check.**
 
-- *gof-closed* per triple shape, read as in E2 with one datum and queries at the other two points, a
-  member being finite at both exactly when the three share a cell.
+- *gof-closed*. The share of partitions putting each triple in one cell against :math:`e(S)`,
+  combined as :math:`\sum_i z_i^2 \sim \chi^2_5`, with :math:`N = 4\,000` partitions in ``ci`` and
+  :math:`16\,000` in ``full``. The cells are read as in E1.
+
+**Results.** On seeds 1 to 3 the theory's process passes (p between 0.24 and 0.58) while the default
+Mondrian rejects with :math:`|z|` up to 11.6, on the collinear triples above all.
 
 Beyond E2, it tests the process on sets of more than two locations, on ``"mondrian-raw"`` as an
 ordinary check and on the default Mondrian partition as a negative control.
@@ -176,7 +188,8 @@ asks whether two given locations fall in the cell of the same nucleus, has to be
 E5 — Fourth joint cumulant of a block-mark field
 ================================================
 
-:Status: ready (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``partition_law``
 :Source in the theory: higher-order cumulants of block-mark fields
 :Claim: for four equally spaced points on a line, the fourth joint cumulant of a block-mark field
   with Gaussian marks has a closed form in the spacing.
@@ -197,8 +210,20 @@ which is largest, :math:`27/128`, at :math:`s = \log(4/3)`.
 
 **Check.**
 
-- *identity* at several spacings, with a bootstrap standard error of the empirical cumulant over the
-  ensemble members.
+- *identity*. At the spacings :math:`s = 0.1, \log(4/3), 0.5, 0.8`, the empirical fourth cumulant
+  minus :math:`2q^3(1-q)`, divided by its bootstrap standard error, combined as
+  :math:`\sum z^2 \sim \chi^2_4`, with :math:`N = 80\,000` partitions in ``ci`` and
+  :math:`320\,000` in ``full``.
+
+**Reading.** The partitions are read as in E1. Under each partition the evaluator paints every block
+with an independent standard Gaussian mark, which makes the four values a block-mark field built on
+the estimator's partitions.
+
+**Results.** With :math:`N = 20\,000` the control on the default Mondrian rejected on two seeds out of
+three, its cumulant differing from the closed form by 0.05 to 0.06 at the two larger spacings and by
+about 0.016 at the smaller ones. :math:`N` was raised to :math:`80\,000` before the scenario was
+released. On seeds 1 to 4 the theory's process then passes (p between 0.45 and 0.95) while the default
+Mondrian rejects with p at most :math:`10^{-9}`.
 
 .. _scenario-E6:
 

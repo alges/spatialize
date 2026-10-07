@@ -629,8 +629,139 @@ def eval_draw_laws(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _same_cell(runner, est, points, n, seed):
+    """Which of ``points`` share a cell, partition by partition, read through the estimator.
+
+    The cell mean run on the indicator of point ``a`` is positive exactly at the points of a's cell,
+    and every run with one seed sees the same partitions.
+
+    Returns
+    -------
+    ndarray of bool, shape (n, k, k)
+        ``[t, a, j]`` is true when points a and j share a cell of partition t.
+    """
+    points = np.asarray(points, np.float32)
+    k = len(points)
+    out = np.zeros((n, k, k), bool)
+    for a in range(k):
+        values = (np.arange(k) == a).astype(np.float32)
+        m = np.asarray(runner.members(est, points, values, points, n_members=n, seed=seed))  # (k, n)
+        out[:, a, :] = (m > 0).T
+    return out
+
+
+def _groupings(same):
+    """The set partition of the points under each partition, as a tuple of block labels."""
+    labels = []
+    for t in range(same.shape[0]):
+        lab = []
+        for j in range(same.shape[1]):
+            lab.append(next(a for a in range(same.shape[1]) if same[t, a, j]))
+        labels.append(tuple(lab))
+    return labels
+
+
+def _line_grouping_law(points, rate):
+    """Law of the groupings of sorted points on a line under Poisson cuts of rate ``rate``: each gap
+    is cut independently with probability 1 - exp(-rate * gap). Returns {labels: probability}."""
+    x = np.sort(np.asarray(points, float).ravel())
+    keep = np.exp(-rate * np.diff(x))
+    law = {}
+    for cuts in np.ndindex(*(2,) * len(keep)):
+        p = np.prod([1 - keep[g] if c else keep[g] for g, c in enumerate(cuts)])
+        lab, block = [0], 0
+        for g, c in enumerate(cuts):
+            if c:
+                block = g + 1
+            lab.append(block)
+        law[tuple(lab)] = law.get(tuple(lab), 0.0) + float(p)
+    return law
+
+
+def eval_partition_law(sc: Scenario, runner: Runner, mode: str, seed: int,
+                       save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``partition_law``: the law of the partition of a few points (E1, E3, E5).
+
+    Which points share a cell is read through the estimator (see :func:`_same_cell`), so the
+    scenario's estimators use the ``cellmean`` decoder. Kinds (key ``kind``):
+
+    - ``line_groupings`` (``data.points`` on a line) — goodness of fit of the frequencies of the
+      interval groupings to the law of Poisson cuts of rate ``rate``, each gap :math:`g` cut with
+      probability :math:`1 - e^{-\lambda g}`;
+    - ``interval_only`` (same data) — almost-sure: no grouping other than intervals of consecutive
+      points occurs;
+    - ``set_cooccurrence`` (``data.sets``) — goodness of fit of the share of partitions putting a set
+      in one cell to :math:`\exp(-\lambda \sum_c \mathrm{range}_c(S))`;
+    - ``fourth_cumulant`` (``data.spacings``, four points on a line) — identity: the fourth joint
+      cumulant of a block-mark field with standard Gaussian marks, drawn by the evaluator on the
+      estimator's partitions, equals :math:`2q^3(1-q)`, :math:`q = e^{-\lambda s}`, with a bootstrap
+      standard error.
+
+    Reads ``n_members`` (per mode) of each check.
+    """
+    s = sc.spec
+    out = []
+    for check in s["checks"]:
+        kind, n = check["kind"], int(_mode_value(check["n_members"], mode))
+        for eid in check["estimators"]:
+            est = sc.estimator(next(e for e in s["estimators"] if e["id"] == eid))
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            if not runner.supports(est):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+                continue
+            lam = float(est.rate)
+            if kind in ("line_groupings", "interval_only"):
+                pts = np.asarray(s["data"]["points"], float)
+                order = np.argsort(pts[:, 0])
+                labels = _groupings(_same_cell(runner, est, pts[order], n, seed))
+                law = _line_grouping_law(pts[:, 0], lam)
+                observed = {}  # groupings labelled, as the law, by the first point of each block
+                for lab in labels:
+                    observed[lab] = observed.get(lab, 0) + 1
+                if kind == "interval_only":
+                    bad = sum(c for key, c in observed.items() if key not in law)
+                    r = families.almost_sure(bad, n)
+                else:
+                    keys = sorted(law)
+                    r = families.gof_counts([observed.get(k_, 0) for k_ in keys], [n * law[k_] for k_ in keys],
+                                            df=len(keys) - 1)
+            elif kind == "set_cooccurrence":
+                sets = [np.asarray(S, float) for S in s["data"]["sets"]]
+                p_hat, p0 = [], []
+                for S in sets:
+                    same = _same_cell(runner, est, S, n, seed)
+                    p_hat.append(float(np.mean(same[:, 0, :].all(axis=1))))
+                    p0.append(float(np.exp(-lam * np.sum(S.max(axis=0) - S.min(axis=0)))))
+                r = families.gof_proportions(np.array(p_hat), np.array(p0), n)
+            elif kind == "fourth_cumulant":
+                rng = np.random.default_rng(seed)
+                z = []
+                origin = float(s["data"].get("origin", 0.0))
+                for sp in s["data"]["spacings"]:
+                    pts = origin + sp * np.arange(4, dtype=float)[:, None]
+                    labels = _groupings(_same_cell(runner, est, pts, n, seed))
+                    Z = np.empty((n, 4))
+                    for t, lab in enumerate(labels):
+                        marks = rng.standard_normal(4)
+                        Z[t] = marks[list(lab)]
+                    def k4(W):
+                        m = lambda a, b: np.mean(W[:, a] * W[:, b])
+                        return (np.mean(W.prod(axis=1)) - m(0, 1) * m(2, 3) - m(0, 2) * m(1, 3) - m(0, 3) * m(1, 2))
+                    boot = [k4(Z[rng.integers(0, n, n)]) for _ in range(200)]
+                    q = np.exp(-lam * sp)
+                    z.append((k4(Z) - 2 * q ** 3 * (1 - q)) / np.std(boot, ddof=1))
+                r = families.identity(z, "κ4 − 2q³(1−q)")
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
-              "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws}
+              "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law}
 
 
 # ----------------------------------------------------------------------------- run

@@ -1,0 +1,32 @@
+id: E5-block-mark-fourth-cumulant
+version: 1
+tier: T1
+evaluator: partition_law
+book:
+  topic: "higher-order cumulants of block-mark fields; fourth joint cumulant of four points on a line"
+  draft_2026_09: "co-occurrence identity, order four"   # the book is a draft: numbers may change
+purpose: >
+  Four equally spaced points with gaps s on a line, cut by Poisson cuts of rate λ (the one-dimensional
+  Mondrian process), each block painted with an independent standard Gaussian mark. Given the
+  partition the values are Gaussian with covariance 1 within a block and 0 across blocks, so the fourth
+  joint cumulant is 2q³(1 − q) with q = exp(−λ s), largest at s = log(4/3)/λ. The partitions are read
+  through the estimator, as in E1; the marks are drawn by the evaluator.
+domain: {box: [[0.0, 4.0]]}
+data:
+  origin: 0.5
+  spacings: [0.1, 0.2877, 0.5, 0.8]   # 0.2877 = log(4/3), where the cumulant peaks at λ = 1
+estimators:
+  - {id: cm-theory, encoder: mondrian-theory, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cm, encoder: mondrian, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
+checks:
+  - id: k4
+    title: "fourth joint cumulant = 2q³(1 − q)"
+    kind: fourth_cumulant
+    family: identity
+    estimators: [cm-theory, cm]
+    n_members: {ci: 80000, full: 320000}   # 20000 left the control without power (failed 1 seed in 3)
+    expect:
+      mondrian-theory: pass
+      mondrian: reject   # negative control: the default Mondrian cuts the whole box once
+provenance:
+  v1: "2026-10-07: first version, with the cell-mean decoder and mondrian-raw (phase 2); sizes fixed before the first run"

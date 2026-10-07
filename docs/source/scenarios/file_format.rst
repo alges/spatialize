@@ -34,8 +34,8 @@ Top-level keys
      - Encoder law, estimator properties, or geostatistical scenario (:doc:`index`).
    * - ``evaluator``
      - string
-     - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``map_visual``,
-       ``edge_cases`` or ``draw_laws`` (below).
+     - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
+       ``map_visual``, ``edge_cases`` or ``draw_laws`` (below).
    * - ``book``
      - mapping
      - Source in the theory: ``topic`` (by content) and the draft's section, equation and figure
@@ -187,6 +187,18 @@ This evaluator decides almost-sure checks on degenerate designs (scenario S12).
   ``generator_seed``.
 - per check: ``kind`` (``runs``, ``finite``, ``convex``, ``exact``), ``estimators`` (list) and, for
   ``convex`` and ``exact``, ``tolerance`` (relative to the data range).
+
+Evaluator ``partition_law``
+---------------------------
+
+This evaluator reads the law of the partition of a few locations through the estimator (scenarios
+E1, E3 and E5), its estimators using the ``cellmean`` decoder.
+
+- ``data.points`` — locations on a line (``line_groupings``, ``interval_only``); ``data.sets`` — sets
+  of locations (``set_cooccurrence``); ``data.spacings`` and ``data.origin`` — four equally spaced
+  points (``fourth_cumulant``).
+- per check: ``kind`` (``line_groupings``, ``interval_only``, ``set_cooccurrence``,
+  ``fourth_cumulant``), ``estimators`` and ``n_members`` (per mode).
 
 Evaluator ``draw_laws``
 -----------------------

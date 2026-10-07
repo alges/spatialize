@@ -10,17 +10,20 @@
 namespace sptlz{
   // Decoder defined by user callbacks (per-cell post-creation, estimation, LOO, k-fold).
   class CustomDecoder: public Decoder {
+    public:
+      typedef std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> Post;
+      typedef std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> Estimation;
+      typedef std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> Loo;
+      typedef std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> Kfold;
+
     protected:
-      std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> post_creation;
-      std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> estimation_by_leaf;
-      std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> loo_by_leaf;
-      std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> kfold_by_leaf;
+      Post post_creation;
+      Estimation estimation_by_leaf;
+      Loo loo_by_leaf;
+      Kfold kfold_by_leaf;
 
     public:
-      CustomDecoder(  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*)> _post,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<std::vector<float>>*, std::vector<float> *)> _est,
-                  std::function<std::vector<float>(std::vector<std::vector<float>>*, std::vector<float>*, std::vector<float> *)> _loo,
-                  std::function<std::vector<float>(int, std::vector<std::vector<float>>*, std::vector<float>*, std::vector<int> *, std::vector<float> *)> _kfold){
+      CustomDecoder(Post _post, Estimation _est, Loo _loo, Kfold _kfold){
         post_creation = _post;
         estimation_by_leaf = _est;
         loo_by_leaf = _loo;

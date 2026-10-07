@@ -13,6 +13,7 @@
 #include "spatialize/decoders/adaptive_idw.hpp"
 #include "spatialize/decoders/custom.hpp"
 #include "spatialize/coesi/custom_coesi.hpp"
+#include "registry.hpp"
 
 namespace py = pybind11;
 
@@ -249,11 +250,11 @@ class OmpThreads {
     }
 };
 
-enum class EsiMethod { ESTIMATE, LOO, KFOLD };
+using EsiMethod = registry::Method;
 
-// The engine. Draws the forest ("mondrian": lifetime from alpha and the box of samples ∪ queries;
-// "mondrian-raw": the same lifetime with the theory's Mondrian process; "voronoi": alpha as nuclei rate, sign = data conditioning), fits the decoder (takes ownership)
-// and runs the method. `class_name` names the computation in log messages.
+// The engine. Draws the forest of the named partition (registry.hpp) on the box of samples ∪
+// queries, fits the decoder (takes ownership) and runs the method. `class_name` names the
+// computation in log messages.
 static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<float>> &smp,
                                                     std::vector<float> &val,
                                                     std::vector<std::vector<float>> &qry,
@@ -265,16 +266,8 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
                                                     const std::string &class_name){
     std::unique_ptr<sptlz::Decoder> owned(decoder);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    std::unique_ptr<sptlz::Ensemble> ensemble;
-    if (partition == "mondrian" || partition == "mondrian-raw"){
-        float lambda = sptlz::bbox_sum_interval(bbox);
-        lambda = 1/(lambda-alpha*lambda);
-        ensemble.reset(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, partition == "mondrian-raw"));
-    }else if (partition == "voronoi"){
-        ensemble.reset(new sptlz::VORONOI(smp, val, alpha, forest_size, bbox, visitor, seed));
-    }else{
-        throw std::runtime_error("unknown partition '" + partition + "' (expected 'mondrian', 'mondrian-raw' or 'voronoi')");
-    }
+    auto &spec = registry::find(registry::partitions(), partition, "partition");
+    std::unique_ptr<sptlz::Ensemble> ensemble(spec.make(smp, val, bbox, alpha, forest_size, seed, visitor));
     ensemble->set_class_name(class_name);
     ensemble->set_decoder(owned.release());
 
@@ -454,24 +447,10 @@ EsiOutput kfold_custom_esi(py::array_t<float> samples, py::array_t<float> values
 
 /* Generic entry point */
 
-template <typename T>
-static T param_or(const py::dict &params, const char *name, T fallback){
-    return(params.contains(name) ? params[name].cast<T>() : fallback);
-}
-
-template <typename T>
-static T required_param(const py::dict &params, const char *name, const std::string &decoder){
-    if (!params.contains(name))
-        throw std::runtime_error("decoder '" + decoder + "' needs parameter '" + name + "'");
-    return(params[name].cast<T>());
-}
-
 // run(samples, values, queries, partition, alpha, forest_size, seed, decoder, params, method, k,
-//     folding_seed, visitor): any partition ("mondrian", "voronoi") with any decoder ("idw",
-// "kriging", "adaptiveidw"). `params` holds the decoder parameters (idw: exponent; kriging: model
-// (1 spherical, 2 exponential, 3 cubic, 4 gaussian), nugget, range, sill; adaptiveidw: metric,
-// parallelize). method: "estimate" (queries), "loo" or "kfold" (k, folding_seed). Returns
-// (None, array) like the other entry points.
+//     folding_seed, visitor): any partition with any decoder of the catalogue (registry.hpp), in the
+// dimensions both support. `params` holds the decoder's parameters, checked against the catalogue.
+// method: "estimate" (queries), "loo" or "kfold" (k, folding_seed). Returns (None, members).
 EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t<float> queries,
               std::string partition, float alpha, int forest_size, int seed,
               std::string decoder, py::dict params, std::string method, int k, int folding_seed,
@@ -481,30 +460,16 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
     if (d != static_cast<int>(queries.request().shape[1]))
         throw std::runtime_error("samples and queries must have the same number of coordinates");
 
-    EsiMethod m;
-    if (method == "estimate") m = EsiMethod::ESTIMATE;
-    else if (method == "loo") m = EsiMethod::LOO;
-    else if (method == "kfold") m = EsiMethod::KFOLD;
-    else throw std::runtime_error("unknown method '" + method + "' (expected 'estimate', 'loo' or 'kfold')");
+    EsiMethod m = registry::method_from(method);
+    auto &ps = registry::find(registry::partitions(), partition, "partition");
+    auto &ds = registry::find(registry::decoders(), decoder, "decoder");
+    registry::check_dim("partition", partition, ps.min_dim, ps.max_dim, d);
+    registry::check_dim("decoder", decoder, ds.min_dim, ds.max_dim, d);
+    registry::check_params(ds, params);
 
-    bool parallelize = true;  // all threads, except for adaptiveidw, whose 'parallelize' defaults to false
-    sptlz::Decoder *dec;
-    if (decoder == "idw"){
-        dec = new sptlz::IDWDecoder(required_param<float>(params, "exponent", decoder));
-    }else if (decoder == "kriging"){
-        dec = new sptlz::KrigingDecoder(required_param<int>(params, "model", decoder),
-                                        required_param<float>(params, "nugget", decoder),
-                                        required_param<float>(params, "range", decoder),
-                                        required_param<float>(params, "sill", decoder));
-    }else if (decoder == "adaptiveidw"){
-        if (d != 2 && d != 3)
-            throw std::runtime_error("decoder 'adaptiveidw' is available for 2 and 3 dimensions only");
-        parallelize = param_or<bool>(params, "parallelize", false);
-        dec = new sptlz::AdaptiveIDWDecoder(d, param_or<std::string>(params, "metric", "mae"));
-    }else{
-        throw std::runtime_error("unknown decoder '" + decoder + "' (expected 'idw', 'kriging' or 'adaptiveidw')");
-    }
-
+    // all threads, unless the decoder has its own 'parallelize' parameter (adaptive IDW)
+    bool parallelize = ds.has_parallelize ? registry::param<bool>(ds, params, "parallelize") : true;
+    sptlz::Decoder *dec = ds.make(d, params, m);
     OmpThreads threads(parallelize);
     return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder));
 }
@@ -850,11 +815,16 @@ PYBIND11_MODULE(libspatialize, m) {
     m.def(
       "run",
       &run,
-      "Ensemble estimation with any partition ('mondrian', 'mondrian-raw', 'voronoi') and decoder ('idw', 'kriging', 'adaptiveidw')",
+      "Ensemble estimation with any partition and decoder of catalog()",
       py::arg("samples"), py::arg("values"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
       py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
       py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,
       py::arg("visitor") = py::none()
+    );
+    m.def(
+      "catalog",
+      &registry::catalog,
+      "The partitions and decoders of the extension, with their dimensions and parameters"
     );
     /* Custom COESI */
     m.def(

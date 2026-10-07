@@ -1,8 +1,4 @@
-import threading
-from multiprocessing import Manager
-
 import numpy as np
-from joblib import Parallel, delayed
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from sklearn.neighbors import KernelDensity
 from sklearn.exceptions import ConvergenceWarning
@@ -11,6 +7,7 @@ from sklearn.exceptions import ConvergenceWarning
 import warnings
 
 from spatialize import logging
+from spatialize._parallel import map_chunks
 from spatialize.empirical import (FittedModelFactory, EmpiricalModel, _local_target_variance,
                                    _local_target_skewness)
 from spatialize.logging import log_message, default_singleton_callback
@@ -118,7 +115,6 @@ def ess_sample(esi_result,
                n_sims=100,
                fitted_model_factory=None,
                desc=None,
-               n_jobs=-1,
                callback=default_singleton_callback):
     """
     Generate simulated scenarios from Ensemble Spatial Interpolation (ESI) samples using probabilistic models.
@@ -146,9 +142,6 @@ def ess_sample(esi_result,
     desc : str, optional
         Textual description for the result. If not provided, it is generated
         based on the model type and simulation parameters.
-    n_jobs : int, optional
-        Number of parallel jobs to use. Set to ``1`` for serial execution or
-        ``-1`` to use all available CPUs.
     callback : callable, optional
         A callback function for progress reporting. Expected to support
         ``logging.progress.init``, ``inform``, and ``stop`` methods.
@@ -171,15 +164,16 @@ def ess_sample(esi_result,
 
     Notes
     -----
-    This function supports parallel execution using ``joblib.Parallel`` and
-    includes a separate thread for real-time progress monitoring. It is
-    designed for large-scale scenario generation from spatial ensemble data.
+    The locations are sampled on several processes (``joblib``) under the
+    session settings ``parallel`` and ``num_threads`` (:mod:`spatialize.session`),
+    when the work is large enough to repay starting them. Each location draws
+    from its own seed, so the scenarios are the same with any number of
+    processes.
 
-    In parallel execution, a location where model fitting or sampling fails
-    gets NaN scenarios, and a warning reports how many locations failed.
-    Serial execution raises the error instead.
+    A location where model fitting or sampling fails gets NaN scenarios, and a
+    warning reports how many locations failed.
 
-    When using ``n_jobs != 1``, this function must be called within an
+    When it runs in parallel, a script should call this function within an
     ``if __name__ == "__main__":`` block to avoid multiprocessing issues
     (especially on Windows and macOS).
 
@@ -222,107 +216,47 @@ def ess_sample(esi_result,
                                                       esi_result._xi_flat,
                                                       knn=fitted_model_factory.widening_knn)
 
-    def run_serial():
-        scenarios = np.empty([esi_samples.shape[0], n_sims])
-        callback(logging.progress.init(esi_samples.shape[0], 1))
-        for esi_sample_idx in range(esi_samples.shape[0]):
-            target_var = target_var_arr[esi_sample_idx] if target_var_arr is not None else None
-            target_skew = target_skew_arr[esi_sample_idx] if target_skew_arr is not None else None
-            # derive a per-location seed so widening doesn't draw identical noise at every
-            # sample (mirrors the `self.seed + i` pattern used elsewhere, e.g. gs/esmi/_main.py)
-            location_seed = (fitted_model_factory.seed + esi_sample_idx
-                              if fitted_model_factory.seed is not None else None)
-            model, _ = fitted_model_factory.create(esi_samples[esi_sample_idx, :],
-                                                    target_var=target_var, target_skew=target_skew,
-                                                    seed=location_seed)
+    factory = fitted_model_factory
 
-            # sampling from the fitted model
-            if fitted_model_factory.point_model_name in {"vim", "emm"}:
-                s = model.sample(n_sims)[0].reshape(1, n_sims)[0]
-            elif fitted_model_factory.point_model_name == "kde":
-                # KernelDensity has no constructor-level random_state (unlike GMM/BGM), so
-                # its draw is only reproducible if seeded per call.
-                s = model.sample(n_sims, random_state=location_seed).reshape(1, n_sims)[0]
-            else:
-                raise ValueError(f"Unsupported model type: {fitted_model_factory.point_model_name}")
+    def rows_data(rows):
+        # what a chunk needs: its rows of the ensemble and of the widening targets
+        idx = list(rows)
+        return (esi_samples[idx, :],
+                target_var_arr[idx] if target_var_arr is not None else None,
+                target_skew_arr[idx] if target_skew_arr is not None else None)
 
-            scenarios[esi_sample_idx, :] = s[:]
-            callback(logging.progress.inform())
-        callback(logging.progress.stop())
-        return scenarios
+    def sample_rows(rows, data):
+        # one location at a time, each with its own seed (so widening does not draw the same noise
+        # everywhere, and the scenarios do not depend on where the location runs)
+        samples, target_var, target_skew = data
+        model_name = factory.point_model_name
+        out = []
+        for k, i in enumerate(rows):
+            seed = factory.seed + i if factory.seed is not None else None
+            try:
+                model, _ = factory.create(
+                    samples[k, :],
+                    target_var=target_var[k] if target_var is not None else None,
+                    target_skew=target_skew[k] if target_skew is not None else None,
+                    seed=seed)
+                if model_name in {"vim", "emm"}:
+                    sims = model.sample(n_sims)[0].reshape(n_sims)
+                else:
+                    # KernelDensity has no constructor-level random_state (unlike GMM/BGM), so its
+                    # draw is only reproducible if seeded per call
+                    sims = model.sample(n_sims, random_state=seed).reshape(n_sims)
+                out.append((sims, None))
+            except Exception as e:
+                out.append((None, f"{type(e).__name__}: {e}"))
+        return out
 
-    # to run in parallel ------------------------------------------------------------------------
-    def sample_single_scenario(idx, sample_row, n_sims, model_factory, target_var, target_skew, seed, progress_q):
-        try:
-            model, _ = model_factory.create(sample_row, target_var=target_var, target_skew=target_skew,
-                                             seed=seed)
-
-            # Sample based on model type
-            if model_factory.point_model_name in {"vim", "emm"}:
-                sims = model.sample(n_sims)[0].reshape(n_sims)
-            elif model_factory.point_model_name == "kde":
-                sims = model.sample(n_sims, random_state=seed).reshape(n_sims)
-            else:
-                raise ValueError(f"Unsupported model type: {model_factory.point_model_name}")
-
-            if progress_q:
-                progress_q.put(1)
-            return idx, sims, None
-
-        except Exception as e:
-            if progress_q:
-                progress_q.put(1)
-            return idx, None, f"{type(e).__name__}: {e}"
-
-    def run_parallel():
-        def progress_monitor(queue, total, cb):
-            count = 0
-            cb(logging.progress.init(total, 1))
-            while count < total:
-                queue.get()
-                count += 1
-                cb(logging.progress.inform())
-            cb(logging.progress.stop())
-
-        with Manager() as manager:
-            progress_queue = manager.Queue()
-
-            monitor_thread = threading.Thread(
-                target=progress_monitor,
-                args=(progress_queue, esi_samples.shape[0], callback),
-                daemon=True
-            )
-            monitor_thread.start()
-
-            results = Parallel(n_jobs=n_jobs, backend='loky')(
-                delayed(sample_single_scenario)(
-                    i, esi_samples[i, :], n_sims, fitted_model_factory,
-                    target_var_arr[i] if target_var_arr is not None else None,
-                    target_skew_arr[i] if target_skew_arr is not None else None,
-                    fitted_model_factory.seed + i if fitted_model_factory.seed is not None else None,
-                    progress_queue
-                )
-                for i in range(esi_samples.shape[0])
-            )
-
-            monitor_thread.join()
-
-        # Sort results and construct the scenarios array
-        sorted_results = sorted(results, key=lambda x: x[0])
-        failed = [(r[0], r[2]) for r in sorted_results if r[1] is None]
-        if failed:
-            log_message(logging.logger.warning(
-                f"sampling failed at {len(failed)} of {len(sorted_results)} locations, whose "
-                f"scenarios are NaN (first failure, location {failed[0][0]}: {failed[0][1]})"))
-        valid_scenarios = [r[1] if r[1] is not None else np.full(n_sims, np.nan) for r in sorted_results]
-        scenarios = np.stack(valid_scenarios)
-
-        return scenarios
-
-    if n_jobs == 1:
-        scenarios = run_serial()
-    else:
-        scenarios = run_parallel()
+    results = map_chunks(sample_rows, esi_samples.shape[0], data_for=rows_data, callback=callback)
+    failed = [(i, r[1]) for i, r in enumerate(results) if r[0] is None]
+    if failed:
+        log_message(logging.logger.warning(
+            f"sampling failed at {len(failed)} of {len(results)} locations, whose "
+            f"scenarios are NaN (first failure, location {failed[0][0]}: {failed[0][1]})"))
+    scenarios = np.stack([r[0] if r[0] is not None else np.full(n_sims, np.nan) for r in results])
 
     if desc is None:
         if fitted_model_factory.point_model_name == "kde":

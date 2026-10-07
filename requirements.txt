@@ -7,4 +7,4 @@ tqdm
 matplotlib
 opencv-python
 numba
-joblib
+joblib>=1.3

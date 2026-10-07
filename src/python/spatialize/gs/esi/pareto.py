@@ -28,6 +28,7 @@ from itertools import permutations, product
 import spatialize.gs.esi.scorefunction as sf
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 from spatialize.gs.esi._main import build_arg_list
+from spatialize._parallel import map_chunks
 from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
 from spatialize import logging
@@ -100,6 +101,7 @@ class EmpiricalRobustnessBound:
         self.pair_strategy      = pair_strategy
         self.support_sample_size = support_sample_size
         self.interp_kwargs      = interp_kwargs or {}
+        self.repeated           = False   # set by ParetoOptimizer: one of several estimates in a row
 
         self._factory = FittedModelFactory(
             nan_model_name=nan_model_name,
@@ -137,10 +139,9 @@ class EmpiricalRobustnessBound:
         # EmpiricalModel Akima-interpolator layer and all redundant refitting.
         models = self._prefit_models(self.esi_samples)
 
-        # Step 4 — sweep cells and accumulate max KL
-        eps_hat = 0.0
+        # Step 4 — the pairs that share a cell in some partition, each once
+        pairs: list[tuple[int, int]] = []
         seen: set[tuple[int, int]] = set()
-
         for t in range(self.n_partitions):
             cells = self.leaf_indexes[:, t]
             for k in np.unique(cells):
@@ -153,12 +154,13 @@ class EmpiricalRobustnessBound:
                     seen.add((i, j))
                     if models[i] is None or models[j] is None:
                         continue
-                    d = _kl_from_models(models[i], models[j], self.support_sample_size)
-                    if d > eps_hat:
-                        eps_hat = d
+                    pairs.append((i, j))
 
-        self.epsilon_hat = eps_hat
-        return eps_hat
+        # Step 5 — the largest divergence among them. The divergences take almost all the time and
+        # are independent, so they run in parallel under the session settings; a maximum does not
+        # depend on the order, so the result is the same with any number of workers.
+        self.epsilon_hat = _max_divergence(models, pairs, self.support_sample_size, self.repeated)
+        return self.epsilon_hat
 
     # ------------------------------------------------------------------
 
@@ -366,6 +368,7 @@ class ParetoOptimizer:
                 support_sample_size = self.support_sample_size,
                 interp_kwargs       = merged_interp_kw,
             )
+            erb.repeated = n_configs > 1
             eps_hat = erb.estimate(points, values)
 
             # ── 2. Decoder error R_CV ────────────────────────────────────
@@ -420,6 +423,24 @@ class ParetoOptimizer:
 # ===========================================================================
 # Private helpers
 # ===========================================================================
+
+def _max_divergence(models, pairs, support_sample_size, repeated=False) -> float:
+    """The largest D_KL(p̂_i ‖ p̂_j) over ``pairs``, on worker processes when the work repays them
+    (:func:`spatialize._parallel.map_chunks`); each worker receives only the models of its pairs."""
+    def chunk_data(rows):
+        chunk = [pairs[r] for r in rows]
+        return chunk, {k: models[k] for pair in chunk for k in pair}
+
+    def divergences(rows, data):
+        chunk, chunk_models = data
+        return [_kl_from_models(chunk_models[i], chunk_models[j], support_sample_size) for i, j in chunk]
+
+    best = 0.0
+    for d in map_chunks(divergences, len(pairs), data_for=chunk_data, repeated=repeated):
+        if d > best:
+            best = d
+    return best
+
 
 def _kl_from_models(
     model_tuple_i: tuple,

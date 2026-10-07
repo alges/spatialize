@@ -18,14 +18,19 @@ The settings are the following.
     datum and query must lie in the domain.
 
 ``parallel`` (bool)
-    Whether the compiled code runs on several threads. The default is ``True``. Results are the same
-    bit for bit with any number of threads, so the setting changes only the run time. When
-    Spatialize was built without OpenMP, a warning says once how to install it, after which the code
-    runs on one thread.
+    Whether the compiled code runs on several threads, and the Python loops on several processes
+    (``joblib``): the encoder error of the Pareto search
+    (:func:`~spatialize.gs.esi.esi_pareto_hparams_search`), the simulations
+    (:func:`~spatialize.gs.ess.ess_sample`) and the ranking of the data
+    (:meth:`~spatialize.gs.spa.PosteriorSampleAnalyzer.rank_samples`), these only when the work
+    repays starting the processes. The default is ``True``. Results are the same bit for bit with any number of threads or processes, so the
+    setting changes only the run time. When Spatialize was built without OpenMP, a warning says once
+    how to install it, after which the compiled code runs on one thread, the processes being
+    unaffected.
 
 ``num_threads`` (positive int, or ``None``)
-    The number of threads when ``parallel`` is true. With ``None``, the default, the runtime uses
-    every processor, or the number set by the environment variable ``OMP_NUM_THREADS``.
+    The number of threads, or processes, when ``parallel`` is true. With ``None``, the default, the
+    runtime uses every processor, or the number set by the environment variable ``OMP_NUM_THREADS``.
 
 Examples
 --------

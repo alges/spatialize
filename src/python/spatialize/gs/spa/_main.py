@@ -5,14 +5,11 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.lines import Line2D
-from joblib import Parallel, delayed
-from multiprocessing import Manager
-import threading
-import time
 
 from copy import deepcopy
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 import spatialize.gs.esi.aggfunction as af
+from spatialize._parallel import map_chunks
 from spatialize.gs.esi._main import build_arg_list
 from spatialize._util import signature_overload, per_call, random_seed
 from spatialize.logging import default_singleton_callback, log_message
@@ -132,7 +129,7 @@ class PosteriorSampleAnalyzer:
                 log_message(logging.logger.debug(f"error for values[{i}] = {self.sample_values[i]}: {e}"))
                 continue
 
-    def rank_samples(self, entropy_mass_alphas=[0.5, 0.7, 0.9, 0.99], n_jobs=-1):
+    def rank_samples(self, entropy_mass_alphas=[0.5, 0.7, 0.9, 0.99]):
         """
         Categorizes sample values based on their central entropy intervals.
 
@@ -170,113 +167,51 @@ class PosteriorSampleAnalyzer:
         entropy_mass_alphas : list[float], optional
             List of alpha values (between 0 and 1) defining the central
             entropy mass for intervals. Defaults to `[0.5, 0.7, 0.9, 0.99]`.
-        n_jobs : int, optional
-            Number of parallel jobs to run for categorization. -1 means
-            using all available cores. 1 means serial execution. Defaults
-            to -1. When using ``n_jobs != 1``, this function must be called
-            within a ``if __name__ == "__main__":`` block to avoid
-            multiprocessing issues (especially on Windows and macOS).
 
         Returns
         -------
         pandas.DataFrame
             A DataFrame with 'value' (original sample value) and 'category'
             (e.g., "level_0") columns.
+
+        Notes
+        -----
+        The samples are ranked on several processes (``joblib``) under the
+        session settings ``parallel`` and ``num_threads``
+        (:mod:`spatialize.session`), when the work is large enough to repay
+        starting them. When it runs in parallel, a script should
+        call this method within an ``if __name__ == "__main__":`` block to avoid
+        multiprocessing issues (especially on Windows and macOS).
         """
         alphas_ = sorted(entropy_mass_alphas)  # narrowest to widest intervals
-        categories_results = []  # Using a temporary list to store results before assigning to self or returning
 
         values = self.sample_values
-        callback = self.callback
+        emodels = self.emodels
 
-        def run_serial():
-            local_categories = []
-            callback(logging.progress.init(len(values), 1))
-            for i in range(len(values)):
-                emodel = self.emodels[i]
+        def rows_data(rows):
+            idx = list(rows)
+            return [values[k] for k in idx], [emodels[k] for k in idx]
+
+        def categorize_rows(rows, data):
+            # the most certain category whose interval leaves the value out (None on error)
+            vals, models = data
+            out = []
+            for i, value, emodel in zip(rows, vals, models):
                 try:
-                    # default: most uncertain category (inside all intervals)
-                    cat = len(alphas_)
-                    # check from widest to narrowest (reversed alphas)
-                    for j, alpha in enumerate(reversed(alphas_)):
-                        cei = emodel.central_entropy_interval(alpha)
-                        low, high = cei['interval']
-                        if values[i] < low or values[i] > high:
-                            # falls outside this interval → more certain
+                    cat = len(alphas_)  # default: inside every interval, the most uncertain
+                    for j, alpha in enumerate(reversed(alphas_)):  # widest to narrowest
+                        low, high = emodel.central_entropy_interval(alpha)['interval']
+                        if value < low or value > high:
                             cat = j
-                            break  # stop at most certain matching category
-
-                    local_categories.append(f"level_{cat}")  # Corrected category naming
+                            break
+                    out.append(f"level_{cat}")
                 except Exception as e:
-                    log_message(logging.logger.debug(f"error for values[{i}] = {values[i]}: {e}"))
-                    local_categories.append(None)  # Append None or some error marker
-                    continue
-                callback(logging.progress.inform())
-            callback(logging.progress.stop())
-            return local_categories
+                    log_message(logging.logger.debug(f"error for values[{i}] = {value}: {e}"))
+                    out.append(None)
+            return out
 
-        # just for parallel execution ----------------------------------------------------------------
-        def categorize_single_sample(idx, value_item, emodel_item, alphas_list, progress_q):
-            try:
-                cat_val = len(alphas_list)
-                for j_idx, alpha_val in enumerate(reversed(alphas_list)):
-                    cei_val = emodel_item.central_entropy_interval(alpha_val)
-                    low_val, high_val = cei_val['interval']
-                    if value_item < low_val or value_item > high_val:
-                        cat_val = j_idx
-                        break
-                if progress_q:  # Check if progress_queue is provided (it will be)
-                    progress_q.put(1)
-                return idx, f"level_{cat_val}"  # Corrected category naming
-            except Exception as e_inner:
-                log_message(logging.logger.debug(f"error for values[{idx}] = {value_item}: {e_inner}"))
-                if progress_q:
-                    progress_q.put(1)  # Still signal progress even on error
-                return idx, None  # Return None or an error marker for this sample
-
-        def run_parallel():
-            # Progress monitor thread remains similar
-            def progress_monitor(queue, total, cb):
-                count = 0
-                cb(logging.progress.init(total, 1))  # Init progress here for monitor
-                while count < total:
-                    queue.get()  # Blocks until an item is available
-                    count += 1
-                    cb(logging.progress.inform())
-                cb(logging.progress.stop())
-
-            # Main parallel execution logic
-            # callback(logging.progress.init(len(values), 1)) # Moved to progress_monitor
-
-            with Manager() as manager:
-                progress_queue = manager.Queue()
-
-                monitor_thread = threading.Thread(
-                    target=progress_monitor,
-                    args=(progress_queue, len(values), callback),
-                    daemon=True
-                )
-                monitor_thread.start()
-
-                results = Parallel(n_jobs=n_jobs, backend='loky')(  # Use passed n_jobs
-                    delayed(categorize_single_sample)(i, values[i], self.emodels[i], alphas_, progress_queue)
-                    for i in range(len(values))
-                )
-
-                monitor_thread.join()
-
-            # Sort results by original index and extract categories
-            # Handle potential None values from errors
-            sorted_results = sorted(results, key=lambda x: x[0])
-            final_categories = [res[1] for res in sorted_results]
-            return final_categories
-            # callback(logging.progress.stop()) # Moved to progress_monitor
-            # return categories # This was assigned inside run_parallel_with_progress which is now inline
-
-        if n_jobs == 1:
-            categories_results = run_serial()
-        else:
-            categories_results = run_parallel()
+        categories_results = map_chunks(categorize_rows, len(values), data_for=rows_data,
+                                        callback=self.callback)
 
         log_message(logging.logger.info(
             f"categorized {len(values)} samples into {len(set(cat for cat in categories_results if cat is not None))} categories."))

@@ -1348,6 +1348,12 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     -------
     ESIParetoResult
 
+    Notes
+    -----
+    The divergences behind ε̂ run on several processes under the session
+    settings ``parallel`` and ``num_threads`` (:mod:`spatialize.session`),
+    with the same result for any number of them.
+
     Examples
     --------
     .. code-block:: python

@@ -221,6 +221,13 @@ Reproducibility under parallel execution
   requires the GIL. Inside a parallel region only the calling thread, identified by its OS thread
   id, may make such calls, the worker threads updating only atomic counters. Any new parallel code
   must follow the same rule.
+- **Python loops.** The loops written in Python, the divergences of the Pareto encoder error, the
+  simulations of ESS and the ranking of SPA, run on worker processes through
+  ``spatialize._parallel.map_chunks``, with the same session settings. The items go in chunks of
+  about four per worker, each chunk receiving only the data it needs. A few items run serially first,
+  the rest going to the workers only when the time those items took, extrapolated to all of them,
+  exceeds the cost of starting the workers. Each item carries its own seed, so the result does not
+  depend on where it runs. New Python loops should use the same function.
 
 Adding a decoder
 ================

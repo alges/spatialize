@@ -36,7 +36,7 @@ def public_cases():
     from spatialize.gs.cat_esi import cat_esi_nongriddata
     from spatialize.gs.idw import idw_nongriddata, idw_hparams_search
     from spatialize.gs.spa import cv_sample_pred_posterior
-    from spatialize.gs.esmi import SpatialEntropy
+    from spatialize.gs.esmi import SpatialEntropy, SpatialMutualInformation
 
     c = []
     add = lambda name, ds, fn: c.append((f"api.{name}", ds, fn))
@@ -94,6 +94,20 @@ def public_cases():
                            exponent=EXP).calculate_entropy(s, v, q[:20])
         return {"entropy": np.asarray(h, dtype=np.float64)}
     add("spatial_entropy", "2d", esmi)
+
+    def esmi_voronoi(s, v, q):
+        h = SpatialEntropy(T=T, M=10, alpha_t=0.5, alpha_m=0.6, seed=SEED, callback=NULL["callback"],
+                           p_process="voronoi", data_cond=False, exponent=EXP).calculate_entropy(s, v, q[:20])
+        return {"entropy": np.asarray(h, dtype=np.float64)}
+    add("spatial_entropy_voronoi", "2d", esmi_voronoi)
+
+    def mutual_information(s, v, q):
+        smi = SpatialMutualInformation(T=T, M=10, alpha_t=ALPHA, alpha_m=0.6, seed=SEED,
+                                       callback=NULL["callback"], exponent=EXP)
+        mi = smi.calculate_mutual_information(s, v, s, np.log(v), q[:20])
+        return {"mi": np.asarray(mi, np.float64), "h_u": np.asarray(smi.entropies_u, np.float64),
+                "h_joint": np.asarray(smi.entropies_joint, np.float64)}
+    add("spatial_mutual_information", "2d", mutual_information)
 
     def cat(s, v, q):
         cats = np.where(v > np.median(v), "high", "low")

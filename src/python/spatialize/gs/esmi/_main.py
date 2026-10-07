@@ -11,6 +11,8 @@ from spatialize.logging import log_message, default_singleton_callback, singleto
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
                     common_args={"seed": 0,
+                                 "p_process": "mondrian",
+                                 "data_cond": True,
                                  "callback": default_singleton_callback},
                     specific_args=with_more_decoders({
                         li.IDW: {"exponent": 3.0},
@@ -36,6 +38,10 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
         Higher values create smaller, more granular partitions.
     local_interpolator : str, default="idw"
         Local interpolator type: "idw", "kriging", or "adaptiveidw".
+    p_process : str, default="mondrian"
+        Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+    data_cond : bool, default=True
+        For "voronoi", whether the nuclei are drawn among the data or uniformly.
     seed : int, default=0
         Random seed for reproducibility.
     callback : callable
@@ -64,10 +70,12 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     xi = np.asarray(xi, dtype=np.float32)
 
     interp_type = kwargs["local_interpolator"]
-    estimate = lib_spatialize_facade.get_operator(points, interp_type, "estimate", "mondrian")
+    p_process = kwargs["p_process"]
+    estimate = lib_spatialize_facade.get_operator(points, interp_type, "estimate", p_process)
 
-    # Base args common to all interpolators
-    l_args = [points, values, T, alpha_t]
+    # Base args common to all interpolators (negative alpha: Voronoi with uniform nuclei)
+    alpha = -alpha_t if p_process == "voronoi" and not kwargs["data_cond"] else alpha_t
+    l_args = [points, values, T, alpha]
 
     if interp_type == li.IDW:
         l_args.append(kwargs["exponent"])
@@ -208,6 +216,8 @@ class SpatialEntropy:
                  seed=0,
                  callback=None,
                  local_interpolator="idw",
+                 p_process="mondrian",
+                 data_cond=True,
                  **interp_kwargs
                  ):
         """
@@ -231,6 +241,12 @@ class SpatialEntropy:
             Callback function for progress reporting. If None, uses default progress callback.
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
+        p_process : str, default="mondrian"
+            Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+            The value range is always partitioned with Mondrian trees, whose boxes give the
+            cell sizes of the density estimate.
+        data_cond : bool, default=True
+            For "voronoi", whether the nuclei are drawn among the data or uniformly.
         **interp_kwargs
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
@@ -258,6 +274,8 @@ class SpatialEntropy:
         self.seed = seed
         self.callback = callback if callback is not None else default_singleton_callback
         self.local_interpolator = local_interpolator
+        self.p_process = p_process
+        self.data_cond = data_cond
         self.interp_kwargs = interp_kwargs
 
     def calculate_entropy(self, points, values, xi):
@@ -302,6 +320,7 @@ class SpatialEntropy:
         # Get esi_samples for all points in xi (progress tracked by C++ code)
         esi_samples = _get_esi_estimates(points, values, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
+                                         p_process=self.p_process, data_cond=self.data_cond,
                                          seed=self.seed, callback=self.callback,
                                          **self.interp_kwargs)
         self.esi_samples = esi_samples
@@ -417,6 +436,8 @@ class SpatialMutualInformation:
                  seed=0,
                  callback=None,
                  local_interpolator="idw",
+                 p_process="mondrian",
+                 data_cond=True,
                  **interp_kwargs
                  ):
         """
@@ -440,6 +461,12 @@ class SpatialMutualInformation:
             Callback function for progress reporting. If None, uses default progress callback.
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
+        p_process : str, default="mondrian"
+            Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+            The value range is always partitioned with Mondrian trees, whose boxes give the
+            cell sizes of the density estimate.
+        data_cond : bool, default=True
+            For "voronoi", whether the nuclei are drawn among the data or uniformly.
         **interp_kwargs
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
@@ -467,6 +494,8 @@ class SpatialMutualInformation:
         self.seed = seed
         self.callback = callback if callback is not None else default_singleton_callback
         self.local_interpolator = local_interpolator
+        self.p_process = p_process
+        self.data_cond = data_cond
         self.interp_kwargs = interp_kwargs
 
     def _calculate_marginal_entropy_from_joint(self, partitions_2d, leaf_indexes_2d, marginal='u'):
@@ -474,7 +503,9 @@ class SpatialMutualInformation:
         Calculate marginal entropy by marginalizing a 2D joint partition.
 
         This ensures consistency between marginal and joint entropy calculations
-        by deriving h(U) and h(V) from the same 2D partition used for h(U,V).
+        by deriving h(U) and h(V) from the same 2D partition used for h(U,V):
+        the joint density is uniform in each cell, and the marginal is its
+        integral over the other variable.
 
         Parameters
         ----------
@@ -493,41 +524,28 @@ class SpatialMutualInformation:
         """
         entropies_per_tree = np.zeros(self.M)
 
+        axis = 1 if marginal == 'u' else 3   # bounds [leaf_idx, u_min, u_max, v_min, v_max]
         for m, (partition, leaf_index) in enumerate(zip(partitions_2d, leaf_indexes_2d.T)):
-            # Count number of points per 2D leaf
             leaf_idxs, counts = np.unique(leaf_index, return_counts=True)
+            bounds = np.asarray([partition[j][axis:axis + 2] for j in leaf_idxs], dtype=float)
+            lo, hi = bounds[:, 0], bounds[:, 1]
+            keep = hi > lo
+            lo, hi, p = lo[keep], hi[keep], counts[keep] / self.T
 
-            # Build marginal distribution by projecting 2D cells onto chosen axis
-            marginal_cells = {}  # {(x_min, x_max): count}
-
-            for j, n_jm in zip(leaf_idxs, counts):
-                # Get bounds of 2D cell (format: [leaf_idx, u_min, u_max, v_min, v_max])
-                _, u_min, u_max, v_min, v_max = partition[j]
-
-                # Project onto chosen marginal axis
-                if marginal == 'u':
-                    cell_bounds = (u_min, u_max)
-                else:  # marginal == 'v'
-                    cell_bounds = (v_min, v_max)
-
-                # Accumulate counts for this marginal cell
-                if cell_bounds in marginal_cells:
-                    marginal_cells[cell_bounds] += n_jm
-                else:
-                    marginal_cells[cell_bounds] = n_jm
-
-            # Calculate marginal entropy from projected cells
-            entropy_m = 0.0
-            for (x_min, x_max), n_jm in marginal_cells.items():
-                length_jm = x_max - x_min
-
-                if length_jm > 0 and n_jm > 0:
-                    # Differential entropy: -sum p(j) * log2(p(j) / length(j))
-                    p_jm = n_jm / self.T
-                    cell_entropy = p_jm * math.log2(p_jm / length_jm)
-                    entropy_m -= cell_entropy
-
-            entropies_per_tree[m] = entropy_m
+            # The joint density is uniform in each cell, p_c / area_c, so the marginal density is
+            # sum_c p_c / len_c over the cells whose projection contains x. The projections of
+            # different cells overlap, so the density is evaluated on the pieces between all the
+            # projected bounds.
+            cuts = np.unique(np.concatenate([lo, hi]))
+            if len(cuts) < 2:
+                entropies_per_tree[m] = np.nan
+                continue
+            mid = (cuts[:-1] + cuts[1:]) / 2
+            inside = (lo[None, :] <= mid[:, None]) & (mid[:, None] <= hi[None, :])
+            density = inside @ (p / (hi - lo))
+            width = np.diff(cuts)
+            pos = density > 0
+            entropies_per_tree[m] = -np.sum(density[pos] * width[pos] * np.log2(density[pos]))
 
         # Get ensemble estimate (average across all M trees)
         return np.nanmean(entropies_per_tree)
@@ -642,6 +660,7 @@ class SpatialMutualInformation:
         # Get ESI estimates for both variables at all target locations (progress tracked by C++ code)
         estimates_u = _get_esi_estimates(points_u, values_u, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
+                                         p_process=self.p_process, data_cond=self.data_cond,
                                          seed=self.seed, callback=self.callback,
                                          **self.interp_kwargs)
         self.esi_samples_u = estimates_u
@@ -651,6 +670,7 @@ class SpatialMutualInformation:
         log_message(logging.logger.info("generating ESI samples for V"))
         estimates_v = _get_esi_estimates(points_v, values_v, xi, self.T, self.alpha_t,
                                          local_interpolator=self.local_interpolator,
+                                         p_process=self.p_process, data_cond=self.data_cond,
                                          seed=self.seed + 1, callback=self.callback,
                                          **self.interp_kwargs)
         self.esi_samples_v = estimates_v

@@ -54,7 +54,16 @@ local laws,
    I(U; V)(x) = h_U(x) + h_V(x) - h_{U,V}(x),
 
 measures how much knowing one tells about the other, location by location, and vanishes when they
-are independent there.
+are independent there. Spatialize estimates the joint density of the members of :math:`U` and :math:`V` with Mondrian
+partitions of the plane of values, uniform within each cell, and integrates it over one variable to
+obtain each marginal,
+
+.. math::
+
+   \hat f_U(u) = \sum_{c\,:\,u \in c_U} \frac{p_c}{|c_U|},
+
+with :math:`p_c` the share of members in cell :math:`c` and :math:`c_U` its side along :math:`U`. The
+three entropies then come from one density, so the estimate is never negative.
 
 In Spatialize
 =============

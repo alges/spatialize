@@ -27,7 +27,7 @@ import numpy as np
 from itertools import permutations, product
 
 import spatialize.gs.esi.scorefunction as sf
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, _domain_corners
+from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, _domain_corners, with_more_decoders
 from spatialize.gs.esi._main import build_arg_list
 from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
@@ -41,11 +41,11 @@ from spatialize import logging
 _COMMON_GRID_KEYS = {"n_partitions", "alpha"}
 
 # Interpolator-specific parameter defaults (mirrors esi/_main.py)
-_INTERP_DEFAULTS = {
+_INTERP_DEFAULTS = with_more_decoders({
     li.IDW:          {"exponent": 2.0},
     li.KRIGING:      {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
     li.ADAPTIVE_IDW: {"metric": "mae"},
-}
+})
 
 # ===========================================================================
 # EmpiricalRobustnessBound  (Algorithm 1 with fitted KL)

@@ -167,9 +167,9 @@ The decoders that draw take their random numbers from the run's seed, the tree a
 so a draw depends neither on the number of threads nor on the other queries. With one seed they see
 the same partitions as the averaging decoders.
 
-The public functions offer the averaging decoders ``idw``, ``kriging`` and ``adaptiveidw``.
-Categorical ESI uses ``custom``. The other decoders are reached through ``run`` until the public
-functions take them. Plain
+The public functions offer every decoder except ``custom``, which categorical ESI uses. Their
+argument lists keep the historical order for ``idw``, ``kriging`` and ``adaptiveidw``, while the
+other decoders pass their parameters in the catalogue's order, followed by the seed. Plain
 IDW (``spatialize.gs.idw``) is a separate engine, outside the catalogue.
 
 Changes of results

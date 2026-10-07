@@ -11,7 +11,7 @@ import threading
 import time
 
 from copy import deepcopy
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
+from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 import spatialize.gs.esi.aggfunction as af
 from spatialize.gs.esi._main import build_arg_list
 from spatialize._util import signature_overload, per_call, random_seed
@@ -497,14 +497,14 @@ class PosteriorSampleAnalyzer:
                                  "callback": default_singleton_callback,
                                  "best_params_found": None
                                  },
-                    specific_args={
+                    specific_args=with_more_decoders({
                         li.IDW: {"exponent": 2.0},
                         li.KRIGING: {"model": "spherical",
                                      "nugget": 0.5,
                                      "range": 50.0,
                                      "sill": 0.9},
                         li.ADAPTIVE_IDW: {"metric": "mae"}
-                    })
+                    }))
 def cv_sample_pred_posterior(points, values, xi, **kwargs):
     """
     Perform cross-validation for sample prediction and generate posterior distributions.

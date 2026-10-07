@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from spatialize import SpatializeError, logging
-from spatialize.gs import lib_spatialize_facade, local_interpolator as li
+from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_params
 from spatialize._util import signature_overload
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 
@@ -12,11 +12,11 @@ from spatialize.logging import log_message, default_singleton_callback, singleto
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
                     common_args={"seed": 0,
                                  "callback": default_singleton_callback},
-                    specific_args={
+                    specific_args=with_more_decoders({
                         li.IDW: {"exponent": 3.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
                         li.ADAPTIVE_IDW: {"metric": "mae"}
-                    })
+                    }))
 def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     """
     Get T spatial estimates for each location in xi using ESI.
@@ -81,6 +81,9 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     elif interp_type == li.ADAPTIVE_IDW:
         l_args.append(kwargs["seed"])
         l_args.append(kwargs["metric"])
+    else:  # the other decoders: their parameters in the catalogue's order, then the seed
+        l_args.extend(kwargs[name] for name in decoder_params(interp_type))
+        l_args.append(kwargs["seed"])
 
     l_args.extend([xi, kwargs["callback"]])
 

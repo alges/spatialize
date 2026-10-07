@@ -12,7 +12,8 @@ import spatialize.gs.esi.lossfunction as lf
 import spatialize.gs.esi.scorefunction as sf
 from spatialize._util import signature_overload, random_seed
 from spatialize._math_util import flatten_grid_data
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
+from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, \
+    with_more_decoders, decoder_params, _LEGACY_ARGUMENTS
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 from spatialize.viz import plot_colormap_array, PlotStyle
 
@@ -735,14 +736,14 @@ class ESIResult(EstimationResult):
                                  "folding_seed": random_seed,
                                  "callback": default_singleton_callback,
                                  },
-                    specific_args={
+                    specific_args=with_more_decoders({
                         li.IDW: {"exponent": list(np.arange(1.0, 15.0, 1.0))},
                         li.KRIGING: {"model": ["spherical", "exponential", "cubic", "gaussian"],
                                      "nugget": [0.0, 0.5, 1.0],
                                      "range": [10.0, 50.0, 100.0, 200.0],
                                      "sill": [0.9, 1.0, 1.1]},
                         li.ADAPTIVE_IDW: {"metric": ["mae"]}
-                    })
+                    }, grid=True))
 def esi_hparams_search(points, values, xi, **kwargs):
     """Perform a k-fold (or leave-one-out) cross-validation hyperparameter search for ESI.
 
@@ -773,9 +774,10 @@ def esi_hparams_search(points, values, xi, **kwargs):
     Other Parameters
     ----------------
     local_interpolator : str, optional
-        Local interpolator to search over: ``"idw"`` (default),
-        ``"kriging"``, or ``"adaptiveidw"``. Determines which of the
-        interpolator-specific parameters below are accepted.
+        Local interpolator to search over, any of those of
+        :func:`esi_griddata` (default ``"idw"``). Determines which of the
+        interpolator-specific parameters below are accepted, as lists of
+        candidates.
     k : int, optional
         Number of cross-validation folds. If `k` equals the number of
         points or is ``-1``, leave-one-out (LOO) cross-validation is used
@@ -829,8 +831,14 @@ def esi_hparams_search(points, values, xi, **kwargs):
     sill : list of float, optional
         *(Kriging only)* Candidate variogram sill values to search.
     metric : list of str, optional
-        *(Adaptive IDW only)* Candidate local-optimization metrics to
-        search. Default: ``["mae"]``.
+        *(Adaptive IDW, sharpened IDW and their draws)* Candidate
+        local-optimization metrics to search. Default: ``["mae"]``.
+    kappa_r, kappa_g, rho_max : list of float, optional
+        *(Sharpened IDW and its draw)* Candidates for the constants of the
+        sharpened decoder. Default: ``[1.5]``, ``[0.2]``, ``[3.0]``.
+    negative_weights : list of str, optional
+        *(Kriging draw)* Candidates among ``"clip"`` and ``"abs"``.
+        Default: ``["clip"]``.
 
     Returns
     -------
@@ -876,17 +884,8 @@ def esi_hparams_search(points, values, xi, **kwargs):
     if kwargs["p_process"] == partitioning_process.VORONOI:
         grid["data_cond"] = kwargs["data_cond"]
 
-    if kwargs["local_interpolator"] == li.IDW:
-        grid["exponent"] = kwargs["exponent"]
-
-    if kwargs["local_interpolator"] == li.KRIGING:
-        grid["model"] = kwargs["model"]
-        grid["nugget"] = kwargs["nugget"]
-        grid["range"] = kwargs["range"]
-        grid["sill"] = kwargs["sill"]
-
-    if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
-        grid["metric"] = kwargs["metric"]
+    for name in decoder_params(kwargs["local_interpolator"]):
+        grid[name] = kwargs[name]
 
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
@@ -988,8 +987,14 @@ def esi_griddata(points, values, xi, **kwargs):
 
     Other Parameters
     ----------------
-    local_interpolator : {"idw", "kriging", "adaptiveidw"}, optional
-         Which local interpolator to use within each partition cell.
+    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging"}, optional
+         Which local interpolator (decoder) to use within each partition
+         cell. ``"idw"``, ``"kriging"``, ``"adaptiveidw"`` and
+         ``"sharpidw"`` average the cell's data with weights, while
+         ``"cellmean"`` averages them equally. The ``"draw"`` decoders
+         return a datum of the cell instead, drawn uniformly or with the
+         weights of the decoder they name, so that the ensemble carries the
+         dispersion within the cell.
          Determines which of the interpolator-specific parameters below are
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
@@ -1038,24 +1043,39 @@ def esi_griddata(points, values, xi, **kwargs):
              those same two keys plus ``local_interpolator``, ``epsilon``,
              and ``decoder_error``.
     exponent : float, optional
-         IDW distance-decay exponent. Only used when
-         ``local_interpolator="idw"``. Default: ``2.0``.
+         IDW distance-decay exponent. Only used by ``"idw"`` and
+         ``"wdraw_idw"``. Default: ``2.0``.
     model : {"spherical", "exponential", "cubic", "gaussian"}, optional
-         Variogram model. Only used when ``local_interpolator="kriging"``.
+         Variogram model. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``"spherical"``.
     nugget : float, optional
-         Variogram nugget. Only used when ``local_interpolator="kriging"``.
+         Variogram nugget. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``0.1``.
     range : float, optional
-         Variogram range. Only used when ``local_interpolator="kriging"``.
+         Variogram range. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``5000.0``.
     sill : float, optional
-         Variogram sill. Only used when ``local_interpolator="kriging"``.
+         Variogram sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``1.0``.
+    negative_weights : {"clip", "abs"}, optional
+         How ``"wdraw_kriging"`` turns the kriging weights into
+         probabilities: ``"clip"`` sets the negative ones to 0, ``"abs"``
+         takes their absolute value. Default: ``"clip"``.
     metric : str, optional
          Error metric used for the per-cell LOO parameter optimization.
-         Only used when ``local_interpolator="adaptiveidw"``. Default:
-         ``"mae"``.
+         Only used by ``"adaptiveidw"``, ``"sharpidw"`` and their draws.
+         Default: ``"mae"``.
+    kappa_r : float, optional
+         Weight boost of the data the rest of the cell predicts badly,
+         :math:`1 + \\kappa_r |r_j| / s`. Only used by ``"sharpidw"`` and
+         ``"wdraw_sharpidw"``. Default: ``1.5``.
+    kappa_g : float, optional
+         Raise of the exponent with the cell's dimensionless gradient,
+         :math:`p (1 + \\kappa_g \\min(\\varrho, \\varrho_{max}))`. Only
+         used by ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``0.2``.
+    rho_max : float, optional
+         Cap of the cell's dimensionless gradient. Only used by
+         ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``3.0``.
 
     Returns
     -------
@@ -1127,8 +1147,14 @@ def esi_nongriddata(points, values, xi, **kwargs):
 
     Other Parameters
     ----------------
-    local_interpolator : {"idw", "kriging", "adaptiveidw"}, optional
-         Which local interpolator to use within each partition cell.
+    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging"}, optional
+         Which local interpolator (decoder) to use within each partition
+         cell. ``"idw"``, ``"kriging"``, ``"adaptiveidw"`` and
+         ``"sharpidw"`` average the cell's data with weights, while
+         ``"cellmean"`` averages them equally. The ``"draw"`` decoders
+         return a datum of the cell instead, drawn uniformly or with the
+         weights of the decoder they name, so that the ensemble carries the
+         dispersion within the cell.
          Determines which of the interpolator-specific parameters below are
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
@@ -1177,24 +1203,39 @@ def esi_nongriddata(points, values, xi, **kwargs):
              those same two keys plus ``local_interpolator``, ``epsilon``,
              and ``decoder_error``.
     exponent : float, optional
-         IDW distance-decay exponent. Only used when
-         ``local_interpolator="idw"``. Default: ``2.0``.
+         IDW distance-decay exponent. Only used by ``"idw"`` and
+         ``"wdraw_idw"``. Default: ``2.0``.
     model : {"spherical", "exponential", "cubic", "gaussian"}, optional
-         Variogram model. Only used when ``local_interpolator="kriging"``.
+         Variogram model. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``"spherical"``.
     nugget : float, optional
-         Variogram nugget. Only used when ``local_interpolator="kriging"``.
+         Variogram nugget. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``0.1``.
     range : float, optional
-         Variogram range. Only used when ``local_interpolator="kriging"``.
+         Variogram range. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``5000.0``.
     sill : float, optional
-         Variogram sill. Only used when ``local_interpolator="kriging"``.
+         Variogram sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``1.0``.
+    negative_weights : {"clip", "abs"}, optional
+         How ``"wdraw_kriging"`` turns the kriging weights into
+         probabilities: ``"clip"`` sets the negative ones to 0, ``"abs"``
+         takes their absolute value. Default: ``"clip"``.
     metric : str, optional
          Error metric used for the per-cell LOO parameter optimization.
-         Only used when ``local_interpolator="adaptiveidw"``. Default:
-         ``"mae"``.
+         Only used by ``"adaptiveidw"``, ``"sharpidw"`` and their draws.
+         Default: ``"mae"``.
+    kappa_r : float, optional
+         Weight boost of the data the rest of the cell predicts badly,
+         :math:`1 + \\kappa_r |r_j| / s`. Only used by ``"sharpidw"`` and
+         ``"wdraw_sharpidw"``. Default: ``1.5``.
+    kappa_g : float, optional
+         Raise of the exponent with the cell's dimensionless gradient,
+         :math:`p (1 + \\kappa_g \\min(\\varrho, \\varrho_{max}))`. Only
+         used by ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``0.2``.
+    rho_max : float, optional
+         Cap of the cell's dimensionless gradient. Only used by
+         ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``3.0``.
 
     Returns
     -------
@@ -1235,7 +1276,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
         "support_sample_size":  500,
         "callback":             default_singleton_callback,
     },
-    specific_args={
+    specific_args=with_more_decoders({
         li.IDW:          {"exponent":  list(np.arange(1.0, 5.0, 1.0))},
         li.KRIGING:      {
             "model":  ["spherical", "exponential"],
@@ -1244,7 +1285,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
             "sill":   [0.9, 1.0],
         },
         li.ADAPTIVE_IDW: {"metric": ["mae"]},
-    },
+    }, grid=True),
 )
 def esi_pareto_hparams_search(points, values, **kwargs):
     """Pareto hyperparameter optimisation for ESI.
@@ -1261,7 +1302,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     values : array-like, shape (n,)
         Training sample values.
     local_interpolator : str, optional
-        ``"idw"`` (default), ``"kriging"``, or ``"adaptiveidw"``.
+        Any of those of :func:`esi_griddata` (default ``"idw"``).
     p_process : str, optional
         Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
         or ``"voronoi"``.
@@ -1331,15 +1372,8 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         "n_partitions": kwargs["n_partitions"],
         "alpha":        kwargs["alpha"],
     }
-    if kwargs["local_interpolator"] == li.IDW:
-        param_grid["exponent"] = kwargs["exponent"]
-    elif kwargs["local_interpolator"] == li.KRIGING:
-        param_grid["model"]  = kwargs["model"]
-        param_grid["nugget"] = kwargs["nugget"]
-        param_grid["range"]  = kwargs["range"]
-        param_grid["sill"]   = kwargs["sill"]
-    elif kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
-        param_grid["metric"] = kwargs["metric"]
+    for name in decoder_params(kwargs["local_interpolator"]):
+        param_grid[name] = kwargs[name]
 
     # Fixed (non-searchable) interpolator kwargs — execution flags that are
     # forwarded as-is to every ESI call, not iterated over in the grid.
@@ -1390,11 +1424,11 @@ def esi_pareto_hparams_search(points, values, **kwargs):
                                  "callback": default_singleton_callback,
                                  "best_params_found": None
                                  },
-                    specific_args={
+                    specific_args=with_more_decoders({
                         li.IDW: {"exponent": 2.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
                         li.ADAPTIVE_IDW: {"metric": "mae"}
-                    })
+                    }))
 def _call_libspatialize(points, values, xi, **kwargs):
     """
     Call the libspatialize library to perform ESI estimation.
@@ -1495,5 +1529,11 @@ def build_arg_list(points, values, xi, nonpos_args):
     if nonpos_args["local_interpolator"] == li.ADAPTIVE_IDW:
         l_args.insert(-2, nonpos_args["seed"])
         l_args.insert(-2, nonpos_args.get("metric", "mae"))
+
+    if nonpos_args["local_interpolator"] not in _LEGACY_ARGUMENTS:
+        # the other decoders: their parameters in the catalogue's order, then the seed
+        for name in decoder_params(nonpos_args["local_interpolator"]):
+            l_args.insert(-2, nonpos_args[name])
+        l_args.insert(-2, nonpos_args["seed"])
 
     return l_args

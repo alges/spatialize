@@ -22,6 +22,11 @@ from spatialize.logging import log_message
 
 class local_interpolator:
     IDW, KRIGING, ADAPTIVE_IDW = "idw", "kriging", "adaptiveidw"
+    SHARP_IDW = "sharpidw"                              # sharpened adaptive IDW
+    CELLMEAN = "cellmean"                               # the mean of the cell's data
+    DRAW = "draw"                                       # a datum drawn uniformly
+    WDRAW_IDW, WDRAW_ADAPTIVE_IDW = "wdraw_idw", "wdraw_adaptiveidw"
+    WDRAW_SHARP_IDW, WDRAW_KRIGING = "wdraw_sharpidw", "wdraw_kriging"
 
 
 class partitioning_process:
@@ -67,6 +72,44 @@ def _num_threads():
         return 1
     n = session.get("num_threads")
     return 0 if n is None else n
+
+
+#: decoders whose public argument list predates the catalogue (see _through_run)
+_LEGACY_ARGUMENTS = {"idw", "kriging", "adaptiveidw"}
+
+
+def decoder_params(decoder):
+    """Names of a decoder's parameters, in the catalogue's order (Python callables left out)."""
+    return [p["name"] for p in _DECODERS[decoder]["params"] if p["type"] != "callable"]
+
+
+def more_decoders(idw, kriging, adaptive, grid=False):
+    """Defaults of the decoders beyond idw, kriging and adaptiveidw, from a function's own defaults.
+
+    Parameters
+    ----------
+    idw, kriging, adaptive : dict
+        The function's defaults (or search grids) for ``idw``, ``kriging`` and ``adaptiveidw``.
+    grid : bool
+        Whether the defaults are search grids (lists), as in the hyperparameter searches.
+    """
+    one = (lambda x: [x]) if grid else (lambda x: x)
+    sharp = dict(adaptive, kappa_r=one(1.5), kappa_g=one(0.2), rho_max=one(3.0))
+    return {
+        local_interpolator.CELLMEAN: {}, local_interpolator.DRAW: {},
+        local_interpolator.WDRAW_IDW: dict(idw),
+        local_interpolator.WDRAW_KRIGING: dict(kriging, negative_weights=one("clip")),
+        local_interpolator.SHARP_IDW: sharp,
+        local_interpolator.WDRAW_ADAPTIVE_IDW: dict(adaptive),
+        local_interpolator.WDRAW_SHARP_IDW: dict(sharp),
+    }
+
+
+def with_more_decoders(specific, grid=False):
+    """A function's ``signature_overload`` defaults, extended to every decoder of the public API."""
+    out = dict(specific)
+    out.update(more_decoders(specific[local_interpolator.IDW], specific[local_interpolator.KRIGING], specific[local_interpolator.ADAPTIVE_IDW], grid))
+    return out
 
 
 def _dims_text(dims):
@@ -197,7 +240,8 @@ def _through_run(partition, decoder, operation):
     <decoder arguments, seed>, (k, folding_seed,) queries, callback]``, computed by ``run``.
 
     The decoder arguments are, in order, ``exponent`` (idw); ``model, nugget, range, sill``
-    (kriging); and ``metric`` after the seed (adaptive IDW).
+    (kriging); ``metric`` after the seed (adaptive IDW); and for every other decoder its parameters in
+    the catalogue's order, then the seed.
     """
     def call(*args):
         samples, values, n_partitions, alpha = args[:4]
@@ -217,7 +261,8 @@ def _through_run(partition, decoder, operation):
             seed, metric = rest
             params = {"metric": metric}
         else:
-            raise SpatializeError(f"Local interpolator '{decoder}' has no argument list in the public API")
+            *given, seed = rest
+            params = dict(zip(decoder_params(decoder), given))
         return _run(partition, decoder, operation, samples, values, queries, alpha, n_partitions, seed, params,
                     k, folding_seed, visitor, _num_threads())
 

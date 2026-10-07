@@ -1,5 +1,5 @@
 id: S12-edge-cases
-version: 4
+version: 5
 tier: T3
 evaluator: edge_cases
 book:
@@ -40,30 +40,57 @@ estimators:
      params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0}, empty_cells: nan}
   - {id: vd-aidw, encoder: voronoi-data, rate: 8.0, decoder: adaptiveidw,
      params: {metric: mae}, empty_cells: nan}
+  # phase 2 decoders (v5), on the Mondrian and the uniform Voronoi partitions
+  - {id: m-cellmean, encoder: mondrian, rate: 2.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: m-draw, encoder: mondrian, rate: 2.0, decoder: draw, params: {}, empty_cells: nan}
+  - {id: m-wdraw-idw, encoder: mondrian, rate: 2.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: m-wdraw-krig, encoder: mondrian, rate: 2.0, decoder: wdraw_kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0, negative_weights: clip}, empty_cells: nan}
+  - {id: m-sharp, encoder: mondrian, rate: 2.0, decoder: sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: m-wdraw-aidw, encoder: mondrian, rate: 2.0, decoder: wdraw_adaptiveidw, params: {metric: mae}, empty_cells: nan}
+  - {id: m-wdraw-sharp, encoder: mondrian, rate: 2.0, decoder: wdraw_sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: vu-cellmean, encoder: voronoi, rate: 8.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: vu-draw, encoder: voronoi, rate: 8.0, decoder: draw, params: {}, empty_cells: nan}
+  - {id: vu-wdraw-idw, encoder: voronoi, rate: 8.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: vu-wdraw-krig, encoder: voronoi, rate: 8.0, decoder: wdraw_kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.6, sill: 1.0, negative_weights: clip}, empty_cells: nan}
+  - {id: vu-sharp, encoder: voronoi, rate: 8.0, decoder: sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: vu-wdraw-aidw, encoder: voronoi, rate: 8.0, decoder: wdraw_adaptiveidw, params: {metric: mae}, empty_cells: nan}
+  - {id: vu-wdraw-sharp, encoder: voronoi, rate: 8.0, decoder: wdraw_sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
 checks:
   - id: e1
     title: "runs: no error, one member per partition at every query"
     kind: runs
     family: almost-sure
-    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw,
+                 m-cellmean, m-draw, m-wdraw-idw, m-wdraw-krig, m-sharp, m-wdraw-aidw, m-wdraw-sharp, vu-cellmean, vu-draw, vu-wdraw-idw, vu-wdraw-krig, vu-sharp, vu-wdraw-aidw, vu-wdraw-sharp]
   - id: e2
     title: "no infinite values (finite, or NaN for an empty cell)"
     kind: finite
     family: almost-sure
-    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw,
+                 m-cellmean, m-draw, m-wdraw-idw, m-wdraw-krig, m-sharp, m-wdraw-aidw, m-wdraw-sharp, vu-cellmean, vu-draw, vu-wdraw-idw, vu-wdraw-krig, vu-sharp, vu-wdraw-aidw, vu-wdraw-sharp]
   - id: e3
     title: "positive-weight decoders stay within the data range"
     kind: convex
     family: almost-sure
     tolerance: 1.0e-5               # × data range: float32 rounding of a weighted mean
     # not kriging: its weights can be negative, so it may leave the data range by design
-    estimators: [m-idw, m-aidw, vu-idw, vu-aidw, vd-idw, vd-aidw]
+    estimators: [m-idw, m-aidw, vu-idw, vu-aidw, vd-idw, vd-aidw,
+                 m-cellmean, m-draw, m-wdraw-idw, m-wdraw-krig, m-sharp, m-wdraw-aidw, m-wdraw-sharp, vu-cellmean, vu-draw, vu-wdraw-idw, vu-wdraw-krig, vu-sharp, vu-wdraw-aidw, vu-wdraw-sharp]
   - id: e4
     title: "exact interpolators return the datum at its location"
     kind: exact
     family: almost-sure
     tolerance: 1.0e-3               # × data range: float32 linear algebra (kriging) and the 1e-10 guard (adaptive IDW)
-    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw]
+    # not cellmean nor the uniform draw, which do not interpolate; not the kriging draw, whose weights at a
+    # datum are a unit vector only up to float32 rounding
+    estimators: [m-idw, m-krig, m-aidw, vu-idw, vu-krig, vu-aidw, vd-idw, vd-krig, vd-aidw,
+                 m-sharp, m-wdraw-idw, m-wdraw-aidw, m-wdraw-sharp, vu-sharp, vu-wdraw-idw, vu-wdraw-aidw, vu-wdraw-sharp]
 provenance:
   design: "2026-10-06: checks, tolerances and estimators fixed before the first run"
   v2: >
@@ -71,3 +98,7 @@ provenance:
     IDW weighted data by 1/(1+d^p) and did not interpolate exactly; corrected to 1/d^p.
   v3: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"
   v4: "2026-10-07: parameter parallelize removed from the adaptive IDW estimators (Spatialize runs in parallel through its session settings); results unchanged"
+  v5: >
+    2026-10-07: the decoders of phase 2 (cell mean, uniform and weighted draws, sharpened adaptive IDW) on
+    the Mondrian and the uniform Voronoi partitions, in every check that applies to them, with the
+    tolerances unchanged; fixed before their first run.

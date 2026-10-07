@@ -524,8 +524,9 @@ square, part of which lies outside the data box, plus 5 queries placed exactly o
 duplicated.
 
 **Estimators.** Nine estimators combine IDW, kriging and adaptive IDW with Mondrian partitions (rate
-2, about 9 cells) and with both Voronoi profiles (intensity 8), using :math:`T = 50` members (200 in
-``full``).
+2, about 9 cells) and with both Voronoi profiles (intensity 8). Fourteen more, added in version 5,
+combine the cell mean, the uniform draw, the weighted draws and the sharpened adaptive IDW with the
+Mondrian and the uniform Voronoi partitions. All use :math:`T = 50` members (200 in ``full``).
 
 **Checks.** Each check gives one outcome per estimator.
 
@@ -544,13 +545,15 @@ duplicated.
      - all
    * - e3
      - finite members within the data range (up to :math:`10^{-5}` × range, float rounding)
-     - the positive-weight decoders, IDW and adaptive IDW (kriging is excluded, since its weights can
-       be negative)
+     - the positive-weight decoders and the draws, everything but kriging, whose weights can be
+       negative
    * - e4
      - at a query on a datum, every member equals the datum (up to :math:`10^{-3}` × range)
-     - all nine (every decoder interpolates exactly)
+     - the exact interpolators, all but the cell mean and the uniform draw, which do not
+       interpolate, and the kriging draw, whose weights at a datum are a unit vector only up to
+       float32 rounding
 
-**Result.** All 33 outcomes pass, across seeds and in ``full`` mode. The first run found a defect.
+**Result.** All 83 outcomes pass, across seeds and in ``full`` mode, the 50 of version 5 included. The first run found a defect.
 Adaptive IDW did not return the datum at its own location in about 11 % of the members (median error
 1.4 %, maximum 20 % of the data range), because the guard against division by zero capped the
 datum's weight below that of close neighbours under large fitted exponents. The fix gives a query on

@@ -170,6 +170,12 @@ Reproducibility under parallel execution
 
 - **Seeds.** The seeds determine a run fully. The forest, then the decoder's ``fit``, draw from one
   ``std::mt19937`` in a fixed order, while k-fold uses its own ``folding_seed``.
+- **Parallel trees.** Estimation, leave-one-out and k-fold run the trees of the ensemble in
+  parallel under OpenMP, each tree writing only its own column of the result, so the output is
+  bitwise the same for any number of threads. ``OMP_NUM_THREADS`` sets the number of threads.
+  Adaptive IDW with ``parallelize=False`` runs on one thread, as before. A decoder whose
+  ``thread_safe()`` returns false, such as ``CustomDecoder`` with its Python callbacks, keeps the
+  trees serial. An exception raised inside a tree is rethrown once the loop ends.
 - **Parallel adaptive IDW.** With ``parallelize=True`` the per-cell fitting runs under OpenMP. Each
   tree receives its own generator, seeded before the parallel region, so parallel and serial runs
   give bitwise identical results.
@@ -187,7 +193,9 @@ Adding a decoder
 1. Subclass ``Decoder`` in its own file under ``include/spatialize/decoders/``, implementing
    ``leaf_estimation``, ``leaf_loo`` and ``leaf_kfold`` on the samples of one cell. Implement ``fit``
    if the decoder needs per-cell parameters, storing them in ``partition->leaf_params``, and draw
-   any randomness from the generator passed to ``fit`` only.
+   any randomness from the generator passed to ``fit`` only. The ``leaf_*`` methods run on several
+   cells at once, so they must not modify shared state. A decoder that cannot meet this overrides
+   ``thread_safe()`` to return false.
 2. Register it in ``run`` (``src/c++/libspatialize.cpp``) with its parameters.
 3. Test it with the conformance scenarios, which reach any decoder the facade or ``run`` knows
    (:doc:`testing`).

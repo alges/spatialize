@@ -15,6 +15,10 @@ namespace sptlz{
 		public:
 			virtual ~Decoder(){}
 
+			// Whether leaf_estimation / leaf_loo / leaf_kfold may run on several cells at once, from
+			// threads other than the caller's (false for decoders that call into Python).
+			virtual bool thread_safe(){ return true; }
+
 			// Per-cell fitting run once after the forest is built (e.g. adaptive parameters).
 			// `rng` is the ensemble's generator, positioned right after the forest was drawn.
 			virtual void fit(std::vector<Partition*> *forest,

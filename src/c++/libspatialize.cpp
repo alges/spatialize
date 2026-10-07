@@ -487,7 +487,7 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
     else if (method == "kfold") m = EsiMethod::KFOLD;
     else throw std::runtime_error("unknown method '" + method + "' (expected 'estimate', 'loo' or 'kfold')");
 
-    bool parallelize = false;
+    bool parallelize = true;  // all threads, except for adaptiveidw, whose 'parallelize' defaults to false
     sptlz::Decoder *dec;
     if (decoder == "idw"){
         dec = new sptlz::IDWDecoder(required_param<float>(params, "exponent", decoder));

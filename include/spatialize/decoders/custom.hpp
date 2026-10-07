@@ -27,6 +27,9 @@ namespace sptlz{
         kfold_by_leaf = _kfold;
       }
 
+      // the callbacks are Python functions, which need the GIL: one cell at a time
+      bool thread_safe(){ return false; }
+
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params){
         auto _coords = slice(coords, samples_id);
         auto _values = slice(values, samples_id);

@@ -1,0 +1,46 @@
+id: P6-locality
+version: 1
+tier: T2
+evaluator: locality
+book:
+  topic: "the estimate at a location depends only on the data and the partition law"
+  draft_2026_09: "ch 3, the estimator; ch 2, the process law fixed ahead of the data"   # the book is a draft
+purpose: >
+  The law of the estimate at a location must not change when the other locations requested change,
+  since the partitions are drawn from a law fixed on the domain. The same location is estimated with
+  one seed, first together with a few other queries, then with many. With the other queries inside the
+  declared domain the law must stay the same. With the other queries extending past the domain, an
+  implementation that draws its partitions on the box of data and queries changes the law, which the
+  second check documents for Spatialize (its fixed session domain removes the effect).
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+data:
+  n: 150
+  location: [0.5, 0.5]
+  few: 20
+  many: 400
+  beyond: 0.5          # the far queries fill [-0.5, 1.5]²
+  generator_seed: 20261009
+estimators_T: {ci: 3000, full: 12000}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw-theory, encoder: mondrian-theory, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw-voronoi, encoder: voronoi, rate: 36.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+checks:
+  - id: inside
+    title: "the law at a location ignores other queries inside the domain"
+    kind: inside
+    family: two-sample
+    estimators: [idw, idw-theory, idw-voronoi]
+  - id: beyond
+    title: "queries beyond the domain change the box, hence the law at a location"
+    kind: beyond
+    family: two-sample
+    estimators: [idw, idw-theory, idw-voronoi]
+    expect:
+      # Spatialize draws its partitions on the box of data and queries: far queries enlarge the box,
+      # which coarsens the Mondrian cells for the same alpha and spreads the Voronoi nuclei.
+      mondrian: reject
+      mondrian-theory: reject
+      voronoi: reject
+provenance:
+  v1: "2026-10-07: first version (phase 2), with the session domain that makes the box fixed; sizes fixed before the first run"

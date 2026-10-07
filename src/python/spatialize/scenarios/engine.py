@@ -760,8 +760,55 @@ def eval_partition_law(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_locality(sc: Scenario, runner: Runner, mode: str, seed: int,
+                  save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``locality``: the law at a location must not depend on the other queries (P6).
+
+    The members at ``data.location`` are computed twice with one seed, together with two different
+    sets of other queries, and compared by a two-sample Kolmogorov–Smirnov test. Kinds (key
+    ``kind``): ``inside``, the other queries drawn uniformly in the domain, and ``beyond``, drawn in
+    the domain enlarged by ``data.beyond`` on every side, which moves the box of an implementation
+    that draws its partitions on the box of data and queries.
+
+    Reads ``data.n``, ``data.location``, ``data.few``, ``data.many``, ``data.beyond``,
+    ``data.generator_seed`` and ``estimators_T``.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    rng = np.random.default_rng(int(s["data"]["generator_seed"]))
+    box = np.asarray(s["domain"]["box"], float)
+    lo, hi = box[:, 0], box[:, 1]
+    n, d = int(s["data"]["n"]), len(box)
+    pts = (lo + rng.random((n, d)) * (hi - lo)).astype(np.float32)
+    u = (pts - lo) / (hi - lo)
+    vals = (np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1]) + 0.3 * rng.standard_normal(n)).astype(np.float32)
+    v = np.asarray(s["data"]["location"], np.float32)[None, :]
+    few = lo + rng.random((int(s["data"]["few"]), d)) * (hi - lo)
+    many_in = lo + rng.random((int(s["data"]["many"]), d)) * (hi - lo)
+    b = float(s["data"]["beyond"])
+    many_out = (lo - b) + rng.random((int(s["data"]["many"]), d)) * (hi - lo + 2 * b)
+    out = []
+    for check in s["checks"]:
+        for eid in check["estimators"]:
+            est = sc.estimator(next(e for e in s["estimators"] if e["id"] == eid))
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            if not runner.supports(est):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult("two-sample", np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+                continue
+            other = many_in if check["kind"] == "inside" else many_out
+            a_ = np.asarray(runner.members(est, pts, vals, np.vstack([v, few]).astype(np.float32), n_members=T, seed=seed))[0]
+            b_ = np.asarray(runner.members(est, pts, vals, np.vstack([v, other]).astype(np.float32), n_members=T, seed=seed))[0]
+            r = families.two_sample_ks(a_[np.isfinite(a_)], b_[np.isfinite(b_)])
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
-              "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law}
+              "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
+              "locality": eval_locality}
 
 
 # ----------------------------------------------------------------------------- run

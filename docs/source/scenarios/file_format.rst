@@ -35,7 +35,7 @@ Top-level keys
    * - ``evaluator``
      - string
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
-       ``map_visual``, ``edge_cases`` or ``draw_laws`` (below).
+       ``map_visual``, ``edge_cases``, ``draw_laws`` or ``locality`` (below).
    * - ``book``
      - mapping
      - Source in the theory: ``topic`` (by content) and the draft's section, equation and figure
@@ -199,6 +199,16 @@ E1, E3 and E5), its estimators using the ``cellmean`` decoder.
   points (``fourth_cumulant``).
 - per check: ``kind`` (``line_groupings``, ``interval_only``, ``set_cooccurrence``,
   ``fourth_cumulant``), ``estimators`` and ``n_members`` (per mode).
+
+Evaluator ``locality``
+----------------------
+
+This evaluator compares the law at one location estimated with two sets of other queries (scenario
+P6).
+
+- ``data``: ``n`` data uniform in the domain, ``location``, the numbers ``few`` and ``many`` of other
+  queries, ``beyond`` (how far past the domain the ``beyond`` queries reach) and ``generator_seed``.
+- per check: ``kind`` (``inside`` or ``beyond``) and ``estimators``.
 
 Evaluator ``draw_laws``
 -----------------------

@@ -98,7 +98,7 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - empty-cell policy and its diagnostic (phase 3)
    * - :ref:`P6 <scenario-P6>`
      - the law at a location does not depend on the other queries
-     - ready (expected to reject)
+     - **implemented**
      - —
    * - :ref:`P7 <scenario-P7>`
      - covariance of an uncorrelated field against its closed form

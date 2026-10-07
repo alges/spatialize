@@ -9,8 +9,8 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2 and P3 are implemented. P5, P8 and P9 need the empty-cell policy, a planned feature of
-Spatialize, while P1, P4, P6 and P7 can be implemented now.
+P2, P3 and P6 are implemented. P5, P8 and P9 need the empty-cell policy, a planned feature of
+Spatialize, while P1, P4 and P7 can be implemented now.
 
 .. _scenario-P1:
 
@@ -146,22 +146,32 @@ P5 — Residual weight of the decoders
 P6 — Locality
 =============
 
-:Status: ready (not yet implemented), **expected to reject on Spatialize**
+:Status: **implemented**
+:Evaluator: ``locality``
 :Source in the theory: the estimate at a location depends only on the data and the partition law
 :Claim: the law of the estimate at a location does not change when the *other* query locations
   change.
 
-**Setup.** The same data and the same location are estimated together with two different sets of
-other queries (e.g. a small grid, then a large one extending beyond the data).
+**Setup.** 150 data on the unit square carry the field of P2. The location :math:`v = (0.5, 0.5)` is
+estimated twice with one seed, together with 20 other queries, then together with 400. The estimators
+use IDW on the default Mondrian, the theory's Mondrian and the Voronoi partition with uniform nuclei,
+with :math:`T = 3\,000` members in ``ci`` and :math:`12\,000` in ``full``.
 
-**Check.**
+**Checks.**
 
-- *two-sample* (Kolmogorov–Smirnov) between the two laws at the location.
+- *two-sample* (``inside``). With the 400 other queries inside the domain, the Kolmogorov–Smirnov test
+  between the two laws at :math:`v` must not reject.
+- *two-sample* (``beyond``). With the 400 other queries spread over :math:`[-0.5, 1.5]^2`, past the
+  domain, the test is expected to reject on Spatialize.
 
-By default Spatialize draws its partitions on the box of data *and queries*, so its law depends on
-the other queries, which makes the test expected to reject. That run serves as a negative control
-for the test itself (:doc:`encoders`). With a session domain (:doc:`../reference/session`) the box is
-fixed, so the same test is expected to pass.
+Spatialize draws its partitions on the box of the data and the queries. The runner pins that box to
+the declared domain by adding its corners as queries, so other queries inside the domain leave it
+unchanged, while queries beyond it enlarge it. A larger box coarsens the Mondrian cells for the same
+``alpha`` and spreads the Voronoi nuclei, which changes the law at :math:`v`. The second check
+documents that dependence, which a session domain removes (:doc:`../reference/session`).
+
+**Results.** On seeds 1 to 3 the law at :math:`v` is the same with any other queries inside the domain
+(p = 1 for every estimator), while queries beyond it change it (p at most :math:`10^{-6}`).
 
 .. _scenario-P7:
 

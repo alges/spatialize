@@ -1,8 +1,10 @@
 .. _ess:
 
-********************
-ESS Functions
-********************
+***************************
+Ensemble spatial simulation
+***************************
+
+Simulation of whole fields from the predictive laws of an ESI estimation, with the laws fitted and widened as :class:`~spatialize.empirical.FittedModelFactory` sets (:doc:`../theory/ess`).
 
 .. currentmodule:: spatialize.gs.ess
 

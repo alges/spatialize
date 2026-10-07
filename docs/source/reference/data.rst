@@ -1,8 +1,10 @@
 .. _data:
 
-********************
-Data Loading
-********************
+*************************
+Saving, loading, datasets
+*************************
+
+Saving and loading results, and the datasets bundled with Spatialize.
 
 .. currentmodule:: spatialize.data
 

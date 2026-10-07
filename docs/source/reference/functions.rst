@@ -1,11 +1,12 @@
 .. _functions:
 
-**********************************
-Pluggable Functions
-**********************************
+*******************
+Pluggable functions
+*******************
 
-These are the callables that can be passed as ``agg_function``, ``loss_function``,
-or used to score cross-validation results in the ESI API.
+The callables passed as ``agg_function``, which chooses the reading of the members reported as the
+map (:doc:`../theory/sde`), as ``loss_function``, or as the scores of the cross-validation searches
+(:doc:`selection`).
 
 Aggregation functions
 ======================

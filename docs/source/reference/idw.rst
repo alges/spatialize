@@ -1,8 +1,10 @@
 .. _idw:
 
-********************
-IDW Functions
-********************
+*********
+Plain IDW
+*********
+
+Plain inverse distance weighting, without partitions, kept as a baseline to compare the ensemble estimates with.
 
 .. currentmodule:: spatialize.gs.idw
 

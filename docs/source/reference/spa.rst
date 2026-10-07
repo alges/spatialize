@@ -1,8 +1,10 @@
 .. _spa:
 
-***************************
-Spatial Analysis Utilities
-***************************
+******************
+Posterior analysis
+******************
+
+The cross-validated predictive law at each datum and its analysis, which ranks the data by how far into the tails of their laws they fall (:doc:`../theory/other`).
 
 .. currentmodule:: spatialize.gs.spa
 

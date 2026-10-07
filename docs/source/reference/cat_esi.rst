@@ -1,8 +1,10 @@
 .. _cat_esi:
 
-**************************
-Categorical ESI (Cat-ESI)
-**************************
+***************
+Categorical ESI
+***************
+
+Estimation of a categorical variable with a classifier fitted inside each cell, returning the share of each category among the members at each location (:doc:`../theory/other`).
 
 .. currentmodule:: spatialize.gs.cat_esi
 

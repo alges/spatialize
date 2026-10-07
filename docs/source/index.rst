@@ -71,7 +71,8 @@ ensemble spatial interpolation with an IDW local interpolator.
    precision  = result.precision()    # uncertainty / error metric
    result.quick_plot()                # visualize
 
-See the :doc:`API Reference <reference/index>` for the full set of parameters and interpolators.
+The :doc:`Theory <theory/index>` pages explain the method and how to choose its partitions and
+local models, while the :doc:`API Reference <reference/index>` lists every function and parameter.
 
 .. _citation:
 

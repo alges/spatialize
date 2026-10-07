@@ -1,8 +1,10 @@
 .. _evaluation:
 
-********************
-Evaluation Toolkit
-********************
+**********
+Evaluation
+**********
+
+Error metrics, cross-validation helpers and classical baselines to compare Spatialize's estimates with.
 
 .. currentmodule:: spatialize.evaluation
 

@@ -3,31 +3,56 @@
 .. _reference:
 
 #############
-Documentation
+API Reference
 #############
 
 :Release: |version|
 :Date: |today|
 
-This reference manual details functions, modules, and objects
-included in Spatialize, describing what they are and what they do.
-
-Python API
-==========
+The functions and classes of Spatialize, grouped by the task they serve. Each page opens with a
+pointer to the :doc:`../theory/index` page that explains the method behind it.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Estimation
 
    esi
    cat_esi
-   ess
-   spa
    idw
    functions
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Choosing a model
+
+   selection
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Predictive laws
+
+   ess
    empirical
-   evaluation
-   viz
-   data
-   result
+   spa
+   esmi
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Settings
+
    session
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Results
+
+   result
+   data
+   viz
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Testing
+
+   evaluation
    scenarios

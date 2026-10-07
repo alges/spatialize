@@ -1,8 +1,8 @@
 .. _session:
 
-********************
-Session Settings
-********************
+****************
+Session settings
+****************
 
 .. automodule:: spatialize.session
    :no-members:

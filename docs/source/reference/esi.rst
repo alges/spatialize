@@ -1,8 +1,13 @@
 .. _esi:
 
-********************
-ESI Functions
-********************
+******************************
+Ensemble spatial interpolation
+******************************
+
+Estimation on a grid or at a list of locations, returning the members of the ensemble at each
+location together with the reported map and its uncertainty (:doc:`../theory/esi`). The partition
+is chosen with ``p_process`` (:doc:`../theory/encoders`) and the local model with
+``local_interpolator`` (:doc:`../theory/decoders`).
 
 .. currentmodule:: spatialize.gs.esi
 
@@ -10,23 +15,7 @@ ESI Functions
 
 .. autofunction:: esi_nongriddata
 
-.. autofunction:: esi_hparams_search
-
-.. autofunction:: esi_pareto_hparams_search
-
 .. autoclass:: ESIResult
-   :members:
-   :exclude-members: load, save
-   :undoc-members:
-   :inherited-members:
-
-.. autoclass:: ESIGridSearchResult
-   :members:
-   :exclude-members: load, save
-   :undoc-members:
-   :inherited-members:
-
-.. autoclass:: ESIParetoResult
    :members:
    :exclude-members: load, save
    :undoc-members:

@@ -1,8 +1,10 @@
 .. _empirical:
 
-********************
-Empirical Modeling
-********************
+***********
+Fitted laws
+***********
+
+The laws fitted to the members at each location, by kernel density or Gaussian mixtures, with their optional widening (:doc:`../theory/ess`).
 
 .. currentmodule:: spatialize.empirical
 

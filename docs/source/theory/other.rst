@@ -24,8 +24,8 @@ estimate the probability of each category there. A nearest-neighbour classifier 
 anisotropic metric is built in, and any classifier with the scikit-learn interface can take its
 place.
 
-Entropy and mutual information
-==============================
+Information measures
+====================
 
 The entropy of the predictive law at a location summarises its uncertainty in one number that does
 not assume the law is symmetric or unimodal. For two variables measured over the same region, the

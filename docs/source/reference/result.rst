@@ -1,8 +1,10 @@
 .. _result:
 
-********************
-Base Result Classes
-********************
+**************
+Result classes
+**************
+
+The classes the results of the estimations and searches derive from.
 
 .. currentmodule:: spatialize.result
 

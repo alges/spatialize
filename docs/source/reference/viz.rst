@@ -1,8 +1,10 @@
 .. _viz:
 
-********************
-Visualization
-********************
+*****
+Plots
+*****
+
+Plotting helpers and the colour themes the result classes use.
 
 .. currentmodule:: spatialize.viz
 

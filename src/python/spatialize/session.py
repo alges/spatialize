@@ -132,22 +132,3 @@ def show():
         mark = "" if value == _DEFAULTS[name] else "   (set)"
         print(f"{name} = {value!r}{mark}")
 
-
-# --------------------------------------------------------------------------------------------------
-# internal helpers for the facade
-
-
-def _domain_corners(d):
-    """The two opposite corners of the session domain as a float32 (2, d) array, or None."""
-    box = get("domain")
-    if box is None:
-        return None
-    if len(box) != d:
-        raise SpatializeError(f"the session domain has {len(box)} coordinates but the data have {d}")
-    return np.asarray(box, dtype=np.float32).T.copy()
-
-
-def _check_inside(corners, what, arr):
-    arr = np.asarray(arr, dtype=np.float32)
-    if arr.size and (np.any(arr < corners[0]) or np.any(arr > corners[1])):
-        raise SpatializeError(f"some {what} lie outside the session domain {get('domain')}")

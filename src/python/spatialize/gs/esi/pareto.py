@@ -27,11 +27,11 @@ import numpy as np
 from itertools import permutations, product
 
 import spatialize.gs.esi.scorefunction as sf
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li
+from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, _domain_corners
 from spatialize.gs.esi._main import build_arg_list
 from spatialize.empirical import EmpiricalModel, FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
-from spatialize import logging, session
+from spatialize import logging
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class EmpiricalRobustnessBound:
         # Step 2 — spatial encoder cell assignments, on the partitions of step 1: with a session
         # domain, its corners join the samples (the trees do not depend on the samples) and their
         # rows are dropped
-        corners = session._domain_corners(points.shape[1])
+        corners = _domain_corners(points.shape[1])
         located = points if corners is None else np.vstack([points, corners])
         self.leaf_indexes = lib_spatialize_facade.get_leaf_for_samples_using_esi(
             located, self.n_partitions, self.alpha, None, self.seed

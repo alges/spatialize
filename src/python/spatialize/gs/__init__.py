@@ -224,6 +224,23 @@ def _through_run(partition, decoder, operation):
     return call
 
 
+def _domain_corners(d):
+    """The two opposite corners of the session domain as a float32 (2, d) array, or None."""
+    box = session.get("domain")
+    if box is None:
+        return None
+    if len(box) != d:
+        raise SpatializeError(f"the session domain has {len(box)} coordinates but the data have {d}")
+    return np.asarray(box, dtype=np.float32).T.copy()
+
+
+def _check_inside(corners, what, arr):
+    """Raise if some rows of ``arr`` lie outside the box spanned by ``corners``."""
+    arr = np.asarray(arr, dtype=np.float32)
+    if arr.size and (np.any(arr < corners[0]) or np.any(arr > corners[1])):
+        raise SpatializeError(f"some {what} lie outside the session domain {session.get('domain')}")
+
+
 def _in_session_domain(function, operation, queries_at):
     """Wrap an operation so that its partitions are drawn on the session domain.
 
@@ -234,13 +251,13 @@ def _in_session_domain(function, operation, queries_at):
     """
     def call(*args):
         samples = args[0]
-        corners = session._domain_corners(int(np.shape(samples)[1]))
+        corners = _domain_corners(int(np.shape(samples)[1]))
         if corners is None:
             return function(*args)
         args = list(args)
         queries = np.asarray(args[queries_at], dtype=np.float32)
-        session._check_inside(corners, "data", samples)
-        session._check_inside(corners, "queries", queries)
+        _check_inside(corners, "data", samples)
+        _check_inside(corners, "queries", queries)
         args[queries_at] = np.vstack([queries, corners])
         estimation, members = function(*args)
         if operation == "estimate":

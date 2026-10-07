@@ -57,12 +57,18 @@ the square of the reference.
 
 **Checks.**
 
-- *almost-sure* (``support``). Every finite member of ``wdraw_idw``, ``draw`` and ``wdraw_kriging``
-  is one of the data values.
+- *almost-sure* (``support``). Every finite member of ``wdraw_idw``, ``draw``, ``wdraw_kriging``,
+  ``wdraw_adaptiveidw`` and ``wdraw_sharpidw`` is one of the data values.
 - *identity* (``mean``). At each query, the mean over the members of ``wdraw_idw`` minus ``idw``,
   divided by its standard error, is a :math:`z`; the 60 values are combined as
-  :math:`\sum z^2 \sim \chi^2_{60}`. The same for ``draw`` against ``cellmean``.
-- *identity* (``variance``). The same for the squared difference minus the weighted dispersion.
+  :math:`\sum z^2 \sim \chi^2_{60}`. The same for ``draw`` against ``cellmean``,
+  ``wdraw_adaptiveidw`` against ``adaptiveidw`` and ``wdraw_sharpidw`` against ``sharpidw``.
+- *identity* (``variance``). The same for the squared difference minus the weighted dispersion, for
+  ``wdraw_idw`` and ``draw``. The dispersion is read as the reference applied to the squared values
+  minus the square of the reference, which needs weights that do not depend on the values. The
+  adaptive and sharpened weights are fitted from the values, so their variance identity is left
+  out. It was tried and failed on every seed, because running the reference on the squared values
+  refits its weights.
 - *negative control*. The mean of ``wdraw_idw`` against ``cellmean``, a reference with other
   weights, must reject.
 

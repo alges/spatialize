@@ -22,6 +22,7 @@
 #include "spatialize/decoders/adaptive_idw.hpp"
 #include "spatialize/decoders/custom.hpp"
 #include "spatialize/decoders/draw.hpp"
+#include "spatialize/decoders/sharpened.hpp"
 
 namespace py = pybind11;
 
@@ -230,6 +231,24 @@ namespace registry {
        1, ANY, true,
        {},
        nullptr});
+    specs.push_back({"sharpidw", "The sharpened adaptive IDW: residual-boosted weights and an exponent raised with the cell's gradient.",
+       2, 3, true,
+       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
+        {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
+        {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},
+        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}},
+       nullptr});
+    specs.push_back({"wdraw_adaptiveidw", "A datum of the cell drawn with probability proportional to its adaptive IDW weight.",
+       2, 3, true,
+       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}},
+       nullptr});
+    specs.push_back({"wdraw_sharpidw", "A datum of the cell drawn with probability proportional to its sharpened adaptive IDW weight.",
+       2, 3, true,
+       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
+        {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
+        {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},
+        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}},
+       nullptr});
     // factories, which read the parameters through their own spec
     specs[0].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       return(new sptlz::IDWDecoder(param<float>(decoders()[0], p, "exponent")));
@@ -260,6 +279,20 @@ namespace registry {
     };
     specs[7].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       return(new sptlz::WeightedMeanDecoder(new sptlz::UniformWeights()));
+    };
+    specs[8].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      const DecoderSpec &s = decoders()[8];
+      return(new sptlz::SharpenedIDWDecoder(d, s.params[0].choices[param<int>(s, p, "metric")-1], param<float>(s, p, "kappa_r"),
+                                            param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max")));
+    };
+    specs[9].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      const DecoderSpec &s = decoders()[9];
+      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], 0.0f, 0.0f, 0.0f)));
+    };
+    specs[10].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      const DecoderSpec &s = decoders()[10];
+      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], param<float>(s, p, "kappa_r"),
+                                                                param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max"))));
     };
     return(specs);
   }

@@ -56,16 +56,22 @@ namespace sptlz{
   // ----------------------------------------------------------------------------------------------
   // weights of a cell's data at a batch of points: one row per point, one column per datum
 
+  // `cell_values` and `params` (the cell's fitted parameters, see Decoder::fit) serve the weights
+  // that depend on them (adaptive and sharpened IDW); the others ignore them.
   class CellWeights {
     public:
       virtual ~CellWeights(){}
-      virtual std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<std::vector<float>> *points) = 0;
+      virtual std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<float> *cell_values,
+                                                 std::vector<std::vector<float>> *points, std::vector<float> *params) = 0;
+      // per-cell fitting, run once after the forest is drawn (as Decoder::fit)
+      virtual void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                       std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){}
   };
 
   // every datum equally likely (the block-mark decoder)
   class UniformWeights: public CellWeights {
     public:
-      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<std::vector<float>> *points){
+      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<float> *cell_values, std::vector<std::vector<float>> *points, std::vector<float> *params){
         return(std::vector<std::vector<float>>(points->size(), std::vector<float>(cell_coords->size(), 1.0f)));
       }
   };
@@ -76,7 +82,7 @@ namespace sptlz{
       float exponent;
     public:
       IDWWeights(float _exponent): exponent(_exponent){}
-      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<std::vector<float>> *points){
+      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<float> *cell_values, std::vector<std::vector<float>> *points, std::vector<float> *params){
         std::vector<std::vector<float>> result;
         for(auto &p: *points){
           std::vector<float> d, w;
@@ -108,7 +114,7 @@ namespace sptlz{
         else if(negative_weights == "abs") use_abs = true;
         else throw std::runtime_error("negative_weights must be 'clip' or 'abs', not '" + negative_weights + "'");
       }
-      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<std::vector<float>> *points){
+      std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<float> *cell_values, std::vector<std::vector<float>> *points, std::vector<float> *params){
         auto result = kriging.weights(cell_coords, points);
         for(size_t q=0; q<result.size(); q++){
           double total = 0.0;
@@ -146,16 +152,21 @@ namespace sptlz{
         return(sw > 0 ? static_cast<float>(swv/sw) : NAN);
       }
 
-      float mean_from(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> &ids, int target){
+      float mean_from(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> &ids, int target, std::vector<float> *params){
         auto sl_coords = slice(coords, &ids);
         auto sl_values = slice(values, &ids);
         std::vector<std::vector<float>> point = {coords->at(target)};
-        auto w = weights->at(&sl_coords, &point);
+        auto w = weights->at(&sl_coords, &sl_values, &point, params);
         return(mean_of(w[0], sl_values));
       }
 
     public:
       WeightedMeanDecoder(CellWeights *_weights): weights(_weights){}
+
+      void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
+               std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){
+        weights->fit(forest, coords, values, rng, visitor, class_name);
+      }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result(locations_id->size(), NAN);
@@ -165,7 +176,7 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_points = slice(locations, locations_id);
-        auto w = weights->at(&sl_coords, &sl_points);
+        auto w = weights->at(&sl_coords, &sl_values, &sl_points, params);
         for(size_t q=0; q<locations_id->size(); q++){
           result[q] = mean_of(w[q], sl_values);
         }
@@ -182,7 +193,7 @@ namespace sptlz{
           for(size_t j=0; j<samples_id->size(); j++){
             if(i != j) others.push_back(samples_id->at(j));
           }
-          result[i] = mean_from(coords, values, others, samples_id->at(i));
+          result[i] = mean_from(coords, values, others, samples_id->at(i), params);
         }
         return(result);
       }
@@ -199,7 +210,7 @@ namespace sptlz{
           std::vector<int> train;
           for(int l: test_train.second) train.push_back(samples_id->at(l));
           for(int j: test_train.first){
-            result.at(j) = mean_from(coords, values, train, samples_id->at(j));
+            result.at(j) = mean_from(coords, values, train, samples_id->at(j), params);
           }
         }
         return(result);
@@ -213,6 +224,11 @@ namespace sptlz{
     public:
       DrawDecoder(CellWeights *_weights): weights(_weights){}
 
+      void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
+               std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){
+        weights->fit(forest, coords, values, rng, visitor, class_name);
+      }
+
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result(locations_id->size(), NAN);
         if(samples_id->empty() || locations_id->empty()){
@@ -221,7 +237,7 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_points = slice(locations, locations_id);
-        auto w = weights->at(&sl_coords, &sl_points);
+        auto w = weights->at(&sl_coords, &sl_values, &sl_points, params);
         for(size_t q=0; q<locations_id->size(); q++){
           int j = draw_index(w[q], draw_uniform(cell, locations_id->at(q), DrawRole::ESTIMATE));
           if(j >= 0) result[q] = sl_values[j];
@@ -240,7 +256,7 @@ namespace sptlz{
           for(size_t j=0; j<samples_id->size(); j++){
             if(i != j) others.push_back(samples_id->at(j));
           }
-          result[i] = draw_from(coords, values, others, samples_id->at(i), cell, DrawRole::LOO);
+          result[i] = draw_from(coords, values, others, samples_id->at(i), params, cell, DrawRole::LOO);
         }
         return(result);
       }
@@ -258,17 +274,18 @@ namespace sptlz{
           std::vector<int> train;
           for(int l: test_train.second) train.push_back(samples_id->at(l));
           for(int j: test_train.first){
-            result.at(j) = draw_from(coords, values, train, samples_id->at(j), cell, DrawRole::KFOLD);
+            result.at(j) = draw_from(coords, values, train, samples_id->at(j), params, cell, DrawRole::KFOLD);
           }
         }
         return(result);
       }
 
     protected:
-      float draw_from(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> &ids, int target, const CellContext &cell, DrawRole role){
+      float draw_from(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> &ids, int target, std::vector<float> *params, const CellContext &cell, DrawRole role){
         auto sl_coords = slice(coords, &ids);
+        auto sl_values = slice(values, &ids);
         std::vector<std::vector<float>> point = {coords->at(target)};
-        auto w = weights->at(&sl_coords, &point);
+        auto w = weights->at(&sl_coords, &sl_values, &point, params);
         int j = draw_index(w[0], draw_uniform(cell, target, role));
         return(j < 0 ? NAN : values->at(ids[j]));
       }

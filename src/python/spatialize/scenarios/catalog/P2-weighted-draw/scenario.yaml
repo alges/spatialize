@@ -1,5 +1,5 @@
 id: P2-weighted-draw
-version: 1
+version: 2
 tier: T2
 evaluator: draw_laws
 book:
@@ -24,9 +24,15 @@ estimators:
   - {id: cellmean, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: nan}
   - {id: wdraw-kriging, encoder: mondrian, rate: 4.0, decoder: wdraw_kriging,
      params: {model: exponential, nugget: 0.0, range: 0.4, sill: 1.0, negative_weights: clip}, empty_cells: nan}
+  - {id: wdraw-aidw, encoder: mondrian, rate: 4.0, decoder: wdraw_adaptiveidw, params: {metric: mae}, empty_cells: nan}
+  - {id: aidw, encoder: mondrian, rate: 4.0, decoder: adaptiveidw, params: {metric: mae}, empty_cells: nan}
+  - {id: wdraw-sharp, encoder: mondrian, rate: 4.0, decoder: wdraw_sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
+  - {id: sharp, encoder: mondrian, rate: 4.0, decoder: sharpidw,
+     params: {metric: mae, kappa_r: 1.5, kappa_g: 0.2, rho_max: 3.0}, empty_cells: nan}
 checks:
   - {id: support, title: "every member is an observed value", kind: support, family: almost-sure,
-     estimators: [wdraw-idw, draw, wdraw-kriging]}
+     estimators: [wdraw-idw, draw, wdraw-kriging, wdraw-aidw, wdraw-sharp]}
   - {id: mean-wdraw-idw, title: "mean of the draws = IDW", kind: mean, family: identity,
      estimator: wdraw-idw, reference: idw}
   - {id: variance-wdraw-idw, title: "variance of the draws = weighted dispersion", kind: variance, family: identity,
@@ -35,7 +41,19 @@ checks:
      estimator: draw, reference: cellmean}
   - {id: variance-draw, title: "variance of the uniform draws = cell variance", kind: variance, family: identity,
      estimator: draw, reference: cellmean}
+  - {id: mean-wdraw-aidw, title: "mean of the draws = adaptive IDW", kind: mean, family: identity,
+     estimator: wdraw-aidw, reference: aidw}
+  - {id: mean-wdraw-sharp, title: "mean of the draws = sharpened adaptive IDW", kind: mean, family: identity,
+     estimator: wdraw-sharp, reference: sharp}
+  # No variance identity for the adaptive and sharpened draws: the dispersion is read as
+  # reference(z²) − reference(z)², which needs weights independent of the values, while these fit
+  # theirs from the values (and the sharpened ones boost by residuals).
   - {id: control-mean, title: "negative control: the weighted draw's mean is not the cell mean", kind: mean,
      family: identity, estimator: wdraw-idw, reference: cellmean, expect: {mondrian: reject}}
 provenance:
   v1: "2026-10-07: first version, with the draw decoders of phase 2; T fixed before the first run"
+  v2: >
+    2026-10-07: the adaptive and sharpened weighted draws added against their averaging decoders, same
+    T. Their variance identities were tried and removed before release: they failed on every seed
+    because reading the dispersion as reference(z²) − reference(z)² refits the value-dependent weights
+    on z², which tests the reading, not the decoder. Support and mean identities kept.

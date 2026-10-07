@@ -152,6 +152,16 @@ Every partition works with every decoder, in the dimensions both support.
    * - ``wdraw_kriging``
      - 1 or more
      - a datum drawn with probability proportional to its kriging weight, made non-negative
+   * - ``sharpidw``
+     - 2 or 3
+     - the sharpened adaptive IDW, with residual-boosted weights and an exponent raised with the
+       cell's gradient
+   * - ``wdraw_adaptiveidw``
+     - 2 or 3
+     - a datum drawn with probability proportional to its adaptive IDW weight
+   * - ``wdraw_sharpidw``
+     - 2 or 3
+     - a datum drawn with probability proportional to its sharpened weight
 
 The decoders that draw take their random numbers from the run's seed, the tree and the query alone,
 so a draw depends neither on the number of threads nor on the other queries. With one seed they see

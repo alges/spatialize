@@ -111,6 +111,14 @@ def cases(lib):
                                                       {"metric": "mae"}, method, num_threads=1))
         add(f"{pre}_custom_esi", "2d", run("mondrian", ALPHA, T, "custom", custom[method], method))
 
+    # the decoders of phase 2 (draws, cell mean, sharpened adaptive IDW), pinned from their first version
+    phase2 = [("cellmean", {}, T), ("draw", {}, T), ("wdraw_idw", {"exponent": EXP}, T),
+              ("wdraw_kriging", dict(krig, negative_weights="clip"), T),
+              ("sharpidw", {}, T_ADAPTIVE), ("wdraw_adaptiveidw", {}, T_ADAPTIVE), ("wdraw_sharpidw", {}, T_ADAPTIVE)]
+    for decoder, params, forest_size in phase2:
+        for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
+            add(f"{pre}_{decoder}", "2d", run("mondrian", ALPHA, forest_size, decoder, params, method))
+
     # co-estimation: two variables observed at the same locations (3D samples array: variables x n x d)
     co = lambda s, v: (np.stack([s, s]), np.stack([v, np.log(v)]).astype(np.float32))
     add("estimation_custom_coesi", "2d", lambda s, v, q: lib.estimation_custom_coesi(*co(s, v), T, ALPHA, SEED, q, None, lambda c_, v_, l_, p_: np.full(len(l_), v_.mean(), np.float32), _post_creation, _estimation, _aggregation, None))

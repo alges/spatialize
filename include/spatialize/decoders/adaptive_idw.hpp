@@ -19,6 +19,46 @@ namespace sptlz{
   constexpr float DEFAULT_EXPONENT = 2.0f;
   constexpr float DEFAULT_ANISOTROPY = 1.0f;
 
+  // Leave-one-out error of IDW on a line, as a function of the exponent alone.
+  class LOO1D{
+    protected:
+      std::vector<std::vector<float>> *coords;
+      std::vector<float> *values;
+      bool use_mse;  // true for MSE, false for MAE
+
+    public:
+      LOO1D(std::vector<std::vector<float>> *_coords, std::vector<float> *_values, std::string metric = "mae"){
+        values = _values;
+        coords = _coords;
+        use_mse = (metric == "mse");
+      }
+
+      float eval(std::vector<float> X){
+        int n = static_cast<int>(values->size());
+        float r = 0.0;
+
+        #ifdef _OPENMP
+        #pragma omp parallel for reduction(+:r) schedule(static)
+        #endif
+        for(int i=0; i<n; i++){
+          float sum_w = 0.0;
+          float est = 0.0;
+          float wj, dist;
+          for(int j=0;j<n;j++){
+            if(j!=i){
+              dist = std::abs(coords->at(i).at(0) - coords->at(j).at(0));
+              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
+              sum_w += wj;
+              est += wj*values->at(j);
+            }
+          }
+          float error = (sum_w > EPSILON) ? values->at(i) - est/sum_w : values->at(i);
+          r += use_mse ? (error * error) : std::abs(error);
+        }
+        return(r/n);
+      }
+  };
+
   class LOO2D{
     protected:
       std::vector<std::vector<float>> *coords;
@@ -123,7 +163,7 @@ namespace sptlz{
       }
   };
 
-  // Adaptive IDW: per-cell exponent and anisotropy fitted by leave-one-out (2D and 3D).
+  // Adaptive IDW: per-cell exponent and anisotropy fitted by leave-one-out (1D: the exponent alone).
   class AdaptiveIDWDecoder: public Decoder {
     protected:
       int d, k;
@@ -136,7 +176,12 @@ namespace sptlz{
     public:
       AdaptiveIDWDecoder(int dim, std::string _metric="mae"){
         this->metric = _metric;
-        if(dim==2){
+        if(dim==1){
+          this->d = 1;
+          this->param_ranges = {{0.5f, 10.0f}};  // exponent p
+          this->steps = {0.5f};
+          this->ns = {19};
+        }else if(dim==2){
           this->d = 2;
           this->param_ranges = {
             {  0.5f, 10.0f},  // exponent p
@@ -158,7 +203,7 @@ namespace sptlz{
           this->steps = {0.5f, 10.0f, 10.0f, 10.0f, 0.2f, 0.2f};
           this->ns = {19, 18, 18, 18, 25, 25};
         }else{
-          throw std::runtime_error("ADAPTIVE_ESI_IDW available just for 2D and 3D");
+          throw std::runtime_error("adaptive IDW is available in 1D, 2D and 3D");
         }
         this->k = (int)std::ceil(0.1*std::pow(3, this->ns.size()));
       }
@@ -192,10 +237,7 @@ namespace sptlz{
         std::vector<float> centroid;
         int i_params = 0;
 
-        centroid.push_back(params->at(i_params++));
-        centroid.push_back(params->at(i_params++));
-
-        if(coords->at(0).size()==3){
+        for(size_t c=0; c<coords->at(0).size(); c++){
           centroid.push_back(params->at(i_params++));
         }
 
@@ -260,9 +302,7 @@ namespace sptlz{
         auto sl_values = slice(values, samples_id);
         std::vector<float> centroid;
         int i_params = 0;
-        centroid.push_back(params->at(i_params++));
-        centroid.push_back(params->at(i_params++));
-        if(coords->at(0).size()==3){
+        for(size_t c=0; c<coords->at(0).size(); c++){
           centroid.push_back(params->at(i_params++));
         }
 
@@ -315,9 +355,7 @@ namespace sptlz{
 
         std::vector<float> centroid;
         int i_params = 0;
-        centroid.push_back(params->at(i_params++));
-        centroid.push_back(params->at(i_params++));
-        if(coords->at(0).size()==3){
+        for(size_t c=0; c<coords->at(0).size(); c++){
           centroid.push_back(params->at(i_params++));
         }
 
@@ -488,7 +526,9 @@ namespace sptlz{
         }else if(coords->size()==1){
           // Return default parameters with centroid
           auto centroid = sptlz::get_centroid(coords);
-          if(coords->at(0).size()==2){
+          if(coords->at(0).size()==1){
+            return(std::vector<float>({centroid[0], DEFAULT_EXPONENT}));
+          }else if(coords->at(0).size()==2){
             return(std::vector<float>({centroid[0], centroid[1], DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY}));
           }else{
             return(std::vector<float>({centroid[0], centroid[1], centroid[2], DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY}));
@@ -496,7 +536,24 @@ namespace sptlz{
         }
 
         std::vector<float> min_coords;
-        if(coords->at(0).size()==2){
+        if(coords->at(0).size()==1){
+          std::vector<float> starting_point, candidate;
+          float min_value=1e20f, aux;
+          LOO1D *func = new LOO1D(coords, values, this->metric);
+          std::vector<std::vector<float>> ranges = {
+            {0.1f, 8.0f, 0.2f}     // exponent p
+          };
+          for(int i=0; i<best_of; i++){
+            starting_point = {ranges.at(0).at(0)+uni_float(rng)*(ranges.at(0).at(1)-ranges.at(0).at(0))};
+            candidate = sptlz::grid_search<LOO1D>(func, &ranges, starting_point);
+            aux = func->eval(candidate);
+            if(aux<min_value){
+              min_coords = candidate;
+              min_value = aux;
+            }
+          }
+          delete func;
+        }else if(coords->at(0).size()==2){
           std::vector<float> starting_point, candidate;
           float min_value=1e20f, aux;
           LOO2D *func = new LOO2D(coords, values, this->metric);
@@ -546,7 +603,9 @@ namespace sptlz{
         }
 
         if(min_coords.size()==0){ // Fallback if optimization failed
-          if (coords->at(0).size()==2){
+          if (coords->at(0).size()==1){
+            min_coords = {DEFAULT_EXPONENT};
+          }else if (coords->at(0).size()==2){
             min_coords = {DEFAULT_EXPONENT, 0.0f, DEFAULT_ANISOTROPY};
           }else if(coords->at(0).size()==3){
             min_coords = {DEFAULT_EXPONENT, 0.0f, 0.0f, 0.0f, DEFAULT_ANISOTROPY, DEFAULT_ANISOTROPY};

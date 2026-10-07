@@ -93,7 +93,8 @@ where :math:`A_\theta` rotates by an azimuth :math:`\varphi` and stretches by an
 :math:`a_f`, three angles and two elongations in three dimensions. The exponent and
 :math:`\theta = (\varphi, a_f)` are fitted once per cell by minimising the leave-one-out error of
 the cell's data. Prefer it when the field is continuous along a direction that is unknown or varies
-across the domain. The per-cell fit makes it slower than IDW. It works in two and three dimensions.
+across the domain. The per-cell fit makes it slower than IDW. It works in one, two and three
+dimensions. On a line there is no direction to fit, so only the exponent is fitted.
 
 **Sharpened adaptive IDW** (``sharpidw``). It starts from the adaptive fit :math:`(p, \theta)` of
 the cell and changes it twice. The leave-one-out residuals of that fit and their median,

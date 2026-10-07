@@ -222,7 +222,12 @@ namespace sptlz{
     std::vector<std::vector<float>> tr_coords;
     tr_coords.reserve(n);
 
-    if (d==2){
+    if (d==1){
+      // a line has no direction to fit: the coordinate is only centred
+      for(int i=0; i<n; i++){
+        tr_coords.push_back({coords[i]-centroid[0]});
+      }
+    }else if (d==2){
       // Rotation matrix R_φ with anisotropy factor a_f applied to x-component
       // According to paper: R_φ = [cos(φ) -sin(φ); sin(φ) cos(φ)], then multiply by [a_f; 1]
       // Result: [a_f*cos(φ) -a_f*sin(φ); sin(φ) cos(φ)]

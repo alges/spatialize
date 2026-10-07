@@ -201,7 +201,7 @@ namespace registry {
         {"sill", "float", "sill", true, py::none(), {}}},
        nullptr});
     specs.push_back({"adaptiveidw", "IDW whose exponent and anisotropy are fitted in each cell.",
-       2, 3, true,
+       1, 3, true,
        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}},
        nullptr});
     specs.push_back({"custom", "A decoder given by Python callables on the samples of each cell.",
@@ -232,18 +232,18 @@ namespace registry {
        {},
        nullptr});
     specs.push_back({"sharpidw", "The sharpened adaptive IDW: residual-boosted weights and an exponent raised with the cell's gradient.",
-       2, 3, true,
+       1, 3, true,
        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
         {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
         {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},
         {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}},
        nullptr});
     specs.push_back({"wdraw_adaptiveidw", "A datum of the cell drawn with probability proportional to its adaptive IDW weight.",
-       2, 3, true,
+       1, 3, true,
        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}},
        nullptr});
     specs.push_back({"wdraw_sharpidw", "A datum of the cell drawn with probability proportional to its sharpened adaptive IDW weight.",
-       2, 3, true,
+       1, 3, true,
        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
         {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
         {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},

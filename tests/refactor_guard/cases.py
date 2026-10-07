@@ -38,7 +38,9 @@ def datasets():
     rng = np.random.default_rng(GENERATOR_SEED)
     s2, v2, q2 = _block_mark_field(rng, 2, n_samples=80, n_cells=12, n_queries=15)  # 15x15 grid
     s3, v3, q3 = _block_mark_field(rng, 3, n_samples=80, n_cells=12, n_queries=60)
-    return {"2d": (s2, v2, q2), "3d": (s3, v3, q3)}
+    # drawn after the others, so the 2D and 3D inputs stay those of the earlier snapshots
+    s1, v1, q1 = _block_mark_field(rng, 1, n_samples=80, n_cells=12, n_queries=60)
+    return {"2d": (s2, v2, q2), "3d": (s3, v3, q3), "1d": (s1, v1, q1)}
 
 
 # --- decoders written in Python for the custom ESI bindings: the cell mean (block-mark decoder) ---
@@ -118,6 +120,11 @@ def cases(lib):
     for decoder, params, forest_size in phase2:
         for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
             add(f"{pre}_{decoder}", "2d", run("mondrian", ALPHA, forest_size, decoder, params, method))
+
+    # the adaptive decoders on a line, where only the exponent is fitted (since 2026-10-07)
+    for decoder in ("adaptiveidw", "sharpidw", "wdraw_adaptiveidw", "wdraw_sharpidw"):
+        for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
+            add(f"{pre}_{decoder}_1d", "1d", run("mondrian", ALPHA, T_ADAPTIVE, decoder, {}, method))
 
     # co-estimation: two variables observed at the same locations (3D samples array: variables x n x d)
     co = lambda s, v: (np.stack([s, s]), np.stack([v, np.log(v)]).astype(np.float32))

@@ -17,7 +17,7 @@ LIB = sl.load_lib()
 DATA = cases.datasets()
 
 
-@pytest.mark.parametrize("ds", ["2d", "3d"])
+@pytest.mark.parametrize("ds", ["1d", "2d", "3d"])
 @pytest.mark.parametrize("method", ["estimate", "loo", "kfold"])
 def test_sharpidw_without_its_factors_is_adaptiveidw(ds, method):
     s, v, q = DATA[ds]

@@ -10,6 +10,8 @@ the order ``[samples, values, n_partitions, alpha, <decoder arguments, seed>, (k
 queries, callback]``. :meth:`lib_spatialize_facade.get_operator` returns a callable that takes that
 list and runs ``libspatialize.run``, within the session settings (:mod:`spatialize.session`).
 """
+import warnings
+
 import libspatialize as lsp
 
 import numpy as np
@@ -36,6 +38,35 @@ _PARTITIONS = {p["name"]: p for p in CATALOG["partitions"]}
 _DECODERS = {d["name"]: d for d in CATALOG["decoders"]}
 
 _PLAIN = {"estimate": lsp.estimation_nn_idw, "loo": lsp.loo_nn_idw, "kfold": lsp.kfold_nn_idw}
+
+#: how the extension was built (OpenMP availability, threads)
+BUILD_INFO = lsp.build_info()
+
+OPENMP_HELP = """Spatialize was built without OpenMP, so it runs on a single thread. To run in parallel, install
+an OpenMP runtime and reinstall Spatialize from source:
+  - macOS:   brew install libomp
+             pip install --force-reinstall --no-binary spatialize spatialize
+  - Linux:   install the GNU OpenMP runtime (e.g. apt install libgomp1), then reinstall as above
+  - Windows: build with Microsoft Visual C++, whose OpenMP support the build enables
+To silence this warning, run on one thread on purpose: spatialize.session.set(parallel=False)."""
+
+_warned_no_openmp = False
+
+
+def _num_threads():
+    """Threads for one call from the session settings: 1 when not parallel, otherwise
+    ``num_threads`` (0 = all). Without OpenMP, running in parallel warns once and runs serially.
+    """
+    global _warned_no_openmp
+    if not session.get("parallel"):
+        return 1
+    if not BUILD_INFO["openmp"]:
+        if not _warned_no_openmp:
+            warnings.warn(OPENMP_HELP, UserWarning, stacklevel=3)
+            _warned_no_openmp = True
+        return 1
+    n = session.get("num_threads")
+    return 0 if n is None else n
 
 
 def _dims_text(dims):
@@ -106,7 +137,7 @@ class lib_spatialize_facade:
         """
         def call(samples, values, n_partitions, alpha, seed, queries, post_creation, estimation, callback):
             return _run("mondrian", "custom", "estimate", samples, values, queries, alpha, n_partitions, seed,
-                        {"post_creation": post_creation, "estimation": estimation}, 0, 0, callback)
+                        {"post_creation": post_creation, "estimation": estimation}, 0, 0, callback, _num_threads())
         return _in_session_domain(call, "estimate", queries_at=-4)
 
     @classmethod
@@ -139,9 +170,12 @@ class lib_spatialize_facade:
         _check("Partitioning process", _PARTITIONS, partition, d)
         _check("Local interpolator", _DECODERS, decoder, d)
 
+        params = dict(params)
+        threads = _num_threads()
+
         def call(samples, values, queries):
             return _run(partition, decoder, method, samples, values, queries, alpha, n_partitions, seed,
-                        dict(params), k, folding_seed, callback)
+                        params, k, folding_seed, callback, threads)
         return _in_session_domain(call, method, queries_at=2)(samples, values, queries)
 
     @classmethod
@@ -152,10 +186,10 @@ class lib_spatialize_facade:
 
 
 def _run(partition, decoder, method, samples, values, queries, alpha, n_partitions, seed, params, k,
-         folding_seed, visitor):
+         folding_seed, visitor, num_threads):
     return lsp.run(np.asarray(samples, np.float32), np.asarray(values, np.float32),
                    np.asarray(queries, np.float32), partition, float(alpha), int(n_partitions), int(seed),
-                   decoder, params, method, int(k), int(folding_seed), visitor)
+                   decoder, params, method, int(k), int(folding_seed), visitor, int(num_threads))
 
 
 def _through_run(partition, decoder, operation):
@@ -163,7 +197,7 @@ def _through_run(partition, decoder, operation):
     <decoder arguments, seed>, (k, folding_seed,) queries, callback]``, computed by ``run``.
 
     The decoder arguments are, in order, ``exponent`` (idw); ``model, nugget, range, sill``
-    (kriging); and ``metric, parallelize`` after the seed (adaptive IDW).
+    (kriging); and ``metric`` after the seed (adaptive IDW).
     """
     def call(*args):
         samples, values, n_partitions, alpha = args[:4]
@@ -180,12 +214,12 @@ def _through_run(partition, decoder, operation):
             model, nugget, range_, sill, seed = rest
             params = {"model": model, "nugget": nugget, "range": range_, "sill": sill}
         elif decoder == local_interpolator.ADAPTIVE_IDW:
-            seed, metric, parallelize = rest
-            params = {"metric": metric, "parallelize": parallelize}
+            seed, metric = rest
+            params = {"metric": metric}
         else:
             raise SpatializeError(f"Local interpolator '{decoder}' has no argument list in the public API")
         return _run(partition, decoder, operation, samples, values, queries, alpha, n_partitions, seed, params,
-                    k, folding_seed, visitor)
+                    k, folding_seed, visitor, _num_threads())
 
     return call
 

@@ -741,7 +741,7 @@ class ESIResult(EstimationResult):
                                      "nugget": [0.0, 0.5, 1.0],
                                      "range": [10.0, 50.0, 100.0, 200.0],
                                      "sill": [0.9, 1.0, 1.1]},
-                        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False}
+                        li.ADAPTIVE_IDW: {"metric": ["mae"]}
                     })
 def esi_hparams_search(points, values, xi, **kwargs):
     """Perform a k-fold (or leave-one-out) cross-validation hyperparameter search for ESI.
@@ -831,9 +831,6 @@ def esi_hparams_search(points, values, xi, **kwargs):
     metric : list of str, optional
         *(Adaptive IDW only)* Candidate local-optimization metrics to
         search. Default: ``["mae"]``.
-    parallelize : bool, optional
-        *(Adaptive IDW only)* Whether to parallelize the per-cell parameter
-        optimization. Default: ``False``.
 
     Returns
     -------
@@ -927,9 +924,6 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         if kwargs["p_process"] == partitioning_process.MONDRIAN:
             param_set["data_cond"] = True
-
-        if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
-            param_set["parallelize"] = kwargs["parallelize"]
 
         l_args = build_arg_list(points, values, p_xi, param_set)
         if method == "kfold":
@@ -1062,9 +1056,6 @@ def esi_griddata(points, values, xi, **kwargs):
          Error metric used for the per-cell LOO parameter optimization.
          Only used when ``local_interpolator="adaptiveidw"``. Default:
          ``"mae"``.
-    parallelize : bool, optional
-         Whether to parallelize the per-cell parameter optimization. Only
-         used when ``local_interpolator="adaptiveidw"``. Default: ``False``.
 
     Returns
     -------
@@ -1204,9 +1195,6 @@ def esi_nongriddata(points, values, xi, **kwargs):
          Error metric used for the per-cell LOO parameter optimization.
          Only used when ``local_interpolator="adaptiveidw"``. Default:
          ``"mae"``.
-    parallelize : bool, optional
-         Whether to parallelize the per-cell parameter optimization. Only
-         used when ``local_interpolator="adaptiveidw"``. Default: ``False``.
 
     Returns
     -------
@@ -1255,7 +1243,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
             "range":  [50.0, 200.0],
             "sill":   [0.9, 1.0],
         },
-        li.ADAPTIVE_IDW: {"metric": ["mae"], "parallelize": False},
+        li.ADAPTIVE_IDW: {"metric": ["mae"]},
     },
 )
 def esi_pareto_hparams_search(points, values, **kwargs):
@@ -1356,8 +1344,6 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     # Fixed (non-searchable) interpolator kwargs — execution flags that are
     # forwarded as-is to every ESI call, not iterated over in the grid.
     fixed_interp_kwargs = {}
-    if kwargs["local_interpolator"] == li.ADAPTIVE_IDW:
-        fixed_interp_kwargs["parallelize"] = kwargs["parallelize"]
 
     _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
     if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
@@ -1407,7 +1393,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
                     specific_args={
                         li.IDW: {"exponent": 2.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
-                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
+                        li.ADAPTIVE_IDW: {"metric": "mae"}
                     })
 def _call_libspatialize(points, values, xi, **kwargs):
     """
@@ -1509,6 +1495,5 @@ def build_arg_list(points, values, xi, nonpos_args):
     if nonpos_args["local_interpolator"] == li.ADAPTIVE_IDW:
         l_args.insert(-2, nonpos_args["seed"])
         l_args.insert(-2, nonpos_args.get("metric", "mae"))
-        l_args.insert(-2, nonpos_args.get("parallelize", False))
 
     return l_args

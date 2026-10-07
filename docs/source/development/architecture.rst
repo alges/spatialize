@@ -173,13 +173,17 @@ Reproducibility under parallel execution
   ``std::mt19937`` in a fixed order, while k-fold uses its own ``folding_seed``.
 - **Parallel trees.** Estimation, leave-one-out and k-fold run the trees of the ensemble in
   parallel under OpenMP, each tree writing only its own column of the result, so the output is
-  bitwise the same for any number of threads. ``OMP_NUM_THREADS`` sets the number of threads.
-  Adaptive IDW with ``parallelize=False`` runs on one thread, as before. A decoder whose
-  ``thread_safe()`` returns false, such as ``CustomDecoder`` with its Python callbacks, keeps the
-  trees serial. An exception raised inside a tree is rethrown once the loop ends.
-- **Parallel adaptive IDW.** With ``parallelize=True`` the per-cell fitting runs under OpenMP. Each
-  tree receives its own generator, seeded before the parallel region, so parallel and serial runs
-  give bitwise identical results.
+  bitwise the same for any number of threads. A decoder whose ``thread_safe()`` returns false,
+  such as ``CustomDecoder`` with its Python callbacks, keeps the trees serial. An exception raised
+  inside a tree is rethrown once the loop ends.
+- **Number of threads.** The session settings ``parallel`` and ``num_threads``
+  (:mod:`spatialize.session`) decide it. The facade passes it to ``run`` as ``num_threads``, where 0
+  leaves the OpenMP default of every processor, or ``OMP_NUM_THREADS``. ``libspatialize.build_info()``
+  tells whether the extension was built with OpenMP. Without it, a request to run in parallel warns
+  once, with installation instructions, then runs on one thread.
+- **Parallel adaptive IDW.** The per-cell fitting of adaptive IDW also runs under OpenMP. Each tree
+  receives its own generator, seeded before the parallel region, so parallel and serial runs give
+  bitwise identical results.
 - **Linear algebra.** Eigen is compiled with ``EIGEN_DONT_PARALLELIZE``. A matrix product split
   across threads changes the order of summation, which on a nearly singular kriging system can change
   the rank the pseudo-inverse keeps, so the results would depend on the number of threads.

@@ -59,7 +59,6 @@ namespace registry {
     std::string name, doc;
     int min_dim, max_dim;
     bool thread_safe;                 // false: cells are decoded one at a time (Python callbacks)
-    bool has_parallelize;             // its 'parallelize' parameter sets the threads of the whole run
     std::vector<Param> params;
     DecoderFactory make;
   };
@@ -189,23 +188,22 @@ namespace registry {
     static std::vector<DecoderSpec> &specs = *new std::vector<DecoderSpec>();
     if (!specs.empty()) return(specs);
     specs.push_back({"idw", "Inverse distance weighting, weights 1/d^p (a datum at distance 0 takes all the weight).",
-       1, ANY, true, false,
+       1, ANY, true,
        {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
        nullptr});
     specs.push_back({"kriging", "Ordinary kriging with a fixed variogram model.",
-       1, ANY, true, false,
+       1, ANY, true,
        {{"model", "choice", "variogram model", true, py::none(), {"spherical", "exponential", "cubic", "gaussian"}},
         {"nugget", "float", "nugget", true, py::none(), {}},
         {"range", "float", "range", true, py::none(), {}},
         {"sill", "float", "sill", true, py::none(), {}}},
        nullptr});
     specs.push_back({"adaptiveidw", "IDW whose exponent and anisotropy are fitted in each cell.",
-       2, 3, true, true,
-       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
-        {"parallelize", "bool", "whether the run uses several threads", false, py::bool_(false), {}}},
+       2, 3, true,
+       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}},
        nullptr});
     specs.push_back({"custom", "A decoder given by Python callables on the samples of each cell.",
-       1, ANY, false, false,
+       1, ANY, false,
        {{"post_creation", "callable", "post_creation(coords, values) -> cell parameters", false, py::none(), {}},
         {"estimation", "callable", "estimation(coords, values, queries, params) -> predictions (method 'estimate')", false, py::none(), {}},
         {"loo", "callable", "loo(coords, values, params) -> predictions (method 'loo')", false, py::none(), {}},

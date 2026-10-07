@@ -222,7 +222,7 @@ independently before a scenario is implemented, and computed by the evaluator wh
 Example run
 ===========
 
-The excerpt below comes from a run in ``ci`` mode with seed 12345, which takes about thirty minutes
+The excerpt below comes from a run in ``ci`` mode with seed 12345, which takes about seven minutes
 on a multi-core machine.
 
 .. code-block:: text

@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 8
+version: 9
 tier: T3
 evaluator: map_visual
 book:
@@ -27,7 +27,7 @@ estimators:
   # Mondrian rate 5 on the unit square: E[#cells] = (1 + 5)² = 36 for the book's process.
   - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
   - {id: aidw, encoder: mondrian, rate: 5.0, decoder: adaptiveidw,
-     params: {metric: mae, parallelize: true}, empty_cells: nan}   # parallel == serial bitwise
+     params: {metric: mae}, empty_cells: nan}   # threads from the session; parallel == serial bitwise
   # Isotropic exponential kriging (spatialize: exp(−3d/r)); scale = geometric mean of the true
   # ranges, √(0.45·0.09) = 0.201 (same ellipse area), practical range r = 3·0.201 = 0.604.
   - {id: krig, encoder: mondrian, rate: 5.0, decoder: kriging,
@@ -42,7 +42,7 @@ estimators:
   - {id: vor-uniform-krig, encoder: voronoi, rate: 36.0, decoder: kriging,
      params: {model: exponential, nugget: 0.0, range: 0.604, sill: 1.0}, empty_cells: nan}
   - {id: vor-uniform-aidw, encoder: voronoi, rate: 36.0, decoder: adaptiveidw,
-     params: {metric: mae, parallelize: true}, empty_cells: nan}
+     params: {metric: mae}, empty_cells: nan}
 checks:
   # The same two pre-registered criteria for every estimator:
   #   v1a — direction visible: |θ(median map) − 30°| < 10° (TOST over the K fields)
@@ -164,3 +164,4 @@ provenance:
     needs a mean below 0.386, which the seed-to-seed spread of the mean (s.d. 0.025) crosses about
     one run in four. At K = 80 the standard error is 0.021 and the mean must stay below 0.423, which
     it crosses about once in a thousand runs. K = 60 would still fail about one run in 50.
+  v9: "2026-10-07: parameter parallelize removed from the adaptive IDW estimators (Spatialize runs in parallel through its session settings); results unchanged"

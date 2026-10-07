@@ -100,7 +100,7 @@ Estimators
      - Every decoder parameter, explicitly (they are pre-registered; runners fill in no defaults):
        ``idw`` — ``exponent``; ``kriging`` — ``model`` (``spherical``, ``exponential``, ``cubic``,
        ``gaussian``), ``nugget``, ``range``, ``sill``; ``adaptiveidw`` — ``metric``
-       (``mae``/``mse``), ``parallelize``.
+       (``mae``/``mse``).
    * - ``empty_cells``
      - Policy for cells without data; ``nan`` (the cell yields NaN) is the only one every runner
        must support.

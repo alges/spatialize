@@ -210,29 +210,47 @@ static void check_arrays(py::array_t<float> &samples, py::array_t<float> &values
         throw std::runtime_error("[3] queries must be a 2 dimensions array");
 }
 
-// Restricts OpenMP to one thread while alive unless `parallelize` (restores the count after).
+// Sets the number of OpenMP threads of the calling thread while alive (0 leaves the runtime's
+// default, all processors unless OMP_NUM_THREADS says otherwise) and restores it after.
 class OmpThreads {
     #ifdef _OPENMP
     int original_threads;
     #endif
-    bool parallelize;
+    int num_threads;
   public:
-    OmpThreads(bool _parallelize): parallelize(_parallelize){
+    OmpThreads(int _num_threads): num_threads(_num_threads){
         #ifdef _OPENMP
         original_threads = omp_get_max_threads();
-        if (!parallelize) {
-            omp_set_num_threads(1);
+        if (num_threads > 0) {
+            omp_set_num_threads(num_threads);
         }
         #endif
     }
     ~OmpThreads(){
         #ifdef _OPENMP
-        if (!parallelize) {
+        if (num_threads > 0) {
             omp_set_num_threads(original_threads);
         }
         #endif
     }
 };
+
+// How the extension was built: whether it runs in parallel (OpenMP) and on how many threads.
+py::dict build_info(){
+    py::dict info;
+    #ifdef _OPENMP
+    info["openmp"] = true;
+    info["openmp_version"] = _OPENMP;
+    info["max_threads"] = omp_get_max_threads();
+    info["num_procs"] = omp_get_num_procs();
+    #else
+    info["openmp"] = false;
+    info["openmp_version"] = py::none();
+    info["max_threads"] = 1;
+    info["num_procs"] = 1;
+    #endif
+    return(info);
+}
 
 using EsiMethod = registry::Method;
 
@@ -277,13 +295,14 @@ static EsiOutput run_ensemble_py(py::array_t<float> &samples, py::array_t<float>
 /* Generic entry point */
 
 // run(samples, values, queries, partition, alpha, forest_size, seed, decoder, params, method, k,
-//     folding_seed, visitor): any partition with any decoder of the catalogue (registry.hpp), in the
-// dimensions both support. `params` holds the decoder's parameters, checked against the catalogue.
-// method: "estimate" (queries), "loo" or "kfold" (k, folding_seed). Returns (None, members).
+//     folding_seed, visitor, num_threads): any partition with any decoder of the catalogue
+// (registry.hpp), in the dimensions both support. `params` holds the decoder's parameters, checked
+// against the catalogue. method: "estimate" (queries), "loo" or "kfold" (k, folding_seed).
+// num_threads: OpenMP threads (0: the runtime's default). Returns (None, members).
 EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t<float> queries,
               std::string partition, float alpha, int forest_size, int seed,
               std::string decoder, py::dict params, std::string method, int k, int folding_seed,
-              std::optional<py::function> visitor){
+              std::optional<py::function> visitor, int num_threads){
     check_arrays(samples, values, queries);
     int d = static_cast<int>(samples.request().shape[1]);
     if (d != static_cast<int>(queries.request().shape[1]))
@@ -296,10 +315,10 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
     registry::check_dim("decoder", decoder, ds.min_dim, ds.max_dim, d);
     registry::check_params(ds, params);
 
-    // all threads, unless the decoder has its own 'parallelize' parameter (adaptive IDW)
-    bool parallelize = ds.has_parallelize ? registry::param<bool>(ds, params, "parallelize") : true;
+    if (num_threads < 0)
+        throw std::runtime_error("num_threads must be 0 (the runtime's default) or positive");
     sptlz::Decoder *dec = ds.make(d, params, m);
-    OmpThreads threads(parallelize);
+    OmpThreads threads(num_threads);
     return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder));
 }
 
@@ -538,7 +557,12 @@ PYBIND11_MODULE(libspatialize, m) {
       py::arg("samples"), py::arg("values"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
       py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
       py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,
-      py::arg("visitor") = py::none()
+      py::arg("visitor") = py::none(), py::arg("num_threads") = 0
+    );
+    m.def(
+      "build_info",
+      &build_info,
+      "How the extension was built: OpenMP availability, version and threads"
     );
     m.def(
       "catalog",

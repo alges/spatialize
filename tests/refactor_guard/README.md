@@ -20,8 +20,8 @@ snapshot, so the test does not depend on numpy's RNG.
 - The 24 ensemble cases (every decoder on Mondrian and Voronoi, estimation, LOO and k-fold) call
   `libspatialize.run`. They keep the names and the snapshots of the dedicated entry points they
   replaced (`estimation_esi_idw`, ...; removed 2026-10-07), which `run` reproduced bit for bit.
-- The custom decoder is the cell mean written in Python; the adaptive decoder runs with
-  `parallelize=False` (the same numbers as with threads).
+- The custom decoder is the cell mean written in Python; the adaptive decoder runs on one thread
+  (`num_threads=1`; the same numbers as with several).
 - The other cases call the remaining exported functions: the partitions, plain IDW and
   co-estimation.
 

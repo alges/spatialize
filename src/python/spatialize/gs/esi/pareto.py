@@ -44,7 +44,7 @@ _COMMON_GRID_KEYS = {"n_partitions", "alpha"}
 _INTERP_DEFAULTS = {
     li.IDW:          {"exponent": 2.0},
     li.KRIGING:      {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
-    li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False},
+    li.ADAPTIVE_IDW: {"metric": "mae"},
 }
 
 # ===========================================================================

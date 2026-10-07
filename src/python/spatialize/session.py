@@ -17,6 +17,16 @@ The settings are the following.
     hyperparameter searches then draw the same partitions as the estimation for the same seed. Every
     datum and query must lie in the domain.
 
+``parallel`` (bool)
+    Whether the compiled code runs on several threads. The default is ``True``. Results are the same
+    bit for bit with any number of threads, so the setting changes only the run time. When
+    Spatialize was built without OpenMP, a warning says once how to install it, after which the code
+    runs on one thread.
+
+``num_threads`` (positive int, or ``None``)
+    The number of threads when ``parallel`` is true. With ``None``, the default, the runtime uses
+    every processor, or the number set by the environment variable ``OMP_NUM_THREADS``.
+
 Examples
 --------
 >>> import spatialize
@@ -24,7 +34,7 @@ Examples
 >>> with spatialize.session.override(domain=None):     # restored on exit
 ...     pass
 >>> spatialize.session.effective_config()
-{'domain': ((0.0, 100.0), (0.0, 50.0))}
+{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None}
 >>> spatialize.session.reset()
 """
 import contextlib
@@ -34,7 +44,7 @@ import numpy as np
 
 from spatialize import SpatializeError
 
-_DEFAULTS = {"domain": None}
+_DEFAULTS = {"domain": None, "parallel": True, "num_threads": None}
 
 _global = {}
 _overrides = contextvars.ContextVar("spatialize_session_overrides", default={})
@@ -54,7 +64,21 @@ def _validate_domain(value):
     return tuple((float(lo), float(hi)) for lo, hi in box)
 
 
-_VALIDATORS = {"domain": _validate_domain}
+def _validate_parallel(value):
+    if not isinstance(value, (bool, np.bool_)):
+        raise SpatializeError(f"parallel must be True or False; got {value!r}")
+    return bool(value)
+
+
+def _validate_num_threads(value):
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+        raise SpatializeError(f"num_threads must be a positive integer or None; got {value!r}")
+    return int(value)
+
+
+_VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_threads": _validate_num_threads}
 
 
 def _validated(settings):

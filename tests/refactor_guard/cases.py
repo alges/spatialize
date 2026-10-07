@@ -78,7 +78,7 @@ KRIG = dict(model=2, nugget=0.1, range=0.3, sill=1.0)
 def cases(lib):
     """(name, dataset key, callable(samples, values, queries) -> output) for every exported function.
 
-    The adaptive decoder runs with parallelize=False, which gives the same numbers as True.
+    The adaptive decoder runs on one thread, which gives the same numbers as several.
     """
     m, n_, r_, s_ = KRIG["model"], KRIG["nugget"], KRIG["range"], KRIG["sill"]
     c = []
@@ -93,8 +93,9 @@ def cases(lib):
 
     # The ensemble cases go through libspatialize.run. They keep the names, and the snapshots, of the
     # dedicated entry points they replaced (removed 2026-10-07), which run reproduces bit for bit.
-    def run(partition, alpha, forest_size, decoder, params, method):
-        return lambda s, v, q: lib.run(s, v, q, partition, alpha, forest_size, SEED, decoder, params, method, K, FSEED)
+    def run(partition, alpha, forest_size, decoder, params, method, num_threads=0):
+        return lambda s, v, q: lib.run(s, v, q, partition, alpha, forest_size, SEED, decoder, params, method, K, FSEED,
+                                       None, num_threads)
     custom = {"estimate": dict(post_creation=_post_creation, estimation=_estimation),
               "loo": dict(post_creation=_post_creation, loo=_loo),
               "kfold": dict(post_creation=_post_creation, kfold=_kfold)}
@@ -107,7 +108,7 @@ def cases(lib):
             add(f"{pre}_voronoi_idw_{tag}", "2d", run("voronoi", a, T, "idw", {"exponent": EXP}, method))
         for d in ("2d", "3d"):
             add(f"{pre}_adaptive_esi_idw_{d}", d, run("mondrian", ALPHA, T_ADAPTIVE, "adaptiveidw",
-                                                      {"metric": "mae", "parallelize": False}, method))
+                                                      {"metric": "mae"}, method, num_threads=1))
         add(f"{pre}_custom_esi", "2d", run("mondrian", ALPHA, T, "custom", custom[method], method))
 
     # co-estimation: two variables observed at the same locations (3D samples array: variables x n x d)

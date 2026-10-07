@@ -15,7 +15,7 @@ from spatialize.logging import log_message, default_singleton_callback, singleto
                     specific_args={
                         li.IDW: {"exponent": 3.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
-                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
+                        li.ADAPTIVE_IDW: {"metric": "mae"}
                     })
 def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     """
@@ -52,8 +52,6 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
         Kriging sill parameter (Kriging only).
     metric : str, default="mae"
         Error metric for adaptive IDW (Adaptive IDW only).
-    parallelize : bool, default=False
-        Whether to parallelize adaptive IDW fitting (Adaptive IDW only).
 
     Returns
     -------
@@ -83,7 +81,6 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     elif interp_type == li.ADAPTIVE_IDW:
         l_args.append(kwargs["seed"])
         l_args.append(kwargs["metric"])
-        l_args.append(kwargs["parallelize"])
 
     l_args.extend([xi, kwargs["callback"]])
 
@@ -235,7 +232,7 @@ class SpatialEntropy:
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
             - Kriging: model (str), nugget (float), range (float), sill (float)
-            - Adaptive IDW ("adaptiveidw"): metric (str), parallelize (bool)
+            - Adaptive IDW ("adaptiveidw"): metric (str)
 
         Raises
         ------
@@ -444,7 +441,7 @@ class SpatialMutualInformation:
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
             - Kriging: model (str), nugget (float), range (float), sill (float)
-            - Adaptive IDW ("adaptiveidw"): metric (str), parallelize (bool)
+            - Adaptive IDW ("adaptiveidw"): metric (str)
 
         Raises
         ------

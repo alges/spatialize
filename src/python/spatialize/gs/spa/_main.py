@@ -503,7 +503,7 @@ class PosteriorSampleAnalyzer:
                                      "nugget": 0.5,
                                      "range": 50.0,
                                      "sill": 0.9},
-                        li.ADAPTIVE_IDW: {"metric": "mae", "parallelize": False}
+                        li.ADAPTIVE_IDW: {"metric": "mae"}
                     })
 def cv_sample_pred_posterior(points, values, xi, **kwargs):
     """

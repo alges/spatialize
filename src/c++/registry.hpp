@@ -21,6 +21,7 @@
 #include "spatialize/decoders/kriging.hpp"
 #include "spatialize/decoders/adaptive_idw.hpp"
 #include "spatialize/decoders/custom.hpp"
+#include "spatialize/decoders/draw.hpp"
 
 namespace py = pybind11;
 
@@ -209,6 +210,26 @@ namespace registry {
         {"loo", "callable", "loo(coords, values, params) -> predictions (method 'loo')", false, py::none(), {}},
         {"kfold", "callable", "kfold(k, coords, values, folds, params) -> predictions (method 'kfold')", false, py::none(), {}}},
        nullptr});
+    specs.push_back({"draw", "A datum of the cell drawn uniformly (the block-mark decoder).",
+       1, ANY, true,
+       {},
+       nullptr});
+    specs.push_back({"wdraw_idw", "A datum of the cell drawn with probability proportional to 1/d^p.",
+       1, ANY, true,
+       {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
+       nullptr});
+    specs.push_back({"wdraw_kriging", "A datum of the cell drawn with probability proportional to its ordinary-kriging weight, made non-negative.",
+       1, ANY, true,
+       {{"model", "choice", "variogram model", true, py::none(), {"spherical", "exponential", "cubic", "gaussian"}},
+        {"nugget", "float", "nugget", true, py::none(), {}},
+        {"range", "float", "range", true, py::none(), {}},
+        {"sill", "float", "sill", true, py::none(), {}},
+        {"negative_weights", "choice", "'clip' sets negative weights to 0, 'abs' takes their absolute value", false, py::str("clip"), {"clip", "abs"}}},
+       nullptr});
+    specs.push_back({"cellmean", "The mean of the cell's data (the linear decoder of the theory's co-occurrence identity).",
+       1, ANY, true,
+       {},
+       nullptr});
     // factories, which read the parameters through their own spec
     specs[0].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       return(new sptlz::IDWDecoder(param<float>(decoders()[0], p, "exponent")));
@@ -224,6 +245,21 @@ namespace registry {
     };
     specs[3].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       return(custom_decoder(decoders()[3], d, p, m));
+    };
+    specs[4].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      return(new sptlz::DrawDecoder(new sptlz::UniformWeights()));
+    };
+    specs[5].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      return(new sptlz::DrawDecoder(new sptlz::IDWWeights(param<float>(decoders()[5], p, "exponent"))));
+    };
+    specs[6].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      const DecoderSpec &s = decoders()[6];
+      return(new sptlz::DrawDecoder(new sptlz::KrigingWeights(
+          param<int>(s, p, "model"), param<float>(s, p, "nugget"), param<float>(s, p, "range"), param<float>(s, p, "sill"),
+          s.params[4].choices[param<int>(s, p, "negative_weights")-1])));
+    };
+    specs[7].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+      return(new sptlz::WeightedMeanDecoder(new sptlz::UniformWeights()));
     };
     return(specs);
   }

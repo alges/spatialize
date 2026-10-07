@@ -34,8 +34,8 @@ Top-level keys
      - Encoder law, estimator properties, or geostatistical scenario (:doc:`index`).
    * - ``evaluator``
      - string
-     - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``map_visual`` or
-       ``edge_cases`` (below).
+     - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``map_visual``,
+       ``edge_cases`` or ``draw_laws`` (below).
    * - ``book``
      - mapping
      - Source in the theory: ``topic`` (by content) and the draft's section, equation and figure
@@ -121,8 +121,8 @@ The following keys are common to every evaluator.
    * - ``title``
      - What the check claims, in words.
    * - ``family``
-     - Test family (:doc:`statistics`): ``gof-closed``, ``almost-sure``, ``equivalence``,
-       ``one-sided``, ``paired-relation``, ``two-sample``.
+     - Test family (:doc:`statistics`): ``gof-closed``, ``identity``, ``almost-sure``,
+       ``equivalence``, ``one-sided``, ``paired-relation``, ``two-sample``.
    * - ``estimator`` / ``estimators``
      - The estimator the check reads, or a list of them (one outcome each).
    * - ``expect``
@@ -187,6 +187,33 @@ This evaluator decides almost-sure checks on degenerate designs (scenario S12).
   ``generator_seed``.
 - per check: ``kind`` (``runs``, ``finite``, ``convex``, ``exact``), ``estimators`` (list) and, for
   ``convex`` and ``exact``, ``tolerance`` (relative to the data range).
+
+Evaluator ``draw_laws``
+-----------------------
+
+This evaluator decides the laws of decoders that return a draw (scenarios P2 and P3), each read
+against a *reference* decoder run with the same seed.
+
+- ``truth``: ``generator: smooth_plus_noise``, drawn by the evaluator, not pinned.
+- ``data``: ``n`` data and ``queries`` queries, uniform in the domain, and ``generator_seed``.
+- per check, ``kind`` and its keys:
+
+  .. list-table::
+     :header-rows: 1
+     :widths: 22 78
+
+     * - ``kind``
+       - keys and test
+     * - ``support``
+       - ``estimators``: every finite member is a data value (almost-sure).
+     * - ``mean``
+       - ``estimator``, ``reference``: the mean of the difference is 0 at each query (identity).
+     * - ``variance``
+       - ``estimator``, ``reference``: the mean squared difference equals the weighted dispersion
+         (identity).
+     * - ``frequencies``
+       - ``estimator``, ``reference`` (the cell mean): the counts of each datum match their
+         expectation (gof-closed).
 
 Data files
 ==========

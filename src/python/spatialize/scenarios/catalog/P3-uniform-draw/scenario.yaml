@@ -1,0 +1,30 @@
+id: P3-uniform-draw
+version: 1
+tier: T2
+evaluator: draw_laws
+book:
+  topic: "the uniform draw is the block-mark decoder: each value of a cell drawn with frequency equal to its share"
+  draft_2026_09: "Prop 12.3.7"   # the book is a draft: numbers may change
+purpose: >
+  The uniform draw returns each datum of the query's cell with probability one over the cell's
+  occupancy. Over many partitions, the number of times a datum is drawn at a query must match the
+  sum of those probabilities, which the cell-mean decoder run on the datum's indicator computes on
+  the same partitions.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 30
+  queries: 6
+  generator_seed: 20261008
+estimators_T: {ci: 3000, full: 12000}
+estimators:
+  - {id: draw, encoder: mondrian, rate: 2.0, decoder: draw, params: {}, empty_cells: nan}
+  - {id: cellmean, encoder: mondrian, rate: 2.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: wdraw-idw, encoder: mondrian, rate: 2.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: nan}
+checks:
+  - {id: frequencies, title: "draw frequencies = cell shares", kind: frequencies, family: gof-closed,
+     estimator: draw, reference: cellmean}
+  - {id: control-frequencies, title: "negative control: the weighted draw does not draw by cell shares",
+     kind: frequencies, family: gof-closed, estimator: wdraw-idw, reference: cellmean, expect: {mondrian: reject}}
+provenance:
+  v1: "2026-10-07: first version, with the draw decoders of phase 2; T fixed before the first run"

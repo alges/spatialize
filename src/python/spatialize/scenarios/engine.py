@@ -533,8 +533,104 @@ def eval_edge_cases(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _draw_laws_data(s):
+    """Data and queries of a draw_laws scenario, drawn from ``data.generator_seed`` (not pinned)."""
+    rng = np.random.default_rng(int(s["data"]["generator_seed"]))
+    box = np.asarray(s["domain"]["box"], float)
+    n, m = int(s["data"]["n"]), int(s["data"]["queries"])
+    pts = box[:, 0] + rng.random((n, len(box))) * (box[:, 1] - box[:, 0])
+    qry = box[:, 0] + rng.random((m, len(box))) * (box[:, 1] - box[:, 0])
+    u = (pts - box[:, 0]) / (box[:, 1] - box[:, 0])
+    # a smooth field plus noise: distinct values, so a member identifies the datum drawn
+    vals = np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1]) + 0.3 * rng.standard_normal(n)
+    return pts.astype(np.float32), vals.astype(np.float32), qry.astype(np.float32)
+
+
+def eval_draw_laws(sc: Scenario, runner: Runner, mode: str, seed: int,
+                   save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``draw_laws``: the laws of decoders that return a draw (P2, P3).
+
+    A draw decoder is compared with its *reference*, the decoder averaging over the same weights,
+    computed with the same seed and hence, for a runner that shares partitions between estimators
+    with one seed, on the same partitions. Kinds (key ``kind``):
+
+    - ``support`` (``estimators``) — almost-sure: every finite member is one of the data values;
+    - ``mean`` (``estimator``, ``reference``) — identity: at each query the mean over the members of
+      draw − reference is 0, standardised by its own standard error;
+    - ``variance`` (same keys) — identity: the mean of (draw − reference)² equals the mean of the
+      weighted dispersion, read as reference(z²) − reference(z)²;
+    - ``frequencies`` (same keys, the reference being the cell mean) — goodness of fit: the number
+      of times each datum is drawn at a query against its expected number, the sum over the members
+      of the reference run on the datum's indicator (its probability under each partition). The
+      Pearson statistic is referred to :math:`\chi^2` with :math:`k - q` degrees of freedom (k data
+      with positive expectation, q queries), which is conservative when the probabilities vary
+      from one partition to another.
+
+    Reads ``data.n``, ``data.queries``, ``data.generator_seed`` and ``estimators_T``.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    pts, vals, qry = _draw_laws_data(s)
+    cache = {}
+
+    def members(eid, values=None, key=""):
+        if (eid, key) not in cache:
+            v = vals if values is None else np.asarray(values, np.float32)
+            cache[(eid, key)] = np.asarray(runner.members(ests[eid], pts, v, qry, n_members=T, seed=seed), float)
+        return cache[(eid, key)]
+
+    def z_of(x):
+        n = np.sum(np.isfinite(x), axis=1)
+        return np.nanmean(x, axis=1) / (np.nanstd(x, axis=1, ddof=1) / np.sqrt(n))
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        eids = check["estimators"] if "estimators" in check else [check["estimator"]]
+        for eid in eids:
+            est = ests[eid]
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            if "estimators" in check:
+                cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            else:
+                cid, title = check["id"], f"{check['title']} [{profile}]"
+            needed = [est] + ([ests[check["reference"]]] if "reference" in check else [])
+            if not all(runner.supports(e) for e in needed):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support "
+                                                + ", ".join(f"{e.encoder}/{e.decoder}" for e in needed)))
+                continue
+            m = members(eid)
+            if kind == "support":
+                fin = m[np.isfinite(m)].astype(np.float32)
+                r = families.almost_sure(int((~np.isin(fin, vals)).sum()), fin.size)
+            elif kind == "mean":
+                r = families.identity(z_of(m - members(check["reference"])), "mean(draw − reference)")
+            elif kind == "variance":
+                ref = members(check["reference"])
+                ref2 = members(check["reference"], vals.astype(float) ** 2, "squares")
+                r = families.identity(z_of((m - ref) ** 2 - (ref2 - ref ** 2)), "variance − dispersion")
+            elif kind == "frequencies":
+                counts, expected, nq = [], [], 0
+                probs = [members(check["reference"], (np.arange(len(vals)) == j).astype(float), f"onehot{j}")
+                         for j in range(len(vals))]
+                for qi in range(len(qry)):
+                    e_q = np.array([np.nansum(p[qi]) for p in probs])
+                    c_q = np.array([np.sum(m[qi].astype(np.float32) == vals[j]) for j in range(len(vals))])
+                    keep = e_q > 0
+                    if keep.sum() > 1:
+                        counts += list(c_q[keep]); expected += list(e_q[keep]); nq += 1
+                r = families.gof_counts(counts, expected, df=len(counts) - nq)
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
-              "edge_cases": eval_edge_cases}
+              "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws}
 
 
 # ----------------------------------------------------------------------------- run

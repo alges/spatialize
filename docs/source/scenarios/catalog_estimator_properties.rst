@@ -9,8 +9,8 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-None of them is implemented yet. P2 and P3 need the draw decoders, while P5, P8 and P9 need the
-empty-cell policy, both planned features of Spatialize. P1, P4, P6 and P7 can be implemented now.
+P2 and P3 are implemented. P5, P8 and P9 need the empty-cell policy, a planned feature of
+Spatialize, while P1, P4, P6 and P7 can be implemented now.
 
 .. _scenario-P1:
 
@@ -36,31 +36,70 @@ the same data.
 P2 — Weighted-draw decoder
 ==========================
 
-:Status: blocked — needs the weighted-draw decoders (planned)
-:Source in the theory: properties of the weighted-draw decoder
+:Status: **implemented**
+:Evaluator: ``draw_laws``
+:Source in the theory: the distance-weighted draw and its support, mean and variance
 :Claim: a weighted-draw member is always a value of the cell's data. The mean of many members equals
-  the IDW estimate with the same weights, while their variance equals the weighted dispersion of the
-  cell's values.
+  the estimate of the decoder averaging with the same weights, while their variance equals the
+  weighted dispersion of the cell's values.
+
+**Setup.** 150 data placed uniformly on the unit square carry a smooth field plus noise,
+:math:`\sin(2\pi x) + 0.5\cos(2\pi y) + \varepsilon` with :math:`\varepsilon \sim \mathcal N(0, 0.3^2)`,
+so their values are distinct. 60 queries are placed uniformly. Every estimator uses the Mondrian
+partition of rate 4, with :math:`T = 2\,000` members in ``ci`` and :math:`8\,000` in ``full``.
+
+**Reading against a reference.** A draw decoder is compared with its *reference*, the decoder that
+averages over the same weights, run with the same seed. Spatialize's runner gives estimators that
+share a seed the same partitions, so at each query the member of the draw and that of the
+reference come from the same cell. The draw minus the reference then has mean 0. Its square has
+the mean of the weighted dispersion, which is the reference applied to the squared values minus
+the square of the reference.
 
 **Checks.**
 
-- *almost-sure*. Every member is one of the data values.
-- *identity*. The mean of the draws equals the IDW estimate (two-sample on the means of independent
-  runs with the same partitions).
-- *identity* on the variance.
+- *almost-sure* (``support``). Every finite member of ``wdraw_idw``, ``draw`` and ``wdraw_kriging``
+  is one of the data values.
+- *identity* (``mean``). At each query, the mean over the members of ``wdraw_idw`` minus ``idw``,
+  divided by its standard error, is a :math:`z`; the 60 values are combined as
+  :math:`\sum z^2 \sim \chi^2_{60}`. The same for ``draw`` against ``cellmean``.
+- *identity* (``variance``). The same for the squared difference minus the weighted dispersion.
+- *negative control*. The mean of ``wdraw_idw`` against ``cellmean``, a reference with other
+  weights, must reject.
+
+**Results.** On seeds 1 to 3 every identity passes, with p-values between 0.04 and 0.98, while the
+control rejects with :math:`|z|` up to 65.
 
 .. _scenario-P3:
 
-P3 — Draw decoder
+P3 — Uniform draw
 =================
 
-:Status: blocked — needs the draw decoder (planned)
-:Source in the theory: properties of the uniform draw decoder (the block-mark decoder)
+:Status: **implemented**
+:Evaluator: ``draw_laws``
+:Source in the theory: the uniform draw is the block-mark decoder
 :Claim: each value of a cell is drawn with a frequency equal to its share among the cell's data.
+
+**Setup.** 30 data and 6 queries on the unit square, with the field of P2, and the Mondrian
+partition of rate 2, with :math:`T = 3\,000` members in ``ci`` and :math:`12\,000` in ``full``.
+
+**Expected counts.** Under one partition, the uniform draw at a query returns datum :math:`j` with
+probability one over the occupancy of the query's cell when :math:`j` lies in it, and 0 otherwise.
+``cellmean`` run on the indicator of datum :math:`j` returns exactly that probability at the
+query. Summing it over the same partitions gives the expected number of times datum
+:math:`j` is drawn at the query.
 
 **Check.**
 
-- *gof-closed* (:math:`\chi^2`) of the draw frequencies against the shares.
+- *gof-closed*. The Pearson statistic of the observed against the expected counts, over the data
+  with a positive expectation at each query, referred to :math:`\chi^2` with :math:`k - q` degrees
+  of freedom (:math:`k` counts, :math:`q` queries). Since the probabilities change from one
+  partition to the next, the counts vary less than multinomial ones, which makes the test
+  conservative.
+- *negative control*. The counts of ``wdraw_idw``, which draws by distance, must not match the cell
+  shares.
+
+**Results.** On seeds 1 to 3 the check passes (p between 0.34 and 0.92), while the control rejects with
+:math:`\chi^2 \approx 20\,000` on 174 degrees of freedom.
 
 .. _scenario-P4:
 

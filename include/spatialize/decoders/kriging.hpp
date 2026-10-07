@@ -113,6 +113,29 @@ namespace sptlz{
         }
       }
 
+      // The ordinary-kriging weights of the data at `cell_coords` for each of `points` (one row per
+      // point, the Lagrange multiplier left out), from the same system as leaf_estimation.
+      std::vector<std::vector<float>> weights(std::vector<std::vector<float>> *cell_coords, std::vector<std::vector<float>> *points){
+        int n = static_cast<int>(cell_coords->size());
+        int m = static_cast<int>(points->size());
+        std::vector<std::vector<float>> result(m, std::vector<float>(n, 1.0f));
+        if(n<=1){
+          return(result);
+        }
+        auto gamma = variogram(this->variogram_model, this->nugget, this->range, this->sill);
+        auto left_cov = kriging_left_matrix(cell_coords, gamma);
+        auto right_cov = kriging_right_matrix(cell_coords, points, gamma);
+        Eigen::Map<Eigen::MatrixXf> b = Eigen::Map<Eigen::MatrixXf>(right_cov.data(), n+1, m);
+        Eigen::Map<Eigen::MatrixXf> A = Eigen::Map<Eigen::MatrixXf>(left_cov.data(), n+1, n+1);
+        Eigen::MatrixXf w = A.completeOrthogonalDecomposition().pseudoInverse()*b;
+        for(int q=0; q<m; q++){
+          for(int j=0; j<n; j++){
+            result[q][j] = w(j, q);
+          }
+        }
+        return(result);
+      }
+
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
         std::vector<float> result;
         int n = static_cast<int>(samples_id->size());

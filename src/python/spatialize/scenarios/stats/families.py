@@ -4,7 +4,7 @@ Every check of a scenario is decided by one of these functions. Each returns a
 :class:`TestResult` holding the test statistic, the p-value and the family's **pass rule**:
 
 - ``pass_if="not_reject"`` — goodness of fit to a closed form, identities, two-sample comparisons
-  (:func:`gof_proportions`, :func:`two_sample_ks`): an implementation conforms unless the data
+  (:func:`gof_proportions`, :func:`gof_counts`, :func:`identity`, :func:`two_sample_ks`): an implementation conforms unless the data
   reject the null hypothesis. The level bounds *false failures*; the declared power at the minimum
   detectable effect bounds false passes.
 - ``pass_if="reject"`` — one-sided bounds, equivalence (TOST) and paired relations
@@ -30,8 +30,8 @@ class TestResult:
     Attributes
     ----------
     family : str
-        Test family: ``"gof-closed"``, ``"almost-sure"``, ``"equivalence"``, ``"one-sided"``,
-        ``"paired-relation"`` or ``"two-sample"``.
+        Test family: ``"gof-closed"``, ``"identity"``, ``"almost-sure"``, ``"equivalence"``,
+        ``"one-sided"``, ``"paired-relation"`` or ``"two-sample"``.
     statistic : float
         The test statistic (χ², number of violations, mean, ...), as named in ``detail``.
     p_value : float
@@ -80,6 +80,54 @@ def gof_proportions(p_hat, p0, n):
     return TestResult("gof-closed", chi2, p, "not_reject",
                       f"k={len(z)} N={n} max|z|={abs(z[worst]):.2f} at #{worst} "
                       f"(p̂={p_hat[worst]:.4f} vs {p0[worst]:.4f})")
+
+
+def identity(z, what="z"):
+    r"""An identity checked through standardised differences, each N(0, 1) under the null hypothesis.
+
+    Parameters
+    ----------
+    z : array_like of shape (k,)
+        Independent standardised differences between an estimate and its target, each with its own
+        standard error.
+    what : str
+        Name of the quantity, for the report.
+
+    Returns
+    -------
+    TestResult
+        Family ``"identity"``, pass rule ``"not_reject"``; :math:`\sum_i z_i^2` against
+        :math:`\chi^2_k`.
+    """
+    z = np.atleast_1d(np.asarray(z, dtype=float))
+    z = z[np.isfinite(z)]
+    chi2 = float(np.sum(z ** 2))
+    p = float(stats.chi2.sf(chi2, df=len(z)))
+    worst = int(np.argmax(np.abs(z))) if len(z) else 0
+    return TestResult("identity", chi2, p, "not_reject",
+                      f"k={len(z)} {what} max|z|={abs(z[worst]) if len(z) else float('nan'):.2f} "
+                      f"mean z={z.mean() if len(z) else float('nan'):+.2f}")
+
+
+def gof_counts(counts, expected, df):
+    r"""Pearson goodness of fit of counts to expected counts.
+
+    Parameters
+    ----------
+    counts, expected : array_like of shape (k,)
+        Observed and expected counts (expected > 0).
+    df : int
+        Degrees of freedom of the statistic.
+
+    Returns
+    -------
+    TestResult
+        Family ``"gof-closed"``, pass rule ``"not_reject"``.
+    """
+    counts, expected = np.asarray(counts, float), np.asarray(expected, float)
+    chi2 = float(np.sum((counts - expected) ** 2 / expected))
+    p = float(stats.chi2.sf(chi2, df=df))
+    return TestResult("gof-closed", chi2, p, "not_reject", f"k={len(counts)} df={df} chi2={chi2:.1f}")
 
 
 def almost_sure(n_violations, n_checked):

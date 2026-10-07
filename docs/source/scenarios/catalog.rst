@@ -82,12 +82,12 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - :ref:`P2 <scenario-P2>`
      - weighted-draw decoder: draws are data values; their mean is the IDW estimate
-     - blocked
-     - draw decoders (phase 2)
+     - **implemented**
+     - —
    * - :ref:`P3 <scenario-P3>`
      - draw decoder: frequencies match the cell's values
-     - blocked
-     - draw decoders (phase 2)
+     - **implemented**
+     - —
    * - :ref:`P4 <scenario-P4>`
      - estimated CDFs are monotone and within [0, 1]
      - ready

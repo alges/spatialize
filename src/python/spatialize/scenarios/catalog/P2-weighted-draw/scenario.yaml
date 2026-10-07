@@ -1,0 +1,41 @@
+id: P2-weighted-draw
+version: 1
+tier: T2
+evaluator: draw_laws
+book:
+  topic: "decoders that return a draw: support, mean and variance of the distance-weighted draw"
+  draft_2026_09: "Def 12.3.5, Prop 12.3.6"   # the book is a draft: numbers may change
+purpose: >
+  A weighted-draw decoder returns a datum of the cell drawn with probability proportional to its
+  weight. It returns only observed values; the mean of its draws is the decoder averaging with the
+  same weights, and their variance the weighted dispersion of the cell. Each draw decoder is read
+  against its averaging reference on the same partitions (the same seed).
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}   # sin(2πx) + 0.5 cos(2πy) + N(0, 0.3²), drawn by the evaluator
+data:
+  n: 150
+  queries: 60
+  generator_seed: 20261007
+estimators_T: {ci: 2000, full: 8000}
+estimators:
+  - {id: wdraw-idw, encoder: mondrian, rate: 4.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: draw, encoder: mondrian, rate: 4.0, decoder: draw, params: {}, empty_cells: nan}
+  - {id: cellmean, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: wdraw-kriging, encoder: mondrian, rate: 4.0, decoder: wdraw_kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.4, sill: 1.0, negative_weights: clip}, empty_cells: nan}
+checks:
+  - {id: support, title: "every member is an observed value", kind: support, family: almost-sure,
+     estimators: [wdraw-idw, draw, wdraw-kriging]}
+  - {id: mean-wdraw-idw, title: "mean of the draws = IDW", kind: mean, family: identity,
+     estimator: wdraw-idw, reference: idw}
+  - {id: variance-wdraw-idw, title: "variance of the draws = weighted dispersion", kind: variance, family: identity,
+     estimator: wdraw-idw, reference: idw}
+  - {id: mean-draw, title: "mean of the uniform draws = cell mean", kind: mean, family: identity,
+     estimator: draw, reference: cellmean}
+  - {id: variance-draw, title: "variance of the uniform draws = cell variance", kind: variance, family: identity,
+     estimator: draw, reference: cellmean}
+  - {id: control-mean, title: "negative control: the weighted draw's mean is not the cell mean", kind: mean,
+     family: identity, estimator: wdraw-idw, reference: cellmean, expect: {mondrian: reject}}
+provenance:
+  v1: "2026-10-07: first version, with the draw decoders of phase 2; T fixed before the first run"

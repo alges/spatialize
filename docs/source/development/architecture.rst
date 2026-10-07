@@ -140,8 +140,26 @@ Every partition works with every decoder, in the dimensions both support.
    * - ``custom``
      - 1 or more
      - Python callables on each cell (categorical ESI and user decoders)
+   * - ``cellmean``
+     - 1 or more
+     - the mean of the cell's data
+   * - ``draw``
+     - 1 or more
+     - a datum of the cell drawn uniformly
+   * - ``wdraw_idw``
+     - 1 or more
+     - a datum drawn with probability proportional to 1/d^p
+   * - ``wdraw_kriging``
+     - 1 or more
+     - a datum drawn with probability proportional to its kriging weight, made non-negative
 
-The public functions offer every combination except ``custom``, which categorical ESI uses. Plain
+The decoders that draw take their random numbers from the run's seed, the tree and the query alone,
+so a draw depends neither on the number of threads nor on the other queries. With one seed they see
+the same partitions as the averaging decoders.
+
+The public functions offer the averaging decoders ``idw``, ``kriging`` and ``adaptiveidw``.
+Categorical ESI uses ``custom``. The other decoders are reached through ``run`` until the public
+functions take them. Plain
 IDW (``spatialize.gs.idw``) is a separate engine, outside the catalogue.
 
 Changes of results

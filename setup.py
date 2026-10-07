@@ -13,7 +13,7 @@ macros = [('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')]
 
 # Header files, tracked as build dependencies.
 libsptlzheaders = sorted(
-    glob.glob(os.path.join('include', 'spatialize', '*.hpp'))
+    glob.glob(os.path.join('include', 'spatialize', '**', '*.hpp'), recursive=True)
 )
 
 extra_compile_args = ['-std=c++17']

@@ -110,12 +110,15 @@ jobs:
 
     strategy:
       matrix:
-        python: ["3.13"]
+        # one combination per architecture: an `include` entry added to an existing combination
+        # would overwrite the previous one's os/arch
         include:
-          - os: macos-13
+          - os: macos-15-intel
             arch: x86_64
-          - os: macos-14
+            python: "3.13"
+          - os: macos-15
             arch: arm64
+            python: "3.13"
 
     env:
       # Pin build to native arch (Homebrew's libomp is native-arch only).

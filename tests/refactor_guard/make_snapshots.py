@@ -12,6 +12,7 @@ import subprocess
 import time
 
 import cases
+import public_cases
 import snapshot_lib as sl
 
 
@@ -25,12 +26,12 @@ def main():
     commit = subprocess.run(["git", "-C", sl.REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "-C", sl.REPO, "status", "--porcelain", "--", "src/c++", "include/spatialize"],
                                 capture_output=True, text=True).stdout.strip())
-    for name, ds, fn in cases.cases(lib):
+    for name, ds, fn in cases.cases(lib) + public_cases.public_cases():
         if args.only and name not in args.only:
             continue
         s, v, q = data[ds]
         t0 = time.perf_counter()
-        out = cases.normalise(fn(s, v, q))
+        out = fn(s, v, q) if name.startswith("api.") else cases.normalise(fn(s, v, q))
         meta = {"case": name, "dataset": ds, "platform": sl.platform_tag(), "commit": commit,
                 "cpp_dirty": dirty, "created": datetime.datetime.now().isoformat(timespec="seconds"),
                 "seconds": round(time.perf_counter() - t0, 3)}

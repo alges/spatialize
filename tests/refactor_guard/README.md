@@ -21,9 +21,15 @@ decoder runs with `parallelize=False` (parallel runs give the same numbers since
 GIL fix). The generic `libspatialize.run` is not snapshotted: it is checked against the legacy
 functions, which it must reproduce bit for bit.
 
+`public_cases.py` adds 20 cases named `api.*` on the public Python API above the extension
+(`esi_*`, the hyperparameter searches, Pareto, SPA, spatial entropy, cat_esi, plain IDW), every
+seed explicit. They pin the facade between Python and C++ (`spatialize.gs`), so a redesign of the
+facade can be shown to leave every result unchanged. They import the package from this checkout's
+`src/python`, never an installed one.
+
 ## Usage (macOS, conda Python)
 ```bash
-python setup.py build_ext --inplace --force     # --force: header edits are NOT tracked by `make`
+python setup.py build_ext --inplace             # header edits are tracked since 2026-10-06
 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python -m pytest -q tests/refactor_guard
 # (re)generate, only on pre-refactor code:
 DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python tests/refactor_guard/make_snapshots.py [--only CASE ...]

@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 import cases  # noqa: E402
+import public_cases  # noqa: E402
 import snapshot_lib as sl  # noqa: E402
 
 if not os.path.isdir(sl.snap_dir()):
@@ -17,6 +18,7 @@ if not os.path.isdir(sl.snap_dir()):
 
 LIB = sl.load_lib()
 CASES = {name: fn for name, _, fn in cases.cases(LIB)}
+CASES.update({name: fn for name, _, fn in public_cases.public_cases()})
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
@@ -25,7 +27,9 @@ def test_bitwise(name):
     if not os.path.exists(path):
         pytest.fail(f"missing snapshot {path}")
     inputs, expected, meta = sl.load(name)
-    got = cases.normalise(CASES[name](inputs["samples"], inputs["values"], inputs["queries"]))
+    got = CASES[name](inputs["samples"], inputs["values"], inputs["queries"])
+    if not name.startswith("api."):
+        got = cases.normalise(got)
     assert sorted(got) == sorted(expected), f"output structure changed: {sorted(got)} vs {sorted(expected)}"
     for key in expected:
         assert sl.bitwise_equal(got[key], expected[key]), (

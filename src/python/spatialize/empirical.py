@@ -18,6 +18,28 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # each member is a partition-*average* and so only captures between-partition variance) ---
 
 #todo: review unused funtions _local_target_variance, _loo_target_variance
+def silverman_bandwidth(sample):
+    """Silverman's rule of thumb for a Gaussian kernel, from the sample's own spread,
+
+        h = 0.9 · min(σ, IQR / 1.34) · n^(-1/5).
+
+    scikit-learn's ``bandwidth="silverman"`` omits the spread (it assumes unit variance), so its
+    bandwidth would not change with the units of the variable. When the sample has no
+    interquartile range (many ties, as with drawing decoders) σ alone is used; a constant sample
+    gets a bandwidth negligible against its value, a near point mass.
+    """
+    x = np.asarray(sample, dtype=np.float64).ravel()
+    x = x[np.isfinite(x)]
+    n = len(x)
+    sigma = float(np.std(x, ddof=1)) if n > 1 else 0.0
+    q75, q25 = np.percentile(x, [75, 25]) if n else (0.0, 0.0)
+    iqr = float(q75 - q25) / 1.34
+    spread = min(sigma, iqr) if iqr > 0 else sigma
+    if spread <= 0:
+        return 1e-6 * max(1.0, float(np.abs(x).max()) if n else 1.0)
+    return 0.9 * spread * n ** (-0.2)
+
+
 def _local_target_variance(obs_pts, obs_vals, query_pts, knn=12):
     """Target local variance at each query point = variance of its knn nearest OBSERVED
     neighbours (captures the local spread, including the nugget)."""
@@ -238,7 +260,10 @@ class FittedModelFactory:
         point_model_name : str, optional
             Type of model used to estimate the probability density. Options:
 
-            - ``"kde"``: Kernel Density Estimation (fastest).
+            - ``"kde"``: Kernel Density Estimation (fastest), with the
+              bandwidth of Silverman's rule computed from each sample's own
+              spread (:func:`silverman_bandwidth`), so the fit does not depend
+              on the units of the variable.
             - ``"emm"``: Expectation-Maximization for GMM.
             - ``"vim"``: Variational Inference for GMM (slowest).
 
@@ -326,11 +351,11 @@ class FittedModelFactory:
         else:
             raise ValueError("nan_model_name must be either 'replace' or 'ignore'")
 
-        # the bandwidth is calculated automatically using the silverman method
+        # the bandwidth is set at each fit from the sample's spread (silverman_bandwidth)
         if point_model_name == "kde":
             # KDE fitting is deterministic (no random_state in sklearn's KernelDensity
             # constructor); `seed` is not used here.
-            self.model = KernelDensity(kernel=self.kernel, bandwidth="silverman", atol=0.5, rtol=0.5)
+            self.model = KernelDensity(kernel=self.kernel, bandwidth=1.0)
         elif point_model_name == "vim":  # Variational inference dirichlet process gaussian mixture model
             self.model = BayesianGaussianMixture(n_components=self.n_components, covariance_type='full',
                                                   random_state=self.seed)
@@ -423,7 +448,10 @@ class FittedModelFactory:
                                   rng=np.random.default_rng(effective_seed))
 
         # a fresh copy per call, so models created earlier keep their own fit
-        return clone(self.model).fit(data.reshape(-1, 1)), data
+        model = clone(self.model)
+        if self.point_model_name == "kde":
+            model.set_params(bandwidth=silverman_bandwidth(data))
+        return model.fit(data.reshape(-1, 1)), data
 
     def __repr__(self):
         return (f"model_name={self.point_model_name}, "

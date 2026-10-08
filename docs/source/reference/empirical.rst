@@ -15,3 +15,5 @@ The laws fitted to the members at each location, by kernel density or Gaussian m
 .. autoclass:: EmpiricalModel
    :members:
    :undoc-members:
+
+.. autofunction:: silverman_bandwidth

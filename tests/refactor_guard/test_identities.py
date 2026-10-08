@@ -84,3 +84,30 @@ def test_mutual_information_marginals_integrate_the_joint_density():
                     f += ((mid >= c[lo]) & (mid < c[hi])) * (n / smi.T) / (c[hi] - c[lo])
             h.append(-np.sum(f[f > 0] * np.log2(f[f > 0])) * dx)
         assert abs(smi._calculate_marginal_entropy_from_joint(parts, leaves, marginal) - np.mean(h)) < 1e-3
+
+
+@pytest.mark.parametrize("scale", [0.01, 100.0])
+def test_density_readings_do_not_depend_on_units(scale):
+    """The KDE of the local laws (ESS, NLL, Pareto) takes its bandwidth from the sample's own spread,
+    so changing the units of the variable changes no conclusion: the KDE spread scales with the data,
+    the NLL shifts by log(scale) and the encoder error does not change."""
+    from spatialize.empirical import FittedModelFactory
+    from spatialize.gs.esi import scorefunction as sf
+    from spatialize.gs.esi.pareto import EmpiricalRobustnessBound
+    from spatialize import session
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    members, truth = rng.normal(size=(40, 60)), rng.normal(size=40)
+
+    model, _ = FittedModelFactory().create(members[0] * scale)
+    reference, _ = FittedModelFactory().create(members[0])
+    assert np.isclose(model.bandwidth_, reference.bandwidth_ * scale, rtol=1e-12)
+
+    nll = sf.neg_log_likelihood(truth, members)
+    assert np.isclose(sf.neg_log_likelihood(truth * scale, members * scale), nll + np.log(scale), rtol=1e-9)
+
+    s, v, _ = DATA["2d"]
+    with session.override(parallel=False):
+        eps = EmpiricalRobustnessBound(30, cases.ALPHA, "idw", "mondrian", cases.SEED).estimate(s, v)
+        eps_scaled = EmpiricalRobustnessBound(30, cases.ALPHA, "idw", "mondrian", cases.SEED).estimate(
+            s, (v * scale).astype(np.float32))
+    assert np.isclose(eps, eps_scaled, rtol=1e-4)

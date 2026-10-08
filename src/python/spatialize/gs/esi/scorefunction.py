@@ -68,7 +68,11 @@ def neg_log_likelihood(true_values, samples, min_points=30):
     Computes the average negative log-likelihood score for hyperparameter selection.
 
     Computes the negative log-likelihood of the true observed values under the predictive
-    distributions represented by the ESI samples. This corresponds to maximum likelihood
+    distributions represented by the ESI samples, each read through a Gaussian kernel density
+    with the bandwidth of Silverman's rule computed from its own spread
+    (:func:`~spatialize.empirical.silverman_bandwidth`), evaluated exactly. Changing the units
+    of the variable by a factor c shifts the score by log c, so the ranking of configurations
+    does not depend on the units. This corresponds to maximum likelihood
     estimation - minimizing this score finds hyperparameters that maximize the probability
     of the observed data.
 
@@ -90,6 +94,7 @@ def neg_log_likelihood(true_values, samples, min_points=30):
         When true_values is provided, this is the MLE score.
     """
     from sklearn.neighbors import KernelDensity      # local import to avoid circularities
+    from spatialize.empirical import silverman_bandwidth
 
     n_points = len(samples)
     valid_points = n_points
@@ -103,7 +108,7 @@ def neg_log_likelihood(true_values, samples, min_points=30):
             assert len(clean_samples) >= min_points     # ensure a minimum of non-null points
 
             # Fit KDE
-            kde = KernelDensity(kernel="gaussian", bandwidth="silverman", atol=0.5, rtol=0.5)
+            kde = KernelDensity(kernel="gaussian", bandwidth=silverman_bandwidth(clean_samples))
             kde.fit(clean_samples.reshape(-1, 1))
 
             log_prob = kde.score_samples([[true_values[i]]])

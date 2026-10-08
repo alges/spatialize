@@ -198,11 +198,9 @@ class EmpiricalRobustnessBound:
     def _prefit_models(self, samples: np.ndarray) -> list:
         """Fit one density model per training point; return list of (model, d_min, d_max) or None.
 
-        Uses ``sklearn.base.clone`` to create an independent estimator instance
-        per point so that fitting is non-destructive and the list can be safely
-        reused across all KL pair evaluations.
+        The factory returns an independent estimator per point, so the list can
+        be safely reused across all KL pair evaluations.
         """
-        from sklearn.base import clone as _sklearn_clone
         result = []
         for idx in range(len(samples)):
             s = samples[idx].astype(np.float64)
@@ -210,7 +208,7 @@ class EmpiricalRobustnessBound:
             if len(s) < 2:
                 result.append(None)
                 continue
-            model = _sklearn_clone(self._factory.model).fit(s.reshape(-1, 1))
+            model, _ = self._factory.create(s)   # a fresh model, its bandwidth from this sample
             d_min, d_max = float(s.min()), float(s.max())
             ext = (d_max - d_min) * 0.1
             result.append((model, d_min - ext, d_max + ext))
@@ -442,6 +440,19 @@ def _max_divergence(models, pairs, support_sample_size, repeated=False) -> float
     return best
 
 
+def _density(model, x):
+    """The density of a fitted model at the points ``x`` (1-D). A Gaussian KDE is evaluated exactly
+    and vectorised from its data and bandwidth; scikit-learn's tree only pays off when it
+    approximates, which would make the divergence depend on the units of the variable."""
+    from sklearn.neighbors import KernelDensity
+    if isinstance(model, KernelDensity) and model.kernel == "gaussian":
+        data = np.asarray(model.tree_.data).ravel()
+        h = float(model.bandwidth_)
+        z = (x[:, None] - data[None, :]) / h
+        return np.exp(-0.5 * z * z).sum(axis=1) / (len(data) * h * np.sqrt(2.0 * np.pi))
+    return np.exp(model.score_samples(x.reshape(-1, 1))).ravel()
+
+
 def _kl_from_models(
     model_tuple_i: tuple,
     model_tuple_j: tuple,
@@ -464,10 +475,9 @@ def _kl_from_models(
         return 0.0
 
     x_shared, dx = np.linspace(x_min, x_max, support_sample_size, retstep=True)
-    xs = x_shared.reshape(-1, 1)
 
-    p_i = np.nan_to_num(np.exp(model_i.score_samples(xs)).ravel(), nan=0.0).clip(0.0)
-    p_j = np.nan_to_num(np.exp(model_j.score_samples(xs)).ravel(), nan=0.0).clip(0.0)
+    p_i = np.nan_to_num(_density(model_i, x_shared), nan=0.0).clip(0.0)
+    p_j = np.nan_to_num(_density(model_j, x_shared), nan=0.0).clip(0.0)
 
     sum_i = p_i.sum() * dx
     sum_j = p_j.sum() * dx
@@ -478,9 +488,11 @@ def _kl_from_models(
     p_j /= sum_j
 
     mask = p_i > 0.0
-    p_j_floor = dx / (support_sample_size * 10.0)
+    # a floor for p̂_j: the density of a uniform law on the grid carrying 1/(10 N) of the mass, a
+    # density (1/length), so the divergence does not depend on the units of the variable
+    p_j_floor = 1.0 / ((x_max - x_min) * support_sample_size * 10.0)
     p_j_safe = np.maximum(p_j[mask], p_j_floor)
-    return max(float(np.sum(p_i[mask] * np.log(p_i[mask] / p_j_safe)) * dx), 0.0)
+    return max(float(np.sum(p_i[mask] * (np.log(p_i[mask]) - np.log(p_j_safe))) * dx), 0.0)
 
 
 def _fitted_kl(
@@ -569,9 +581,11 @@ def _fitted_kl(
     p_j = p_j / sum_j
 
     mask      = p_i > 0.0
-    p_j_floor = dx / (support_sample_size * 10.0)
+    # a floor for p̂_j: the density of a uniform law on the grid carrying 1/(10 N) of the mass, a
+    # density (1/length), so the divergence does not depend on the units of the variable
+    p_j_floor = 1.0 / ((x_max - x_min) * support_sample_size * 10.0)
     p_j_safe  = np.where(p_j[mask] > 0.0, p_j[mask], p_j_floor)
-    kl = float(np.sum(p_i[mask] * np.log(p_i[mask] / p_j_safe)) * dx)
+    kl = float(np.sum(p_i[mask] * (np.log(p_i[mask]) - np.log(p_j_safe))) * dx)
     return max(kl, 0.0)
 
 

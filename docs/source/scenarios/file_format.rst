@@ -257,6 +257,35 @@ run with one seed, so all of them see the same partitions.
   through the runner's optional method ``cells`` (:doc:`extending`). A runner without it has them
   skipped.
 
+Evaluator ``cv_selection``
+--------------------------
+
+This evaluator reads leave-one-out ensembles under the empty-cell policies (scenario P11), through
+the runner's optional method ``loo`` (:doc:`extending`). Every estimator is run with one seed.
+
+- ``truth``: ``generator: smooth_plus_noise``, drawn by the evaluator, not pinned.
+- ``data``: ``centres`` of Gaussian clusters of ``per_cluster`` data with standard deviation
+  ``spread``, ``scattered`` data uniform in the domain, the ``noise`` of the values and
+  ``generator_seed``.
+- per check, ``kind`` and its keys:
+
+  .. list-table::
+     :header-rows: 1
+     :widths: 22 78
+
+     * - ``kind``
+       - keys and test
+     * - ``loo_filled``
+       - ``estimators``: no leave-one-out member is NaN (almost-sure).
+     * - ``loo_unchanged``
+       - ``estimators``, each naming its ``reference`` under ``nan``, and ``tolerance``: where the
+         reference is finite, the member equals it (almost-sure).
+     * - ``selection``
+       - ``estimator`` (under ``nan``), ``reference`` (defined at every datum) and ``min_share``.
+         The data with fewer than ``min_share`` × T finite members of the estimator are left out.
+         The errors of the reference at the data kept and left out are compared by a
+         Kolmogorov–Smirnov test (two-sample), run as a negative control.
+
 Evaluator ``draw_laws``
 -----------------------
 

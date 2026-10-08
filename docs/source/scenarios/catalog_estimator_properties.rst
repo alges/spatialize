@@ -9,7 +9,7 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2, P3, P6 and P10 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
+P2, P3, P6, P10 and P11 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
 law of the marks of empty cells, so their targets must first be derived for the mark strategies
 Spatialize implements (:doc:`../theory/blockmark`).
 
@@ -295,3 +295,48 @@ The goodness-of-fit check has no negative control. The natural one, the block-ma
 the uniform one on this design. With 1 000 members its counts are rejected on every seed tried
 (p at most :math:`10^{-8}`). With 200 they are not rejected reliably, so a control would fail in
 ``ci``.
+
+.. _scenario-P11:
+
+P11 — Selection bias of the cross-validation
+============================================
+
+:Status: **implemented**
+:Evaluator: ``cv_selection``
+:Source in the theory: the law conditioned on the cell having data is not the theory's law, whose
+  residual weight goes to a mark; scoring the predictive law
+:Claim: a cross-validation score that drops undefined members scores only the data whose cells keep
+  other data, so its value is optimistic and favours fine partitions. ``"mark"`` and ``"coarsen"``
+  define every leave-one-out member, so a score covers every datum.
+
+**Setup.** 180 data on the unit square, 40 in each of three Gaussian clusters of standard deviation
+0.04 and 60 scattered uniformly, carry the field of P2 with noise of standard deviation 0.02. IDW
+predicts each datum from the others (leave-one-out) on the theory's Mondrian process at rate 32,
+fine enough to leave the scattered data alone in their cells, under ``"nan"``, ``"coarsen"`` and
+``"mark"`` (strategies ``local``, and ``cells`` with ``datum``). The almost-sure checks also run on
+Spatialize's default Mondrian at rate 12. Every estimator uses :math:`T = 200` members in ``ci``
+and :math:`1\,000` in ``full``, with one seed. The leave-one-out ensembles come from the runner's
+optional method ``loo`` (:doc:`extending`).
+
+**Checks.**
+
+- ``loo-filled``, *almost-sure*. Under ``"mark"`` and ``"coarsen"`` no leave-one-out member is NaN.
+- ``loo-unchanged``, *almost-sure*. Where the member under ``"nan"`` is defined, the other policies
+  give the same member, bit for bit.
+- ``control-selection``, *negative control* (two-sample). A score that needs 15 % of finite members
+  at a datum, the NLL's 30 out of 200, leaves out the data below that share under ``"nan"``. Each
+  datum's error is read under ``"coarsen"``, defined at every datum, as the absolute difference
+  between the mean of its members and its value. The Kolmogorov–Smirnov test between the errors of
+  the data kept and of those left out must reject, since the data left out are the isolated ones,
+  the hardest to predict.
+
+**Results.** On seeds 1 to 3, in both modes, the almost-sure checks pass with no violation. The
+control rejects with p at most :math:`2.4 \cdot 10^{-11}`. About 37 of the 180 data are left out.
+Their mean error is 0.16 against 0.03 for the data kept, so the score of the kept data, about 0.040,
+understates the error over all the data, about 0.060, by a third.
+
+The searches of Spatialize record, for each configuration, the share of data left out of the score
+and warn above the session setting ``max_left_out`` (:doc:`../reference/session`).
+
+The design was chosen on probes before the first run. With noise 0.05 and rate 24 the control's
+p-values, between :math:`10^{-4}` and :math:`10^{-7}`, came too close to its Holm level.

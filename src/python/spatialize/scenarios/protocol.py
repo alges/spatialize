@@ -76,6 +76,10 @@ class Runner(Protocol):
     ``members`` draws with the same arguments, two queries sharing a cell of partition ``t`` exactly
     when their labels in column ``t`` are equal. The checks that read cells (scenario P10) are
     skipped for a runner without it.
+
+    It may also provide ``loo(estimator, samples, values, *, n_members, seed)``, returning an array of
+    shape ``(n, n_members)``: each datum predicted from the other data, one member per partition, as
+    the hyperparameter searches cross-validate. Scenario P11 needs it.
     """
 
     name: str

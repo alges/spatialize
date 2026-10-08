@@ -54,6 +54,10 @@ labels in column :math:`t` are equal, for the partitions ``members`` draws with 
 The checks of scenario P10 that compare the locations of one cell need it. A runner without it has
 them skipped. Spatialize's runner reads the cells with ``lib_spatialize_facade.cells``.
 
+A runner may also give leave-one-out ensembles, through a method
+``loo(est, samples, values, *, n_members, seed)`` returning an array of shape
+``(n_samples, n_members)``, each datum predicted from the other data. Scenario P11 needs it.
+
 Testing a new spatialize decoder
 ================================
 

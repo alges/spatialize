@@ -1,0 +1,64 @@
+id: P11-cv-selection-bias
+version: 1
+tier: T2
+evaluator: cv_selection
+book:
+  topic: "the law conditioned on the cell having data is not the theory's law: the residual weight goes to a mark"
+  draft_2026_10: "ch 12, the limit law of the estimator; ch 7, scoring the predictive law"   # the book is a draft
+purpose: >
+  A cross-validation score that drops undefined members scores only the data whose cells keep other
+  data, the data in dense zones, so it favours fine partitions. The negative control shows the bias
+  on clustered data. The almost-sure checks show that "mark" and "coarsen" define every
+  leave-one-out member without changing the members "nan" defines, so a score covers every datum.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  centres: [[0.25, 0.3], [0.7, 0.65], [0.3, 0.75]]
+  per_cluster: 40
+  spread: 0.04                      # standard deviation of each Gaussian cluster
+  scattered: 60                     # uniform in the domain: 180 data in all
+  noise: 0.02
+  generator_seed: 20261008
+estimators_T: {ci: 200, full: 1000}
+estimators:
+  # The theory's Mondrian at rate 32 (E[#cells] = 33² = 1089) leaves the isolated data alone in their
+  # cells. Spatialize's default Mondrian at rate 12 (about 465 cells, against 169 for the theory's
+  # process, its cell count growing faster) for the almost-sure checks.
+  - {id: t-nan, encoder: mondrian-theory, rate: 32.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: t-coarsen, encoder: mondrian-theory, rate: 32.0, decoder: idw, params: {exponent: 2.0},
+     empty_cells: coarsen, reference: t-nan}
+  - {id: t-mark, encoder: mondrian-theory, rate: 32.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: t-nan}
+  - {id: t-mark-cells, encoder: mondrian-theory, rate: 32.0, decoder: idw, params: {exponent: 2.0},
+     empty_cells: mark, mark: {source: cells, knn: 8, value: datum}, reference: t-nan}
+  - {id: m-nan, encoder: mondrian, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: m-coarsen, encoder: mondrian, rate: 12.0, decoder: idw, params: {exponent: 2.0},
+     empty_cells: coarsen, reference: m-nan}
+  - {id: m-mark, encoder: mondrian, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: m-nan}
+checks:
+  - id: loo-filled
+    title: "every leave-one-out member is defined"
+    kind: loo_filled
+    family: almost-sure
+    estimators: [t-coarsen, t-mark, t-mark-cells, m-coarsen, m-mark]
+  - id: loo-unchanged
+    title: "the leave-one-out members nan defines are kept"
+    kind: loo_unchanged
+    family: almost-sure
+    tolerance: 0.0                  # the same partitions and decoder: the same float32 members
+    estimators: [t-coarsen, t-mark, t-mark-cells, m-coarsen, m-mark]
+  - id: control-selection
+    title: "negative control: the data a NaN-dropping score leaves out are as easy to predict as the others"
+    kind: selection
+    family: two-sample
+    estimator: t-nan
+    reference: t-coarsen            # defined at every datum: the error of each datum, kept or not
+    min_share: 0.15                 # the NLL's 30 valid members out of 200
+    expect: {default: reject}
+provenance:
+  v1: >
+    2026-10-08: first version (phase 3, the selection bias of the cross-validation under "nan").
+    Design chosen on probes before the first run: with noise 0.05 and rate 24 the control's p-values
+    (1e-4 to 1e-7) were too close to its Holm level; with noise 0.02 and rate 32 the largest p over
+    eight seeds was 2.4e-11.

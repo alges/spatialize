@@ -985,9 +985,110 @@ def eval_empty_cells(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _clustered_data(s):
+    """Data of a cv_selection scenario, drawn from ``data.generator_seed`` (not pinned): Gaussian
+    clusters of ``data.per_cluster`` data around ``data.centres`` with standard deviation
+    ``data.spread``, plus ``data.scattered`` data uniform in the domain, carrying a smooth field plus
+    noise of standard deviation ``data.noise``."""
+    rng = np.random.default_rng(int(s["data"]["generator_seed"]))
+    box = np.asarray(s["domain"]["box"], float)
+    centres = np.asarray(s["data"]["centres"], float)
+    k, spread = int(s["data"]["per_cluster"]), float(s["data"]["spread"])
+    clusters = np.vstack([c + spread * rng.standard_normal((k, len(box))) for c in centres])
+    scattered = box[:, 0] + rng.random((int(s["data"]["scattered"]), len(box))) * (box[:, 1] - box[:, 0])
+    pts = np.clip(np.vstack([clusters, scattered]), box[:, 0], box[:, 1])
+    u = (pts - box[:, 0]) / (box[:, 1] - box[:, 0])
+    vals = (np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1])
+            + float(s["data"]["noise"]) * rng.standard_normal(len(pts)))
+    return pts.astype(np.float32), vals.astype(np.float32)
+
+
+def eval_cv_selection(sc: Scenario, runner: Runner, mode: str, seed: int,
+                      save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``cv_selection``: leave-one-out under the empty-cell policies (P11).
+
+    The leave-one-out ensembles come from the runner's optional method ``loo``; without it every
+    check is skipped. Every estimator is run with one seed. Kinds (key ``kind``):
+
+    - ``loo_filled`` (``estimators``) — almost-sure: no leave-one-out member is NaN;
+    - ``loo_unchanged`` (``estimators``, each naming its ``reference`` under ``"nan"``) — almost-sure:
+      where the reference's member is finite, the member equals it, up to ``tolerance`` × data range;
+    - ``selection`` (``estimator`` under ``"nan"``, ``reference`` defined at every datum) —
+      two-sample: a score that drops undefined members leaves out the data with fewer than
+      ``min_share`` × T finite members of ``estimator``. The absolute errors of the mean of the
+      ``reference`` members at the data kept and at the data left out are compared by a
+      Kolmogorov–Smirnov test. Run as a negative control, it shows that the data left out are not
+      a random subset.
+
+    Reads ``data.centres``, ``data.per_cluster``, ``data.spread``, ``data.scattered``, ``data.noise``,
+    ``data.generator_seed`` and ``estimators_T``.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    entries = {e["id"]: e for e in s["estimators"]}
+    ests = {eid: sc.estimator(e) for eid, e in entries.items()}
+    pts, vals = _clustered_data(s)
+    rng_v = float(vals.max() - vals.min())
+    cache = {}
+
+    def loo(eid):
+        if eid not in cache:
+            cache[eid] = np.asarray(runner.loo(ests[eid], pts, vals, n_members=T, seed=seed), float)
+        return cache[eid]
+
+    out = []
+    for check in s["checks"]:
+        kind, tol = check["kind"], float(check.get("tolerance", 0.0)) * rng_v
+        eids = check["estimators"] if "estimators" in check else [check["estimator"]]
+        for eid in eids:
+            est = ests[eid]
+            ref = check.get("reference", entries[eid].get("reference", eid))
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            if "estimators" in check:
+                cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            else:
+                cid, title = check["id"], f"{check['title']} [{profile}]"
+            needed = [est, ests[ref]]
+            reason = ""
+            if not all(runner.supports(e) for e in needed):
+                reason = f"{runner.name} does not support " + ", ".join(
+                    f"{e.encoder}/{e.decoder}/{e.empty_cells}" for e in needed)
+            elif not hasattr(runner, "loo"):
+                reason = f"{runner.name} gives no leave-one-out ensemble"
+            if reason:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=reason))
+                continue
+            m = loo(eid)
+            if kind == "loo_filled":
+                r = families.almost_sure(int(np.isnan(m).sum()), m.size)
+            elif kind == "loo_unchanged":
+                defined = np.isfinite(loo(ref))
+                a, b = m[defined], loo(ref)[defined]
+                r = families.almost_sure(int((~(np.abs(a - b) <= tol)).sum()), a.size)
+            elif kind == "selection":
+                kept = np.isfinite(m).sum(axis=1) >= float(check["min_share"]) * T
+                err = np.abs(loo(ref).mean(axis=1) - vals)
+                score = np.abs(np.nanmean(m[kept], axis=1) - vals[kept]).mean()
+                if min(kept.sum(), (~kept).sum()) < 2:   # nothing to compare: the test cannot reject
+                    r = families.TestResult("two-sample", np.nan, 1.0, "not_reject", "fewer than 2 data on a side")
+                else:
+                    r = families.two_sample_ks(err[kept], err[~kept])
+                r = families.TestResult(r.family, r.statistic, r.p_value, r.pass_if,
+                                        f"{r.detail}; {int((~kept).sum())} of {len(vals)} data left out; "
+                                        f"score of the kept data {score:.4f}, error over all data "
+                                        f"{err.mean():.4f}, kept {err[kept].mean():.4f}, left out "
+                                        f"{err[~kept].mean():.4f}")
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
-              "locality": eval_locality, "empty_cells": eval_empty_cells}
+              "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection}
 
 
 # ----------------------------------------------------------------------------- run

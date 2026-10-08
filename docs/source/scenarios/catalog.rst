@@ -116,6 +116,10 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - each empty-cell policy does what it declares
      - **implemented**
      - —
+   * - :ref:`P11 <scenario-P11>`
+     - a score that drops undefined members leaves out the hardest data
+     - **implemented**
+     - —
    * - 
      - **T3 — geostatistical scenarios**
      - 

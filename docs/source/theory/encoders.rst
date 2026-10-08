@@ -70,8 +70,18 @@ own cut. On a square domain the difference is modest, the co-occurrence lying so
 :math:`e(\{x,y\})` above. On an elongated domain the uniform choice of axis makes the cells
 elongated too, so locations along the long side are coupled more strongly than across it.
 
-Prefer it as the general default. It is fast, it works in any dimension, and Spatialize's published
-results were obtained with it. Each member shows rectangular blocks, which the ensemble averages
+At fine granularities the uniform choice of axis also multiplies the cells. A thin cell keeps its
+long side, so it still waits little for its next cut, which half of the time falls across its short
+side and makes it thinner. The number of cells then grows much faster than the theory's
+:math:`(1 + \lambda)^2` on the unit square. With 120 data on the unit square, at ``alpha`` = 0.979
+(:math:`\lambda = 24`) a partition has at least 4 500 cells, against about 600 for
+``"mondrian-raw"``. At ``alpha`` = 0.990 (:math:`\lambda = 48`) it has at least 92 000, against
+about 2 400, most of them slivers holding no datum. Time and memory follow, one partition taking
+1.7 s and 0.9 GB at ``alpha`` = 0.993 and 20 s and 9 GB at ``alpha`` = 0.995.
+
+Prefer it as the general default at the usual granularities. It is fast there, it works in any
+dimension, and Spatialize's published results were obtained with it. Close to ``alpha`` = 1,
+``"mondrian-raw"`` keeps the number of cells, and with it the cost, under control. Each member shows rectangular blocks, which the ensemble averages
 away, so that a few hundred partitions leave only a faint trace of the axes in the averaged map.
 
 The Voronoi processes

@@ -98,7 +98,7 @@ class SpatializeRunner:
     ``"mark"`` and ``"coarsen"`` (set through the session, :mod:`spatialize.session`), for every
     decoder the catalogue offers in the domain's dimension. The partition box is pinned to the
     scenario's domain by adding its corners as extra queries. :meth:`cells` gives the cell of each
-    query in the partitions :meth:`members` draws.
+    query in the partitions :meth:`members` draws, and :meth:`loo` the leave-one-out ensemble.
 
     Examples
     --------
@@ -152,6 +152,20 @@ class SpatializeRunner:
         """
         if not self.supports(est):
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
+        return self._run(est, samples, values, queries, n_members, seed, "estimate")[: len(queries)]
+
+    def loo(self, est, samples, values, *, n_members, seed):
+        """Leave-one-out ensemble: each datum predicted from the other data, one member per partition.
+
+        Returns
+        -------
+        ndarray of shape (n, n_members)
+        """
+        if not self.supports(est):
+            raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
+        return self._run(est, samples, values, samples, n_members, seed, "loo")
+
+    def _run(self, est, samples, values, queries, n_members, seed, method):
         partition, alpha, q = self._partition(est, samples, queries)
         policy = {"empty_cells": est.empty_cells}
         if est.empty_cells == "mark":
@@ -160,10 +174,10 @@ class SpatializeRunner:
         try:
             with self._session.override(**policy):
                 _, out = self._gs.lib_spatialize_facade.run(samples, values, q, partition, est.decoder, est.params,
-                                                            alpha, int(n_members), int(seed))
+                                                            alpha, int(n_members), int(seed), method=method)
         except RuntimeError as e:
             raise ValueError(f"{est.id}: {e}") from None
-        return np.asarray(out)[: len(queries)]
+        return np.asarray(out)
 
     def cells(self, est, samples, queries, *, n_members, seed):
         """The cell of each query in each partition :meth:`members` draws with the same arguments.

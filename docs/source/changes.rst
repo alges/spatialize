@@ -47,7 +47,8 @@ New
   any number of threads or processes.
 - **Conformance tests** (:doc:`scenarios/index`), runnable with ``python -m spatialize.scenarios``,
   which prints its progress as it runs. Scenario P10 holds the empty-cell policies to what they
-  declare (:ref:`scenario-P10`).
+  declare (:ref:`scenario-P10`). Scenario P11 shows the selection bias of a cross-validation score
+  that drops undefined members (:ref:`scenario-P11`).
 - :func:`~spatialize.empirical.silverman_bandwidth`, the bandwidth of the kernel density estimates.
 
 Under study

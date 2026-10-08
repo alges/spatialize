@@ -1,123 +1,83 @@
-import time, numpy as np, libspatialize as lsp
+"""A decoder written in Python, plain and compiled with numba, against the built-in IDW.
 
-from matplotlib import pyplot as plt
+The three estimations below give the same members up to float rounding; the script prints how long
+each takes. See the developer guide, "Writing a decoder in Python".
+"""
+import time
+
+import numpy as np
 from numba import njit
 
-from spatialize import logging
 from spatialize.data import load_drill_holes_andes_2D
-from spatialize.gs.esi import ESIResult
-from spatialize.logging import default_singleton_callback
+from spatialize.gs.esi import esi_nongriddata
+from spatialize.logging import singleton_null_callback
 
-logging.log.setLevel("DEBUG")
 
-@njit
-def idw_local_interpolator(cell_points: np.ndarray,
-                           cell_values: np.ndarray,
-                           cell_xi: np.ndarray,
-                           cell_params: np.ndarray) -> np.ndarray:
-    power = cell_params[0] if cell_params.shape[0] > 0 else 2.0  # fallback if empty
+def idw_python(points, values, queries, params):
+    """Inverse distance weighting with exponent params[0], in plain Python (NumPy)."""
+    p = params[0] if params.size else 2.0
+    d = np.sqrt(((queries[:, None, :] - points[None, :, :]) ** 2).sum(axis=-1))
+    out = np.empty(len(queries))
+    for i in range(len(queries)):
+        at = d[i] == 0
+        if at.any():                       # a query on a datum takes its value
+            out[i] = values[at].mean()
+            continue
+        w = d[i] ** -p
+        out[i] = (w * values).sum() / w.sum()
+    return out
 
-    result = []
-    for q in cell_xi:
-        dists = np.array([np.sqrt(np.sum(np.power(s - q, power * np.ones((cell_points.shape[1],))))) for s in cell_points])
-        weights = 1.0 / (1 + np.power(dists, power * np.ones((len(dists),))))
-        norm = np.sum(weights)
-        result.append(np.sum(cell_values * weights) / norm)
-    return (np.array(result))
 
-@njit
-def idw_local_interpolator_anisotropic(
-        cell_points: np.ndarray,
-        cell_values: np.ndarray,
-        cell_xi: np.ndarray,
-        cell_params: np.ndarray) -> np.ndarray:
-    n_qry = cell_xi.shape[0]
-    n_smp = cell_points.shape[0]
-    n_dim = cell_points.shape[1]
+@njit(cache=True)
+def idw_numba(points, values, queries, params):
+    """The same decoder compiled with numba: explicit loops, no Python objects."""
+    p = params[0] if params.size > 0 else 2.0
+    out = np.empty(queries.shape[0])
+    for i in range(queries.shape[0]):
+        sw, swv, exact, n_exact = 0.0, 0.0, 0.0, 0
+        for j in range(points.shape[0]):
+            d2 = 0.0
+            for c in range(points.shape[1]):
+                diff = points[j, c] - queries[i, c]
+                d2 += diff * diff
+            if d2 == 0.0:
+                exact += values[j]
+                n_exact += 1
+                continue
+            w = d2 ** (-p / 2)
+            sw += w
+            swv += w * values[j]
+        out[i] = exact / n_exact if n_exact > 0 else swv / sw
+    return out
 
-    power = cell_params[0] if cell_params.shape[0] > 0 else 2.0  # fallback if empty
 
-    # Use scaling if provided, else default to ones
-    if cell_params.size > 1:
-        scaling = cell_params[1:]
-    else:
-        scaling = np.ones(n_dim, dtype=cell_params.dtype)
+@njit(cache=True)
+def exponent_two(points, values):
+    """The parameters of a cell, computed once per cell: here a fixed exponent."""
+    return np.array([2.0])
 
-    result = np.empty(n_qry, dtype=np.float64)
-    eps = 1e-12  # small epsilon for numerical stability
 
-    for i in range(n_qry):
-        q = cell_xi[i]
-        weights_sum = 0.0
-        weighted_val_sum = 0.0
+if __name__ == "__main__":
+    samples, locations, _, _ = load_drill_holes_andes_2D()
+    points = samples[["x", "y"]].values
+    values = samples[["cu"]].values[:, 0]
+    xi = locations[["x", "y"]].values
+    common = dict(n_partitions=100, alpha=0.9, seed=206936, callback=singleton_null_callback)
 
-        for j in range(n_smp):
-            s = cell_points[j]
-            dist_sq = 0.0
-            for k in range(n_dim):
-                diff = (s[k] - q[k]) * scaling[k]
-                dist_sq += diff * diff
-            dist = np.sqrt(dist_sq)
-            w = 1.0 / (eps + dist ** power)
-            weights_sum += w
-            weighted_val_sum += cell_values[j] * w
-
-        result[i] = weighted_val_sum / weights_sum if weights_sum > 0 else 0.0
-
-    return result
-
-# loading data
-# the samples included in the spatialize package
-samples, locations, krig, _ = load_drill_holes_andes_2D()
-
-# estimation data and result shape
-w, h = 300, 200
-
-# input variables for non gridded estimation spatialize functions
-points = samples[['x', 'y']].values
-values = samples[['cu']].values[:, 0]
-xi = locations[['x', 'y']].values
-
-# general parameters
-n_partitions = 100
-alpha = 0.9
-exponent = 2.0
-
-# pure C++ implementation
-print("running pure c++ esi idw:")
-est1 = lsp.run(
-    points, values, xi,
-    "mondrian", alpha, n_partitions, 206936,
-    "idw", {"exponent": exponent},
-    visitor=default_singleton_callback
-)
-
-esi_result1 = ESIResult(np.nanmean(est1[1], axis=1), est1[1], False, None, xi)
-esi_result1.quick_plot()
-
-# custom implementation using numba and C++
-print("running custom (numba and c++) esi idw:")
-params_iso = np.array([exponent])  # isotropic (no scaling specified)
-params_aniso = np.array([exponent, 1.0, 1.0])  # anisotropic with all ones scaling
-
-@njit
-def set_cell_params(cell_points, cell_values):
-    return params_aniso
-
-est2 = lsp.run(
-    points, values, xi,
-    "mondrian", alpha, n_partitions, 206936,
-    "custom", {"post_creation": set_cell_params, "estimation": idw_local_interpolator_anisotropic},
-    visitor=default_singleton_callback
-)
-
-esi_result2 = ESIResult(np.nanmean(est2[1], axis=1), est2[1], False, None, xi)
-esi_result2.quick_plot()
-
-d = esi_result1.esi_samples(raw=True) - esi_result2.esi_samples(raw=True)
-d = d[~np.isnan(d)]
-
-r = sorted(list(d.flatten()))
-print(f'max error:{r[-1]}')
-
-plt.show()
+    runs = {
+        "built-in idw (C++)": dict(local_interpolator="idw", exponent=2.0),
+        "custom, plain Python": dict(local_interpolator="custom", estimation=idw_python,
+                                     post_creation=exponent_two),
+        "custom, numba": dict(local_interpolator="custom", estimation=idw_numba,
+                              post_creation=exponent_two),
+    }
+    idw_numba(np.zeros((2, 2)), np.zeros(2), np.ones((1, 2)), np.array([2.0]))   # compile once
+    members = {}
+    for name, kw in runs.items():
+        t = time.perf_counter()
+        members[name] = esi_nongriddata(points, values, xi, **common, **kw).esi_samples(raw=True)
+        print(f"{name:22s} {time.perf_counter() - t:6.2f} s")
+    reference = members["built-in idw (C++)"]
+    for name in list(runs)[1:]:
+        print(f"{name}: largest difference from the built-in decoder "
+              f"{np.nanmax(np.abs(members[name] - reference)):.1e}")

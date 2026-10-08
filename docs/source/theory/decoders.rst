@@ -201,4 +201,6 @@ Every decoder is a value of ``local_interpolator`` in the public functions
 ``model``, ``nugget``, ``range`` and ``sill``, and :math:`\kappa_r, \kappa_g, \varrho_{\max}` as
 ``kappa_r``, ``kappa_g`` and ``rho_max``. The conformance tests check that every member of a drawing
 decoder is an observed value and that the mean and variance of its draws match the identities above
-(:doc:`../scenarios/catalog_estimator_properties`).
+(:doc:`../scenarios/catalog_estimator_properties`). A decoder that Spatialize does not offer can be written in Python, with
+nothing to compile, and passed as ``local_interpolator="custom"`` (:doc:`../development/python_decoders`),
+or added to the library in C++ (:doc:`../development/cpp_decoders`).

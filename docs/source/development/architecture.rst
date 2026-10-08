@@ -188,9 +188,10 @@ itself.
 In both, the held-out data of leave-one-out and k-fold take no part. A new partition implements
 ``leaf_point`` and ``coarser``, and a new decoder with per-cell parameters implements ``fit_cell``.
 
-The public functions offer every decoder except ``custom``, which categorical ESI uses. Their
-argument lists keep the historical order for ``idw``, ``kriging`` and ``adaptiveidw``, while the
-other decoders pass their parameters in the catalogue's order, followed by the seed. Plain
+The public functions offer every decoder of the catalogue, ``custom`` included, whose Python
+functions are passed as keyword arguments (:doc:`python_decoders`). Their argument lists keep the
+historical order for ``idw``, ``kriging`` and ``adaptiveidw``, while the other decoders pass their
+parameters in the catalogue's order, functions included, followed by the seed. Plain
 IDW (``spatialize.gs.idw``) is a separate engine, outside the catalogue.
 
 Changes of results
@@ -251,16 +252,7 @@ Reproducibility under parallel execution
 Adding a decoder
 ================
 
-1. Subclass ``Decoder`` in its own file under ``include/spatialize/decoders/``, implementing
-   ``leaf_estimation``, ``leaf_loo`` and ``leaf_kfold`` on the samples of one cell. Each call also
-   receives a ``CellContext`` with the tree, the cell and the run's seed, from which a decoder that
-   draws derives its random numbers. Implement ``fit``
-   if the decoder needs per-cell parameters, storing them in ``partition->leaf_params``, and draw
-   any randomness from the generator passed to ``fit`` only. The ``leaf_*`` methods run on several
-   cells at once, so they must not modify shared state. A decoder that cannot meet this overrides
-   ``thread_safe()`` to return false.
-2. Register it in the catalogue (``src/c++/registry.hpp``), with its dimensions, its parameters and
-   a factory. ``run``, the facade and the scenario runner then know it.
-3. Test it with the conformance scenarios, by naming it in a scenario's estimators (:doc:`testing`).
-4. Give it a place in the public functions' argument lists (``build_arg_list`` and the defaults of
-   ``signature_overload``), then document it.
+There are two routes, each with its own page. :doc:`python_decoders` writes a decoder as Python
+functions (optionally compiled with numba), with nothing to compile, passed as
+``local_interpolator="custom"``. :doc:`cpp_decoders` adds a ``Decoder`` subclass to the library and
+registers it in the catalogue, which runs on every core and draws random numbers reproducibly.

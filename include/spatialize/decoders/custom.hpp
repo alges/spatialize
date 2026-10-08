@@ -33,13 +33,20 @@ namespace sptlz{
       // the callbacks are Python functions, which need the GIL: one cell at a time
       bool thread_safe(){ return false; }
 
+      // a callback must return one value per query (or per datum); anything else is the user's error
+      static std::vector<float> checked(std::vector<float> result, size_t expected, const char *what){
+        if(result.size() != expected)
+          throw std::runtime_error(std::string("decoder 'custom': '") + what + "' returned " + std::to_string(result.size()) +
+                                   " values for " + std::to_string(expected) + (std::string(what) == "estimation" ? " queries" : " data"));
+        return(result);
+      }
+
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
         if(!estimation_by_leaf) throw std::runtime_error("decoder 'custom' needs 'estimation' to predict at locations");
         auto _coords = slice(coords, samples_id);
         auto _values = slice(values, samples_id);
         auto _locations = slice(locations, locations_id);
-        auto result = estimation_by_leaf(&_coords, &_values, &_locations, params);
-        return(result);
+        return(checked(estimation_by_leaf(&_coords, &_values, &_locations, params), locations_id->size(), "estimation"));
       }
 
       // Without a `loo` callback, each datum of the cell is predicted by `estimation` from the other
@@ -48,7 +55,7 @@ namespace sptlz{
         if(loo_by_leaf){
           auto _coords = slice(coords, samples_id);
           auto _values = slice(values, samples_id);
-          return(loo_by_leaf(&_coords, &_values, params));
+          return(checked(loo_by_leaf(&_coords, &_values, params), samples_id->size(), "loo"));
         }
         std::vector<float> result(samples_id->size(), NAN);
         for(size_t i=0; i<samples_id->size(); i++){
@@ -60,7 +67,7 @@ namespace sptlz{
             v.push_back(values->at(samples_id->at(j)));
           }
           if(c.empty()) continue;
-          result.at(i) = estimation_by_leaf(&c, &v, &q, params).at(0);
+          result.at(i) = checked(estimation_by_leaf(&c, &v, &q, params), 1, "estimation").at(0);
         }
         return(result);
       }
@@ -72,7 +79,7 @@ namespace sptlz{
           auto _coords = slice(coords, samples_id);
           auto _values = slice(values, samples_id);
           auto _folds = slice(folds, samples_id);
-          return(kfold_by_leaf(k, &_coords, &_values, &_folds, params));
+          return(checked(kfold_by_leaf(k, &_coords, &_values, &_folds, params), samples_id->size(), "kfold"));
         }
         std::vector<float> result(samples_id->size(), NAN);
         for(int f=0; f<k; f++){
@@ -85,7 +92,7 @@ namespace sptlz{
             else{ c.push_back(coords->at(d)); v.push_back(values->at(d)); }
           }
           if(held.empty() || c.empty()) continue;
-          auto pred = estimation_by_leaf(&c, &v, &q, params);
+          auto pred = checked(estimation_by_leaf(&c, &v, &q, params), q.size(), "estimation");
           for(size_t h=0; h<held.size(); h++) result.at(held.at(h)) = pred.at(h);
         }
         return(result);

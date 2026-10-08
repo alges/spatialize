@@ -335,11 +335,20 @@ class SpatialEntropy:
         self.callback(logging.progress.init(len(xi), 1))
 
         for i in range(len(xi)):
+            # members of empty cells (NaN) carry no value: the law is that of the valid members,
+            # as in the aggregation of the estimate
             estimates = self.esi_samples[i]
+            estimates = estimates[np.isfinite(estimates)]
+            n_valid = len(estimates)
 
             # Use different seed for each location to avoid identical partitions
             # but maintain reproducibility
             location_seed = self.seed + i
+
+            if n_valid < 2:
+                entropies[i] = np.nan
+                self.callback(logging.progress.inform())
+                continue
 
             # Partition samples range
             partitions = _create_partitions(estimates, self.M, self.alpha_m, location_seed)
@@ -360,7 +369,7 @@ class SpatialEntropy:
 
                     if length_jm > 0:
                         # Differential entropy: -sum p(j) * log2(p(j) / length(j))
-                        p_jm = n_jm / self.T
+                        p_jm = n_jm / n_valid
                         cell_entropy = p_jm * math.log2(p_jm / length_jm)
                         entropy_m -= cell_entropy
 
@@ -530,7 +539,7 @@ class SpatialMutualInformation:
             bounds = np.asarray([partition[j][axis:axis + 2] for j in leaf_idxs], dtype=float)
             lo, hi = bounds[:, 0], bounds[:, 1]
             keep = hi > lo
-            lo, hi, p = lo[keep], hi[keep], counts[keep] / self.T
+            lo, hi, p = lo[keep], hi[keep], counts[keep] / len(leaf_index)
 
             # The joint density is uniform in each cell, p_c / area_c, so the marginal density is
             # sum_c p_c / len_c over the cells whose projection contains x. The projections of
@@ -595,7 +604,7 @@ class SpatialMutualInformation:
 
                 if area_jm > 0:
                     # Differential entropy: -sum p(j) * log2(p(j) / area(j))
-                    p_jm = n_jm / self.T
+                    p_jm = n_jm / len(joint_samples)
                     cell_entropy = p_jm * math.log2(p_jm / area_jm)
                     entropy_m -= cell_entropy
 
@@ -688,13 +697,20 @@ class SpatialMutualInformation:
         self.callback(logging.progress.init(len(xi), 1))
 
         for i in range(len(xi)):
-            # Get estimates for this location
-            est_u = estimates_u[i]
-            est_v = estimates_v[i]
+            # Get estimates for this location: the pairs whose two members are valid (a NaN member
+            # comes from an empty cell and carries no value)
+            valid = np.isfinite(estimates_u[i]) & np.isfinite(estimates_v[i])
+            est_u = estimates_u[i][valid]
+            est_v = estimates_v[i][valid]
 
             # Use different seed for each location to avoid identical partitions
             # but maintain reproducibility
             location_seed = self.seed + i + 2
+
+            if valid.sum() < 2:
+                mutual_information[i] = entropies_u[i] = entropies_v[i] = entropies_joint[i] = np.nan
+                self.callback(logging.progress.inform())
+                continue
 
             # Calculate joint entropy FIRST and get partitions
             # This returns the 2D partition that we'll marginalize for h(U) and h(V)

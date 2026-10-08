@@ -19,6 +19,42 @@ namespace sptlz{
   constexpr float DEFAULT_EXPONENT = 2.0f;
   constexpr float DEFAULT_ANISOTROPY = 1.0f;
 
+  // Inverse-distance prediction with weights relative to the nearest datum,
+  //   w_j = b_j (d_min / d_j)^p,
+  // the same normalised weights as b_j / d_j^p, with the largest equal to 1: no power under- or
+  // overflows, so the prediction does not depend on the units of the coordinates (1/(eps + d^p)
+  // vanished for large coordinates and fitted exponents). Data at distance 0 take all the weight
+  // (their mean). `each(f)` calls f(distance, value, boost) for every datum; NaN without data.
+  template <typename Each>
+  inline float relative_idw(Each each, float p){
+    float dmin = INFINITY;
+    int n = 0;
+    each([&](float d, float, float){ if(d < dmin) dmin = d; n++; });
+    if(n == 0) return(NAN);
+    float s = 0.0f, sv = 0.0f;
+    if(dmin == 0.0f){
+      each([&](float d, float v, float){ if(d == 0.0f){ s += 1.0f; sv += v; } });
+      return(sv/s);
+    }
+    each([&](float d, float v, float b){
+      float w = b*std::pow(dmin/d, p);
+      s += w;
+      sv += w*v;
+    });
+    return((s > 0.0f) ? sv/s : NAN);
+  }
+
+  // the weights themselves (one per datum), with the same convention
+  inline std::vector<float> relative_idw_weights(const std::vector<float> &d, const std::vector<float> &boost, float p){
+    std::vector<float> w(d.size(), 0.0f);
+    float dmin = INFINITY;
+    for(float x: d) if(x < dmin) dmin = x;
+    for(size_t j=0; j<d.size(); j++){
+      w[j] = (dmin == 0.0f) ? (d[j] == 0.0f ? 1.0f : 0.0f) : boost[j]*std::pow(dmin/d[j], p);
+    }
+    return(w);
+  }
+
   // Leave-one-out error of IDW on a line, as a function of the exponent alone.
   class LOO1D{
     protected:
@@ -41,18 +77,12 @@ namespace sptlz{
         #pragma omp parallel for reduction(+:r) schedule(static)
         #endif
         for(int i=0; i<n; i++){
-          float sum_w = 0.0;
-          float est = 0.0;
-          float wj, dist;
-          for(int j=0;j<n;j++){
-            if(j!=i){
-              dist = std::abs(coords->at(i).at(0) - coords->at(j).at(0));
-              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
-              sum_w += wj;
-              est += wj*values->at(j);
+          float pred = relative_idw([&](auto f){
+            for(int j=0; j<n; j++){
+              if(j!=i) f(std::abs(coords->at(i).at(0) - coords->at(j).at(0)), values->at(j), 1.0f);
             }
-          }
-          float error = (sum_w > EPSILON) ? values->at(i) - est/sum_w : values->at(i);
+          }, X.at(0));
+          float error = std::isnan(pred) ? values->at(i) : values->at(i) - pred;
           r += use_mse ? (error * error) : std::abs(error);
         }
         return(r/n);
@@ -86,26 +116,14 @@ namespace sptlz{
         #pragma omp parallel for reduction(+:r) schedule(static)
         #endif
         for(int i=0; i<n; i++){
-          float sum_w = 0.0;
-          float est = 0.0;
-          float wj, dist;
-          for(int j=0;j<n;j++){
-            if(j!=i){
-              // Use transformed coordinates for distance calculation
-              dist = sptlz::distance(&(tr_coords[i]), &(tr_coords[j]));
-              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
-              sum_w += wj;
-              est += wj*values->at(j);
+          float pred = relative_idw([&](auto f){
+            for(int j=0; j<n; j++){
+              if(j!=i) f(sptlz::distance(&(tr_coords[i]), &(tr_coords[j])), values->at(j), 1.0f);
             }
-          }
+          }, X.at(0));
           // Use MAE (Mean Absolute Error) or MSE (Mean Squared Error)
-          if(sum_w > EPSILON){
-            float error = values->at(i) - est/sum_w;
-            r += use_mse ? (error * error) : std::abs(error);
-          }else{
-            float error = values->at(i);
-            r += use_mse ? (error * error) : std::abs(error);
-          }
+          float error = std::isnan(pred) ? values->at(i) : values->at(i) - pred;
+          r += use_mse ? (error * error) : std::abs(error);
         }
         return(r/n);
       }
@@ -138,26 +156,14 @@ namespace sptlz{
         #pragma omp parallel for reduction(+:r) schedule(static)
         #endif
         for(int i=0; i<n; i++){
-          float sum_w = 0.0;
-          float est = 0.0;
-          float wj, dist;
-          for(int j=0;j<n;j++){
-            if(j!=i){
-              // Calculate distance directly
-              dist = sptlz::distance(&(tr_coords[i]), &(tr_coords[j]));
-              wj = 1.0f/(EPSILON + std::pow(dist, X.at(0)));
-              sum_w += wj;
-              est += wj*values->at(j);
+          float pred = relative_idw([&](auto f){
+            for(int j=0; j<n; j++){
+              if(j!=i) f(sptlz::distance(&(tr_coords[i]), &(tr_coords[j])), values->at(j), 1.0f);
             }
-          }
+          }, X.at(0));
           // Use MAE (Mean Absolute Error) or MSE (Mean Squared Error)
-          if(sum_w > EPSILON){
-            float error = values->at(i) - est/sum_w;
-            r += use_mse ? (error * error) : std::abs(error);
-          }else{
-            float error = values->at(i);
-            r += use_mse ? (error * error) : std::abs(error);
-          }
+          float error = std::isnan(pred) ? values->at(i) : values->at(i) - pred;
+          r += use_mse ? (error * error) : std::abs(error);
         }
         return(r/n);
       }
@@ -254,35 +260,12 @@ namespace sptlz{
         #pragma omp parallel for schedule(static)
         #endif
         for(int i=0; i<locations_id->size(); i++){
-          float w_sum = 0.0;
-          float w_v_sum = 0.0;
-          // a query on a datum takes its value (the mean, for duplicated locations): the EPSILON
-          // guard alone caps that datum's weight at 1/EPSILON, which close neighbours can exceed
-          // with large fitted exponents
-          float exact_sum = 0.0f;
-          int n_exact = 0;
-
-          for(int j=0; j<samples_id->size(); j++){
-            float dist = distance(&(tr_locations.at(i)), &(tr_coords.at(j)));
-            if(dist == 0.0f){
-              exact_sum += sl_values.at(j);
-              n_exact++;
-              continue;
+          // a query on a datum takes its value (the mean, for duplicated locations)
+          result[i] = relative_idw([&](auto f){
+            for(size_t j=0; j<samples_id->size(); j++){
+              f(distance(&(tr_locations.at(i)), &(tr_coords.at(j))), sl_values.at(j), 1.0f);
             }
-            // calculate weight
-            float w = 1.0f/(EPSILON + std::pow(dist, exponent));
-            // keep sum of weighted values and sum of weights
-            w_sum += w;
-            w_v_sum += w*sl_values.at(j);
-          }
-          if(n_exact > 0){
-            result[i] = exact_sum/n_exact;
-          }else if(w_sum > EPSILON){
-            // return weighted values sum normalized (divided by weights sum)
-            result[i] = w_v_sum/w_sum;
-          }else{
-            result[i] = NAN;
-          }
+          }, exponent);
         }
 
         return(result);
@@ -318,24 +301,11 @@ namespace sptlz{
         #pragma omp parallel for schedule(static)
         #endif
         for(int i=0; i<samples_id->size(); i++){
-          float w_sum = 0.0;
-          float w_v_sum = 0.0;
-
-          for(int j=0; j<samples_id->size(); j++){
-            if(i!=j){
-              // calculate weight
-              float w = 1.0f/(EPSILON + std::pow(distance(&(tr_coords.at(i)), &(tr_coords.at(j))), exponent));
-              // keep sum of weighted values and sum of weights
-              w_sum += w;
-              w_v_sum += w*sl_values.at(j);
+          result[i] = relative_idw([&](auto f){
+            for(int j=0; j<static_cast<int>(samples_id->size()); j++){
+              if(i!=j) f(distance(&(tr_coords.at(i)), &(tr_coords.at(j))), sl_values.at(j), 1.0f);
             }
-          }
-          // return weighted values sum normalized (divided by weights sum)
-          if(w_sum > EPSILON){
-            result[i] = w_v_sum/w_sum;
-          }else{
-            result[i] = NAN;
-          }
+          }, exponent);
         }
         return(result);
       }
@@ -378,18 +348,11 @@ namespace sptlz{
               #endif
               for(int idx=0; idx<test_indices.size(); idx++){
                 int j = test_indices[idx];
-                float w_sum = 0.0;
-                float w_v_sum = 0.0;
-                for(int l: test_train.second){
-                  float w = 1.0f/(EPSILON + std::pow(distance(&(tr_coords.at(j)), &(tr_coords.at(l))), exponent));
-                  w_sum += w;
-                  w_v_sum += w*values->at(samples_id->at(l));
-                }
-                if(w_sum > EPSILON){
-                  result.at(j) = w_v_sum/w_sum;
-                }else{
-                  result.at(j) = NAN;
-                }
+                result.at(j) = relative_idw([&](auto f){
+                  for(int l: test_train.second){
+                    f(distance(&(tr_coords.at(j)), &(tr_coords.at(l))), values->at(samples_id->at(l)), 1.0f);
+                  }
+                }, exponent);
               }
             }
           }

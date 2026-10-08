@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 10
+version: 11
 tier: T3
 evaluator: map_visual
 book:
@@ -170,8 +170,7 @@ checks:
      family: one-sided, functional: contrast_ratio_reference, map: point, min_ratio: 0.9,
      known_failure: "the uniform draw is built for coverage, not for a map: its median map is washed out (contrast ratio about 0.55)"}
   - {id: v4a-sharp, title: "V4 blocks averaged away (sharpened)", estimator: sharp, family: one-sided,
-     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5,
-     known_failure: "sharpening keeps more of each member's blocks (axis-locking about 0.46, against 0.39 for aidw), too close to the bound for 80 fields to separate"}
+     functional: axis_lock, map: point, rotation_deg: 45.0, max_value: 0.5}
   - {id: v4b-sharp, title: "V4 power check: single members are axis-locked (sharpened)", estimator: sharp,
      family: one-sided, functional: axis_lock_members, map: member, rotation_deg: 45.0, members_checked: 5,
      min_value: 0.0}
@@ -185,7 +184,8 @@ checks:
   - {id: order-cov-draw, title: "coverage: uniform draw above weighted draw", estimator: draw, against: wdraw-aidw,
      family: paired-relation, functional: paired_relation, metric: coverage, better: greater}
   - {id: order-rmse-sharp, title: "error: sharpened map below adaptive", estimator: sharp, against: aidw,
-     family: paired-relation, functional: paired_relation, metric: rmse, better: less}
+     family: paired-relation, functional: paired_relation, metric: rmse, better: less,
+     known_failure: "with exact adaptive weights the gradient-raised exponent costs more than the residual boost gains (RMSE 0.438 against 0.437); the advantage measured in v10 came from the saturated weights of bug #22"}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
   v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
@@ -238,3 +238,11 @@ provenance:
     decoder ordering (coverage and map error); all fixed before their first run. The first run
     (seed 12345) failed three of them, recorded as known failures with the thresholds unchanged:
     the uniform draw's map on V1b and V5, and V4a on the sharpened map.
+  v11: >
+    2026-10-08: the adaptive and sharpened weights are relative to the nearest datum (they were
+    1/(1e-10 + d^p), which saturated at short distances and large exponents, and vanished for large
+    coordinates). Thresholds unchanged. v4a-sharp now passes (axis-locking 0.29), so its known failure
+    is removed: the blocks it kept came from the saturated weights. order-rmse-sharp now fails (the
+    sharpened map is 0.001 worse than the adaptive one) and is recorded as a known failure: on ten
+    fields the residual boost alone improves the RMSE by 0.004 while the raised exponent alone worsens
+    it by 0.003.

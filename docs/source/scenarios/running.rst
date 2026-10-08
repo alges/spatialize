@@ -28,7 +28,7 @@ output looks like this.
    S03-anisotropic-field/v1a                       equivalence    1.09e-42   2.3e-05  pass   PASS  — mean=-0.2803 se=0.351 ...
    S03-anisotropic-field/v1b                       one-sided      1.07e-20   3.3e-05  pass   PASS  — mean=0.6084 se=0.00868 ...
    ...                                             (one line per check)
-   S03-anisotropic-field/v5-idw                    one-sided             1   0.00033  pass   KNOWN  — mean=0.8512 se=0.00422 ...
+   S03-anisotropic-field/v5-idw                    one-sided             1     0.001  pass   KNOWN  — mean=0.8512 se=0.00422 ...
    S12-edge-cases/e4-m-aidw                        almost-sure           1     exact  pass   PASS  — 0 violations ...
 
    161 passed, 0 failed, 6 known failures, 0 skipped (reproduce with --mode ci --seed 12345)
@@ -85,7 +85,7 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in about twenty minutes on a multi-core machine. Use it on every change.
+       catalogue runs in about thirty minutes on a multi-core machine. Use it on every change.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at

@@ -19,7 +19,7 @@ namespace sptlz{
   //   r_j = leave-one-out residual of the adaptive weights, s = median |r_j|,
   //   rho = |slope of the least-squares plane| * mean distance to the centre / median |z_j - mean z|,
   //   p_C = p (1 + kappa_g min(rho, rho_max)),
-  //   weight of datum j at v = (1 + kappa_r |r_j| / s) / (EPSILON + d(v_j, v)^p_C).
+  //   weight of datum j at v = (1 + kappa_r |r_j| / s) / d(v_j, v)^p_C (relative_idw).
   // The weights are positive, so the prediction is a convex combination of the cell's values.
   // With kappa_r = kappa_g = 0 it is the adaptive decoder, bit for bit.
 
@@ -50,14 +50,12 @@ namespace sptlz{
     if(kappa_r != 0.0f){
       std::vector<float> r(n), abs_r(n);
       for(size_t j=0; j<n; j++){
-        float w_sum = 0.0f, w_v_sum = 0.0f;
-        for(size_t l=0; l<n; l++){
-          if(l == j) continue;
-          float w = 1.0f/(EPSILON + std::pow(distance(&(tr[l]), &(tr[j])), p));
-          w_sum += w;
-          w_v_sum += w*z[l];
-        }
-        r[j] = (w_sum > EPSILON) ? z[j] - w_v_sum/w_sum : 0.0f;
+        float pred = relative_idw([&](auto g){
+          for(size_t l=0; l<n; l++){
+            if(l != j) g(distance(&(tr[l]), &(tr[j])), z[l], 1.0f);
+          }
+        }, p);
+        r[j] = std::isnan(pred) ? 0.0f : z[j] - pred;
         abs_r[j] = std::fabs(r[j]);
       }
       float s = median_of(abs_r);
@@ -143,22 +141,11 @@ namespace sptlz{
 
         result.resize(locations_id->size());
         for(size_t i=0; i<locations_id->size(); i++){
-          float w_sum = 0.0, w_v_sum = 0.0, exact_sum = 0.0f;
-          int n_exact = 0;
-          for(size_t j=0; j<samples_id->size(); j++){
-            float dist = distance(&(tr_locations.at(i)), &(tr_coords.at(j)));
-            if(dist == 0.0f){
-              exact_sum += sl_values.at(j);
-              n_exact++;
-              continue;
+          result[i] = relative_idw([&](auto g){
+            for(size_t j=0; j<samples_id->size(); j++){
+              g(distance(&(tr_locations.at(i)), &(tr_coords.at(j))), sl_values.at(j), f.boost[j]);
             }
-            float w = f.boost[j]*(1.0f/(EPSILON + std::pow(dist, f.exponent)));
-            w_sum += w;
-            w_v_sum += w*sl_values.at(j);
-          }
-          if(n_exact > 0) result[i] = exact_sum/n_exact;
-          else if(w_sum > EPSILON) result[i] = w_v_sum/w_sum;
-          else result[i] = NAN;
+          }, f.exponent);
         }
         return(result);
       }
@@ -170,13 +157,11 @@ namespace sptlz{
         std::vector<float> z_o;
         for(int l: others){ tr_o.push_back(tr[l]); z_o.push_back(z[l]); }
         auto f = factors(tr_o, z_o, p);
-        float w_sum = 0.0, w_v_sum = 0.0;
-        for(size_t j=0; j<others.size(); j++){
-          float w = f.boost[j]*(1.0f/(EPSILON + std::pow(distance(&(tr[target]), &(tr_o[j])), f.exponent)));
-          w_sum += w;
-          w_v_sum += w*z_o[j];
-        }
-        return((w_sum > EPSILON) ? w_v_sum/w_sum : NAN);
+        return(relative_idw([&](auto g){
+          for(size_t j=0; j<others.size(); j++){
+            g(distance(&(tr[target]), &(tr_o[j])), z_o[j], f.boost[j]);
+          }
+        }, f.exponent));
       }
 
       std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
@@ -240,16 +225,9 @@ namespace sptlz{
         auto f = decoder.factors(tr, *cell_values, p);
         std::vector<std::vector<float>> result;
         for(auto &v: tr_points){
-          std::vector<float> d(n), w(n);
-          bool exact = false;
-          for(size_t j=0; j<n; j++){
-            d[j] = distance(&v, &(tr[j]));
-            if(d[j] == 0.0f) exact = true;
-          }
-          for(size_t j=0; j<n; j++){
-            w[j] = exact ? (d[j] == 0.0f ? 1.0f : 0.0f) : f.boost[j]*(1.0f/(EPSILON + std::pow(d[j], f.exponent)));
-          }
-          result.push_back(w);
+          std::vector<float> d(n);
+          for(size_t j=0; j<n; j++) d[j] = distance(&v, &(tr[j]));
+          result.push_back(relative_idw_weights(d, f.boost, f.exponent));
         }
         return(result);
       }

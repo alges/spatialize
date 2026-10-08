@@ -37,9 +37,11 @@ the index :math:`J` drawn afresh at each location and each partition. Its law wi
 
 .. math::
 
-   \mathbb E\big[g^{\text{draw}}(v)\big] = \sum_j \varpi_j(v)\, z_j = g(v),
-   \qquad
-   \operatorname{Var}\big[g^{\text{draw}}(v)\big] = \sum_j \varpi_j(v)\,\big(z_j - g(v)\big)^2,
+   \begin{aligned}
+   \mathbb E\big[g^{\text{draw}}(v)\big] &= \sum_j \varpi_j(v)\, z_j = g(v),
+   \\
+   \operatorname{Var}\big[g^{\text{draw}}(v)\big] &= \sum_j \varpi_j(v)\,\big(z_j - g(v)\big)^2,
+   \end{aligned}
 
 so the draw agrees with the averaging decoder in mean, while its variance is the weighted dispersion
 of the cell around that mean. The ensemble then carries both sources of uncertainty without anything added afterwards. Every member is a value that was actually observed,
@@ -69,12 +71,14 @@ variogram :math:`\gamma` inside the cell,
 
 .. math::
 
+   \begin{gathered}
    \begin{pmatrix} \Gamma & \mathbf 1 \\ \mathbf 1^\top & 0 \end{pmatrix}
    \begin{pmatrix} \boldsymbol\lambda(v) \\ \mu \end{pmatrix}
    =
    \begin{pmatrix} \boldsymbol\gamma(v) \\ 1 \end{pmatrix},
-   \qquad
+   \\[4pt]
    \Gamma_{jl} = \gamma(v_j - v_l), \quad \boldsymbol\gamma(v)_j = \gamma(v - v_j).
+   \end{gathered}
 
 The prediction is :math:`\sum_j \lambda_j(v) z_j`. Prefer it when a variogram is known and
 trusted, on smooth fields close to Gaussian. The :math:`\lambda_j` can be negative, so the estimate
@@ -94,7 +98,10 @@ where :math:`A_\theta` rotates by an azimuth :math:`\varphi` and stretches by an
 :math:`\theta = (\varphi, a_f)` are fitted once per cell by minimising the leave-one-out error of
 the cell's data. Prefer it when the field is continuous along a direction that is unknown or varies
 across the domain. The per-cell fit makes it slower than IDW. It works in one, two and three
-dimensions. On a line there is no direction to fit, so only the exponent is fitted.
+dimensions. On a line there is no direction to fit, so only the exponent is fitted. The weights
+are computed relative to the nearest datum, :math:`w_j = (d_{\min}/d_j)^p`, which normalise to the
+same values while the largest stays 1. No power under- or overflows, so the estimate and the fit do
+not depend on the units of the coordinates, whether kilometres or metres.
 
 **Sharpened adaptive IDW** (``sharpidw``). It starts from the adaptive fit :math:`(p, \theta)` of
 the cell and changes it twice. The leave-one-out residuals of that fit and their median,
@@ -120,15 +127,19 @@ averaging across the change. The weights are
 
 .. math::
 
-   w_j(v) = \Big(1 + \kappa_r \frac{|r_j|}{s}\Big)\, d_\theta(v_j, v)^{-p_C},
-   \qquad
-   p_C = p\,\big(1 + \kappa_g \min(\varrho_C, \varrho_{\max})\big),
+   \begin{aligned}
+   w_j(v) &= \Big(1 + \kappa_r \frac{|r_j|}{s}\Big)\, d_\theta(v_j, v)^{-p_C},
+   \\
+   p_C &= p\,\big(1 + \kappa_g \min(\varrho_C, \varrho_{\max})\big),
+   \end{aligned}
 
 with the theory's constants :math:`\kappa_r = 3/2`, :math:`\kappa_g = 1/5` and
 :math:`\varrho_{\max} = 3` as defaults. They are positive, so the prediction stays within the range
-of the data. Setting :math:`\kappa_r = \kappa_g = 0` returns adaptive IDW exactly. On the theory's
-anisotropic test field it gives a better map than adaptive IDW on every field tried. Prefer it when
-the map itself is the goal.
+of the data. Setting :math:`\kappa_r = \kappa_g = 0` returns adaptive IDW exactly. Its two factors
+do not act alike. On the anisotropic field of the conformance tests the boost of the large residuals
+improves the map, while the raised exponent makes it slightly worse, so with the default constants
+its map is level with that of adaptive IDW while its intervals cover a little more
+(:ref:`scenario-S03`). Setting ``kappa_g=0`` keeps only the boost, which gave the best map in a comparison on ten of its fields (:ref:`scenario-S03`).
 
 The drawing decoders
 ====================
@@ -154,9 +165,11 @@ the most reliable reading among the decoders. The kriging weights are made non-n
 
 .. math::
 
-   w_j = \max(\lambda_j, 0) \quad (\texttt{"clip"}, \text{the default})
-   \qquad\text{or}\qquad
-   w_j = |\lambda_j| \quad (\texttt{"abs"}).
+   \begin{aligned}
+   w_j &= \max(\lambda_j, 0) && (\texttt{"clip"}, \text{the default}),
+   \\
+   w_j &= |\lambda_j| && (\texttt{"abs"}).
+   \end{aligned}
 
 Choosing by purpose
 ===================
@@ -168,7 +181,7 @@ Choosing by purpose
    * - Purpose
      - Decoder
    * - a map of best values
-     - ``sharpidw``, or ``adaptiveidw`` when speed matters
+     - ``adaptiveidw``, or ``sharpidw`` with ``kappa_g=0``
    * - intervals and probabilities of exceedance
      - a weighted draw, ``wdraw_sharpidw`` or ``wdraw_adaptiveidw``
    * - a variable with an atom (zeros, detection limits)

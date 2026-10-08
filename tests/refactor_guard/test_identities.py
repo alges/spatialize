@@ -134,3 +134,16 @@ def test_empty_cell_fraction_is_the_share_of_nan_members(p_process, alpha, data_
     # Voronoi with nuclei at the data has a datum in every cell; the other cases have empty cells
     assert (share.max() == 0) if (p_process == "voronoi" and data_cond) else (share.max() > 0)
     assert np.array_equal(share, fraction)
+
+
+@pytest.mark.parametrize("decoder", ["adaptiveidw", "sharpidw", "wdraw_adaptiveidw", "wdraw_sharpidw"])
+def test_adaptive_decoders_do_not_depend_on_coordinate_units(decoder):
+    """The adaptive weights are relative to the nearest datum, so with coordinates 10^4 times larger
+    no member of a cell with data is NaN and the members are the same up to float rounding (a
+    rounding may flip a discrete choice of the fit or of a draw in a few members)."""
+    s, v, q = DATA["2d"]
+    runs = [np.asarray(LIB.run((s * c).astype(np.float32), v, (q * c).astype(np.float32), "mondrian", cases.ALPHA,
+                               cases.T_ADAPTIVE, cases.SEED, decoder, {}, "estimate")[1]) for c in (1.0, 1e4)]
+    assert np.array_equal(np.isnan(runs[0]), np.isnan(runs[1]))
+    differ = np.abs(runs[0] - runs[1]) > 1e-4 * (1 + np.abs(runs[0]))
+    assert np.nanmean(differ) < 0.01

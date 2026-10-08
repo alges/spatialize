@@ -158,9 +158,9 @@ the 80 fields.
      - :math:`1.1 \cdot 10^{-20}`
    * - ``aidw``
      - :math:`-1.7° \pm 0.2°`
-     - :math:`6.4 \cdot 10^{-50}`
+     - :math:`3.4 \cdot 10^{-50}`
      - :math:`0.97 \pm 0.006`
-     - :math:`8.7 \cdot 10^{-78}`
+     - :math:`5.1 \cdot 10^{-78}`
    * - ``krig``
      - :math:`-0.5° \pm 0.3°`
      - :math:`1.5 \cdot 10^{-45}`
@@ -182,15 +182,15 @@ the 80 fields.
      - :math:`0.73 \pm 0.010`
      - :math:`4.8 \cdot 10^{-37}`
    * - ``vor-uniform-aidw``
-     - :math:`-1.0° \pm 0.3°`
-     - :math:`2.3 \cdot 10^{-50}`
-     - :math:`0.91 \pm 0.007`
-     - :math:`2.4 \cdot 10^{-65}`
+     - :math:`-1.1° \pm 0.2°`
+     - :math:`6.8 \cdot 10^{-51}`
+     - :math:`0.90 \pm 0.007`
+     - :math:`2.5 \cdot 10^{-65}`
    * - ``sharp``
      - :math:`-1.7° \pm 0.2°`
-     - :math:`1.5 \cdot 10^{-49}`
-     - :math:`0.98 \pm 0.006`
-     - :math:`1.9 \cdot 10^{-79}`
+     - :math:`4.1 \cdot 10^{-51}`
+     - :math:`0.96 \pm 0.006`
+     - :math:`3.7 \cdot 10^{-78}`
    * - ``wdraw-idw``
      - :math:`-1.0° \pm 0.4°`
      - :math:`4.3 \cdot 10^{-39}`
@@ -203,14 +203,14 @@ the 80 fields.
      - :math:`4.7 \cdot 10^{-20}`
    * - ``wdraw-aidw``
      - :math:`-1.8° \pm 0.2°`
-     - :math:`7.2 \cdot 10^{-49}`
+     - :math:`5.4 \cdot 10^{-49}`
      - :math:`0.87 \pm 0.007`
-     - :math:`3.7 \cdot 10^{-65}`
+     - :math:`1.4 \cdot 10^{-64}`
    * - ``wdraw-sharp``
-     - :math:`-1.8° \pm 0.2°`
-     - :math:`2.4 \cdot 10^{-49}`
-     - :math:`0.89 \pm 0.006`
-     - :math:`8.1 \cdot 10^{-70}`
+     - :math:`-1.7° \pm 0.2°`
+     - :math:`2.4 \cdot 10^{-50}`
+     - :math:`0.88 \pm 0.006`
+     - :math:`2.5 \cdot 10^{-69}`
    * - ``draw``
      - :math:`-5.0° \pm 1.2°`
      - :math:`3.7 \cdot 10^{-5}`
@@ -218,8 +218,8 @@ the 80 fields.
      - 1 (known failure)
 
 Every estimator finds the direction. All the strength checks pass except the uniform draw's, stably
-across seeds for the first seven. The sharpened decoder gives the most coherent map of the scenario.
-A weighted draw loses some coherence against the averaging decoder whose weights it borrows, 0.87
+across seeds for the first seven. The adaptive and sharpened decoders give the most coherent maps of
+the scenario. A weighted draw loses some coherence against the averaging decoder whose weights it borrows, 0.87
 against 0.97 with the adaptive weights, since each member holds observed values only. The uniform
 draw keeps the direction, although less precisely, while its strength falls below the bound. Its
 median at a location is close to the median of the cell's data, so the map follows the cells more
@@ -254,12 +254,12 @@ test over the 80 fields, with the threshold fixed before the criterion was first
      - p
      - result
    * - ``aidw``
-     - :math:`0.96 \pm 0.002`
-     - :math:`2.4 \cdot 10^{-48}`
+     - :math:`0.97 \pm 0.002`
+     - :math:`9.3 \cdot 10^{-50}`
      - pass
    * - ``vor-uniform-aidw``
-     - :math:`0.98 \pm 0.002`
-     - :math:`3.1 \cdot 10^{-59}`
+     - :math:`0.99 \pm 0.002`
+     - :math:`1.4 \cdot 10^{-61}`
      - pass
    * - ``krig``
      - :math:`0.96 \pm 0.002`
@@ -282,8 +282,8 @@ test over the 80 fields, with the threshold fixed before the criterion was first
      - 0.92
      - known failure
    * - ``sharp``
-     - :math:`0.98 \pm 0.002`
-     - :math:`1.3 \cdot 10^{-59}`
+     - :math:`1.01 \pm 0.001`
+     - :math:`7.3 \cdot 10^{-76}`
      - pass
    * - ``wdraw-idw``
      - :math:`0.95 \pm 0.003`
@@ -294,12 +294,12 @@ test over the 80 fields, with the threshold fixed before the criterion was first
      - :math:`2.9 \cdot 10^{-58}`
      - pass
    * - ``wdraw-aidw``
-     - :math:`1.01 \pm 0.002`
-     - :math:`1.2 \cdot 10^{-68}`
+     - :math:`1.02 \pm 0.002`
+     - :math:`3.4 \cdot 10^{-69}`
      - pass
    * - ``wdraw-sharp``
-     - :math:`1.03 \pm 0.002`
-     - :math:`6.1 \cdot 10^{-72}`
+     - :math:`1.05 \pm 0.002`
+     - :math:`4.2 \cdot 10^{-72}`
      - pass
    * - ``draw``
      - :math:`0.55 \pm 0.010`
@@ -350,15 +350,15 @@ partition (Voronoi). Three checks are pre-registered with :math:`\delta = 0.5` (
      - :math:`2.83 \pm 0.054`
      - :math:`1.9 \cdot 10^{-63}`
    * - ``aidw``
-     - :math:`0.39 \pm 0.024`
-     - :math:`9.6 \cdot 10^{-6}`
-     - :math:`1.98 \pm 0.059`
-     - :math:`4.3 \cdot 10^{-49}`
+     - :math:`0.37 \pm 0.022`
+     - :math:`4.1 \cdot 10^{-8}`
+     - :math:`1.91 \pm 0.055`
+     - :math:`7.5 \cdot 10^{-50}`
    * - ``sharp``
-     - :math:`0.46 \pm 0.027`
-     - 0.05 (known failure)
-     - :math:`2.06 \pm 0.058`
-     - :math:`1.3 \cdot 10^{-50}`
+     - :math:`0.29 \pm 0.022`
+     - :math:`6.3 \cdot 10^{-15}`
+     - :math:`1.67 \pm 0.050`
+     - :math:`6.5 \cdot 10^{-49}`
    * - ``vor-uniform-idw`` (v4c)
      - :math:`0.01 \pm 0.011`
      - :math:`1.2 \cdot 10^{-56}`
@@ -370,8 +370,8 @@ partition (Voronoi). Three checks are pre-registered with :math:`\delta = 0.5` (
      - —
      - —
    * - ``vor-uniform-aidw`` (v4c)
-     - :math:`-0.05 \pm 0.020`
-     - :math:`1.3 \cdot 10^{-35}`
+     - :math:`-0.05 \pm 0.017`
+     - :math:`4.2 \cdot 10^{-41}`
      - —
      - —
 
@@ -380,11 +380,10 @@ test sees what it is meant to see. At :math:`T = 100` the Mondrian medians keep 
 0.3, roughly a third more energy on the axes than in the rotated run. The residual stays well below a
 small ensemble's and within the pre-registered :math:`\delta`, without vanishing.
 
-The sharpened decoder keeps more of the blocks, 0.46 against 0.39 for adaptive IDW. Sharpening raises
-the exponent where the cell's data change fast, so each member follows its own cell's data more
-closely, which makes the jumps at the cell boundaries larger. The mean stays below :math:`\delta`, but too
-close to it for 80 fields to tell the two apart, the check needing a mean below about 0.40 to pass.
-It is recorded as a known failure, with :math:`\delta` unchanged.
+The sharpened decoder keeps fewer of the blocks than adaptive IDW, 0.29 against 0.37. In version 10
+it seemed to keep more (0.46), which came from the adaptive weights then used, :math:`1/(10^{-10} +
+d^p)`. They saturated at short distances with large exponents, giving many nearby data the same
+weight, so the members followed their cells' data in blocks. The weights now used are exact.
 
 **Why 80 fields.** With 40 fields, check v4a on adaptive IDW failed in 4 of 14 runs with different
 seeds, although its mean axis-locking never came near the bound. Over those runs the mean lay
@@ -445,21 +444,21 @@ field by field over the 80 fields, test these relations
      - p
      - result
    * - coverage, ``sharp`` above ``aidw``
-     - :math:`+0.069 \pm 0.001`
-     - :math:`2.1 \cdot 10^{-71}`
+     - :math:`+0.026 \pm 0.001`
+     - :math:`1.6 \cdot 10^{-43}`
      - pass
    * - coverage, ``wdraw-aidw`` above ``sharp``
-     - :math:`+0.095 \pm 0.002`
-     - :math:`2.7 \cdot 10^{-59}`
+     - :math:`+0.128 \pm 0.002`
+     - :math:`6.2 \cdot 10^{-73}`
      - pass
    * - coverage, ``draw`` above ``wdraw-aidw``
-     - :math:`+0.138 \pm 0.002`
-     - :math:`2.1 \cdot 10^{-72}`
+     - :math:`+0.157 \pm 0.002`
+     - :math:`4.9 \cdot 10^{-75}`
      - pass
    * - RMSE, ``sharp`` below ``aidw``
-     - :math:`-0.0043 \pm 0.0005`
-     - :math:`1.9 \cdot 10^{-14}`
-     - pass
+     - :math:`+0.0011 \pm 0.0005`
+     - 0.99
+     - known failure
 
 The coverage and the error of every Mondrian estimator, read with the same seeds, place the checks
 in context.
@@ -478,23 +477,23 @@ in context.
      - :math:`0.47 \pm 0.003`
      - :math:`0.462 \pm 0.002`
    * - ``aidw``
-     - :math:`0.61 \pm 0.003`
-     - :math:`0.436 \pm 0.002`
+     - :math:`0.60 \pm 0.003`
+     - :math:`0.437 \pm 0.002`
    * - ``sharp``
-     - :math:`0.68 \pm 0.003`
-     - :math:`0.432 \pm 0.002`
+     - :math:`0.63 \pm 0.003`
+     - :math:`0.438 \pm 0.002`
    * - ``wdraw-krig``
      - :math:`0.74 \pm 0.003`
      - :math:`0.515 \pm 0.003`
+   * - ``wdraw-sharp``
+     - :math:`0.75 \pm 0.002`
+     - :math:`0.474 \pm 0.002`
    * - ``wdraw-aidw``
-     - :math:`0.78 \pm 0.002`
+     - :math:`0.76 \pm 0.002`
      - :math:`0.470 \pm 0.002`
    * - ``wdraw-idw``
      - :math:`0.80 \pm 0.002`
      - :math:`0.520 \pm 0.003`
-   * - ``wdraw-sharp``
-     - :math:`0.84 \pm 0.002`
-     - :math:`0.468 \pm 0.002`
    * - ``draw``
      - :math:`0.91 \pm 0.002`
      - :math:`0.697 \pm 0.007`
@@ -503,11 +502,19 @@ An averaging decoder sees only the variation between cells (:doc:`../theory/esi`
 miss the truth more than half the time with IDW or kriging. Adapting the weights to the cell widens
 them a little, sharpening a little more. A weighted draw restores most of the variation within the
 cell, at the cost of a slightly worse median map, the uniform draw reaching the nominal 90 % with a
-map far less accurate. The ordering holds by wide margins, so the theory's comparison carries over to
-this field. Among the weighted draws, ``wdraw-idw`` covers slightly more than ``wdraw-aidw``, which
-suggests that the adaptive fit concentrates the weights more than exponent 2 does. The sharpened weights cover most of all while keeping the median map of the adaptive
-draw. No decoder gives both the best map and nominal intervals, which is why the choice follows the
-purpose (:doc:`../theory/decoders`).
+map far less accurate. The coverage ordering holds by wide margins, so the theory's comparison of
+coverage carries over to this field. Among the weighted draws, ``wdraw-idw`` covers slightly more
+than ``wdraw-aidw``, which suggests that the adaptive fit concentrates the weights more than
+exponent 2 does. No decoder gives both the best map and nominal intervals, which is why the choice
+follows the purpose (:doc:`../theory/decoders`).
+
+The sharpened map is not more accurate than the adaptive one here, its RMSE being 0.001 higher, so
+the fourth check is recorded as a known failure. Its two factors pull in opposite directions. On ten
+fields the boost of the data with large leave-one-out residuals alone lowers the RMSE by 0.004,
+while the exponent raised with the cell's gradient alone raises it by 0.003, concentrating the
+weight on the nearest data more than this field rewards. Version 10 had found the sharpened map
+better by 0.004, an advantage that came from the adaptive weights then used, which saturated at
+short distances (see V4 above).
 
 .. note::
 
@@ -525,7 +532,10 @@ purpose (:doc:`../theory/decoders`).
    (note below), with the thresholds unchanged. Version 8 raised :math:`K` to 80 for the power of
    v4a on adaptive IDW, as argued under V4. Version 10 added the sharpened and drawing decoders with
    V1 and V5 at the same thresholds, V4 for the sharpened map and the four ordering checks, all fixed
-   before their first run. That run failed three of them, recorded as known failures.
+   before their first run. That run failed three of them, recorded as known failures. Version 11
+   follows the correction of the adaptive weights, which had saturated at short distances. V4 on the
+   sharpened map passes since then, while the sharpened map lost its advantage in error (the fourth
+   ordering check), both explained above.
 
 .. note::
 

@@ -215,7 +215,7 @@ class FittedModelFactory:
         entropy, credible intervals, and other distributional summaries.
     """
 
-    def __init__(self, nan_model_name="replace", nan_replace_func_name="median",
+    def __init__(self, nan_model_name="ignore", nan_replace_func_name="median",
                  point_model_name="kde", kernel="gaussian",
                  bgm_sample_size=1000, bgm_max_iter=100, n_components=3,
                  widening=False, widening_knn=12, seed=None):
@@ -225,9 +225,13 @@ class FittedModelFactory:
         Parameters
         ----------
         nan_model_name : str, optional
-            Strategy for handling NaN values. Use ``"replace"`` to replace NaNs
-            using a statistical function, or ``"ignore"`` to discard them.
-            Default: ``"replace"``.
+            Strategy for handling NaN values, the members of partitions whose
+            cell held no datum. ``"ignore"`` (the default) discards them, so the
+            model is fitted to the law of the valid members, the one the
+            aggregation of the estimate reads. ``"replace"`` replaces them with
+            a statistic of the valid members, which piles mass on that value
+            and narrows the law where cells are often empty, that is where the
+            uncertainty is largest.
         nan_replace_func_name : str, optional
             Function used to replace NaNs when ``nan_model_name="replace"``.
             Valid values are ``"mean"`` and ``"median"``. Default: ``"median"``.

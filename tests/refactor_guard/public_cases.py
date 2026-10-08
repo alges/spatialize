@@ -52,6 +52,18 @@ def public_cases():
     add("esi_nongriddata_voronoi_dc", "2d", nongrid("idw", exponent=EXP, p_process="voronoi", data_cond=True))
     add("esi_nongriddata_voronoi_nodc", "2d", nongrid("idw", exponent=EXP, p_process="voronoi", data_cond=False))
     add("esi_nongriddata_mondrian_raw", "2d", nongrid("idw", exponent=EXP, p_process="mondrian-raw"))
+
+    def with_marks(source, value="decoder"):
+        def fn(s, v, q):
+            from spatialize import session
+            q_wide = np.vstack([q, q * 1.6 - 0.3]).astype(np.float32)   # locations beyond the data, in empty cells
+            with session.override(empty_cells="mark", mark_source=source, mark_value=value):
+                return _esi(esi_nongriddata(s, v, q_wide, local_interpolator="idw", exponent=EXP, **common))
+        return fn
+    add("esi_nongriddata_mark_local", "2d", with_marks("local"))
+    add("esi_nongriddata_mark_cells", "2d", with_marks("cells"))
+    add("esi_nongriddata_mark_data", "2d", with_marks("data"))
+    add("esi_nongriddata_mark_blockmark", "2d", with_marks("cells", "datum"))
     for d in ("2d", "3d"):
         add(f"esi_nongriddata_adaptive_{d}", d, lambda s, v, q: _esi(esi_nongriddata(
             s, v, q, local_interpolator="adaptiveidw", n_partitions=T_ADAPTIVE, alpha=ALPHA, seed=SEED, **NULL)))

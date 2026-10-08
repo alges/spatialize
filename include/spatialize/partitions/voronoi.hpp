@@ -72,6 +72,10 @@ namespace sptlz{
 				}
 			}
 
+			std::vector<float> leaf_point(int leaf){
+				return(this->nuclei_coords.at(leaf));
+			}
+
 			int n_leaves(){
 				return(static_cast<int>(this->nuclei_coords.size()));
 			}

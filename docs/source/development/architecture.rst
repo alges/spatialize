@@ -169,6 +169,13 @@ The decoders that draw take their random numbers from the run's seed, the tree a
 so a draw depends neither on the number of threads nor on the other queries. With one seed they see
 the same partitions as the averaging decoders.
 
+Cells without data are handled once, in ``Ensemble`` (``include/spatialize/empty_cells.hpp``), so
+every decoder on every partition follows the session setting ``empty_cells``. The decoder is never
+called on an empty cell. Under ``"mark"`` the loop draws one datum for the cell, from the cells that
+hold data or from all the data, with random numbers keyed by the seed, the tree and the cell (the
+held-out datum in leave-one-out, the cell and the fold in k-fold). The held-out data never serve as
+marks. ``run`` takes the policy as ``empty_cells`` and ``mark_source``.
+
 The public functions offer every decoder except ``custom``, which categorical ESI uses. Their
 argument lists keep the historical order for ``idw``, ``kriging`` and ``adaptiveidw``, while the
 other decoders pass their parameters in the catalogue's order, followed by the seed. Plain

@@ -23,14 +23,59 @@ The settings are the following.
     (:func:`~spatialize.gs.esi.esi_pareto_hparams_search`), the simulations
     (:func:`~spatialize.gs.ess.ess_sample`) and the ranking of the data
     (:meth:`~spatialize.gs.spa.PosteriorSampleAnalyzer.rank_samples`), these only when the work
-    repays starting the processes. The default is ``True``. Results are the same bit for bit with any number of threads or processes, so the
-    setting changes only the run time. When Spatialize was built without OpenMP, a warning says once
+    repays starting the processes. The default is ``True``. Results are the same bit for bit with
+    any number of threads or processes, so the setting changes only the run time. When Spatialize was built without OpenMP, a warning says once
     how to install it, after which the compiled code runs on one thread, the processes being
     unaffected.
 
 ``num_threads`` (positive int, or ``None``)
     The number of threads, or processes, when ``parallel`` is true. With ``None``, the default, the
     runtime uses every processor, or the number set by the environment variable ``OMP_NUM_THREADS``.
+
+``empty_cells`` (``"nan"`` or ``"mark"``)
+    What a member is when the cell of its location holds no datum, in estimation, leave-one-out and
+    k-fold. Unlike the settings above, it changes **which law is estimated**, not only how it is
+    computed, so it also changes the results of the hyperparameter searches.
+
+    - ``"nan"``, the default, leaves the member NaN. Every reading drops it, so the law at a location
+      is the one conditioned on its cell having data. Far from the data, where most cells are empty,
+      it rests on few members, and the cross-validation scores are computed on the data whose cells
+      keep other data, which favours partitions that are too fine.
+    - ``"mark"`` gives the empty cell one value, shared by every location in that cell of that
+      partition (see ``mark_source``). It follows the theory's law, which sends the weight of the
+      partitions that leave a location without data to the law of the marks. Every member is
+      defined, and two locations in one empty cell move together, as they should.
+
+    :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction` tells, at each location, the share of
+    partitions concerned.
+
+``mark_source`` (``"local"``, ``"cells"`` or ``"data"``)
+    Where the mark of an empty cell comes from, under ``empty_cells="mark"``. A cell holding data is
+    drawn, and it gives the mark as ``mark_value`` says.
+
+    - ``"local"``, the default, draws among the ``mark_knn`` cells with data nearest to the empty
+      cell, so the mark follows the level of the field around it.
+    - ``"cells"`` draws among all the cells with data of the partition, each weighing the same, the
+      block-mark model's single law of the marks for the whole field.
+    - ``"data"`` draws one datum uniformly among all the data, so densely sampled zones weigh more.
+
+    The empty cells of one partition draw their sources without repetition while candidates remain.
+    In leave-one-out and k-fold the data held out take no part.
+
+``mark_knn`` (positive int)
+    The number of nearby cells with data among which ``mark_source="local"`` draws. The default is 8.
+
+``mark_value`` (``"decoder"`` or ``"datum"``)
+    What the cell drawn by ``mark_source`` gives as the mark of an empty cell.
+
+    - ``"decoder"``, the default, is that cell's decoder prediction at the empty cell's centre (its
+      nucleus, for Voronoi), the kind of value the decoder gives elsewhere: an observed value for the
+      drawing decoders, a local average for the others.
+    - ``"datum"`` is one of that cell's data, drawn uniformly, whatever the decoder. It is the
+      block-mark model, in which a block carries one mark drawn from the law of the marks.
+      ``mark_source="cells"`` with ``mark_value="datum"`` follows the model exactly.
+
+    With ``mark_source="data"`` the mark is always a datum.
 
 Examples
 --------
@@ -39,7 +84,7 @@ Examples
 >>> with spatialize.session.override(domain=None):     # restored on exit
 ...     pass
 >>> spatialize.session.effective_config()
-{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None}
+{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder'}
 >>> spatialize.session.reset()
 """
 import contextlib
@@ -49,7 +94,8 @@ import numpy as np
 
 from spatialize import SpatializeError
 
-_DEFAULTS = {"domain": None, "parallel": True, "num_threads": None}
+_DEFAULTS = {"domain": None, "parallel": True, "num_threads": None, "empty_cells": "nan",
+             "mark_source": "local", "mark_knn": 8, "mark_value": "decoder"}
 
 _global = {}
 _overrides = contextvars.ContextVar("spatialize_session_overrides", default={})
@@ -83,7 +129,27 @@ def _validate_num_threads(value):
     return int(value)
 
 
-_VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_threads": _validate_num_threads}
+def _validate_num_threads_like(name):
+    def validate(value):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise SpatializeError(f"{name} must be a positive integer; got {value!r}")
+        return int(value)
+    return validate
+
+
+def _choice(name, options):
+    def validate(value):
+        if value not in options:
+            raise SpatializeError(f"{name} must be one of {list(options)}; got {value!r}")
+        return value
+    return validate
+
+
+_VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_threads": _validate_num_threads,
+               "empty_cells": _choice("empty_cells", ("nan", "mark")),
+               "mark_source": _choice("mark_source", ("local", "cells", "data")),
+               "mark_knn": _validate_num_threads_like("mark_knn"),
+               "mark_value": _choice("mark_value", ("decoder", "datum"))}
 
 
 def _validated(settings):

@@ -252,7 +252,9 @@ def _run(partition, decoder, method, samples, values, queries, alpha, n_partitio
          folding_seed, visitor, num_threads):
     return lsp.run(np.asarray(samples, np.float32), np.asarray(values, np.float32),
                    np.asarray(queries, np.float32), partition, float(alpha), int(n_partitions), int(seed),
-                   decoder, params, method, int(k), int(folding_seed), visitor, int(num_threads))
+                   decoder, params, method, int(k), int(folding_seed), visitor, int(num_threads),
+                   session.get("empty_cells"), session.get("mark_source"), session.get("mark_knn"),
+                   session.get("mark_value"))
 
 
 def _through_run(partition, decoder, operation):

@@ -265,12 +265,14 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
                                                     sptlz::Decoder *decoder,
                                                     EsiMethod method, int k, int folding_seed,
                                                     std::function<int(std::string)> visitor,
-                                                    const std::string &class_name){
+                                                    const std::string &class_name,
+                                                    sptlz::EmptyCellPolicy empty_cells = sptlz::EmptyCellPolicy()){
     std::unique_ptr<sptlz::Decoder> owned(decoder);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
     auto &spec = registry::find(registry::partitions(), partition, "partition");
     std::unique_ptr<sptlz::Ensemble> ensemble(spec.make(smp, val, bbox, alpha, forest_size, seed, visitor));
     ensemble->set_class_name(class_name);
+    ensemble->set_empty_cells(empty_cells);
     ensemble->set_decoder(owned.release());
 
     if (method == EsiMethod::ESTIMATE){
@@ -284,11 +286,12 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
 static EsiOutput run_ensemble_py(py::array_t<float> &samples, py::array_t<float> &values, py::array_t<float> &queries,
                                  const std::string &partition, float alpha, int forest_size, int seed,
                                  sptlz::Decoder *decoder, EsiMethod method, int k, int folding_seed,
-                                 std::optional<py::function> visitor, const std::string &class_name){
+                                 std::optional<py::function> visitor, const std::string &class_name,
+                                 sptlz::EmptyCellPolicy empty_cells = sptlz::EmptyCellPolicy()){
     auto smp = sptlz::ndarray_to_vector_2d(&samples);
     auto val = sptlz::ndarray_to_vector_1d(&values);
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
-    auto r = run_ensemble(smp, val, qry, partition, alpha, forest_size, seed, decoder, method, k, folding_seed, make_visitor(visitor), class_name);
+    auto r = run_ensemble(smp, val, qry, partition, alpha, forest_size, seed, decoder, method, k, folding_seed, make_visitor(visitor), class_name, empty_cells);
     return(esi_output(&r));
 }
 
@@ -298,11 +301,15 @@ static EsiOutput run_ensemble_py(py::array_t<float> &samples, py::array_t<float>
 //     folding_seed, visitor, num_threads): any partition with any decoder of the catalogue
 // (registry.hpp), in the dimensions both support. `params` holds the decoder's parameters, checked
 // against the catalogue. method: "estimate" (queries), "loo" or "kfold" (k, folding_seed).
-// num_threads: OpenMP threads (0: the runtime's default). Returns (None, members).
+// num_threads: OpenMP threads (0: the runtime's default). empty_cells: what a member is when its
+// cell holds no datum ("nan", "mark", "coarsen"); mark_source, mark_knn: where the marks come from
+// ("local" among the mark_knn nearest cells with data, "cells", "data"); mark_value: what the drawn
+// cell gives ("decoder" prediction or a "datum", the block-mark model); see empty_cells.hpp. Returns (None, members).
 EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t<float> queries,
               std::string partition, float alpha, int forest_size, int seed,
               std::string decoder, py::dict params, std::string method, int k, int folding_seed,
-              std::optional<py::function> visitor, int num_threads){
+              std::optional<py::function> visitor, int num_threads,
+              std::string empty_cells, std::string mark_source, int mark_knn, std::string mark_value){
     check_arrays(samples, values, queries);
     int d = static_cast<int>(samples.request().shape[1]);
     if (d != static_cast<int>(queries.request().shape[1]))
@@ -317,9 +324,12 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
 
     if (num_threads < 0)
         throw std::runtime_error("num_threads must be 0 (the runtime's default) or positive");
+    auto policy = sptlz::EmptyCellPolicy::from(empty_cells, mark_source, mark_knn, mark_value);
+    if (policy.kind == sptlz::EmptyCells::COARSEN)
+        throw std::runtime_error("empty_cells='coarsen' is not available yet");
     sptlz::Decoder *dec = ds.make(d, params, m);
     OmpThreads threads(num_threads);
-    return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder));
+    return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder, policy));
 }
 
 // cells(samples, queries, partition, alpha, forest_size, seed, num_threads): the cell of every
@@ -581,7 +591,9 @@ PYBIND11_MODULE(libspatialize, m) {
       py::arg("samples"), py::arg("values"), py::arg("queries"), py::arg("partition"), py::arg("alpha"),
       py::arg("forest_size"), py::arg("seed"), py::arg("decoder"), py::arg("params"),
       py::arg("method") = "estimate", py::arg("k") = 0, py::arg("folding_seed") = 0,
-      py::arg("visitor") = py::none(), py::arg("num_threads") = 0
+      py::arg("visitor") = py::none(), py::arg("num_threads") = 0,
+      py::arg("empty_cells") = "nan", py::arg("mark_source") = "local", py::arg("mark_knn") = 8,
+      py::arg("mark_value") = "decoder"
     );
     m.def(
       "cells",

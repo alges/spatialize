@@ -318,6 +318,12 @@ namespace sptlz{
 			   std::vector<std::vector<float>>().swap(this->leaf_params);
 			}
 
+  		std::vector<float> leaf_point(int leaf){
+  			std::vector<float> c;
+  			for(auto &side: leaves.at(leaf)->bbox) c.push_back(0.5f*(side.at(0) + side.at(1)));
+  			return(c);
+  		}
+
   		int n_leaves(){
   			return(static_cast<int>(this->leaves.size()));
   		}

@@ -17,6 +17,7 @@ ends with a pointer to the functions that implement it.
    sde
    encoders
    decoders
+   blockmark
    error
    esi
    ess

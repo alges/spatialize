@@ -66,9 +66,12 @@ Every quantity reported is a functional of the members.
 
 .. math::
 
+   \begin{gathered}
    \bar z(v) = \frac1T \sum_t \hat z^{(t)}(v), \qquad
-   \hat q_\alpha(v) = \inf\{z : \hat F_v^{(T)}(z) \ge \alpha\}, \qquad
+   \hat q_\alpha(v) = \inf\{z : \hat F_v^{(T)}(z) \ge \alpha\},
+   \\
    \hat p_t(v) = \frac1T \sum_t \mathbf 1\{\hat z^{(t)}(v) > t\},
+   \end{gathered}
 
 the mean, the quantile of level :math:`\alpha` and the probability of exceeding :math:`t`, with
 :math:`[\hat q_{\alpha/2}(v), \hat q_{1-\alpha/2}(v)]` an interval of nominal coverage
@@ -107,6 +110,15 @@ whose quantiles are not the averages of the quantiles at the points of :math:`B`
 quantiles assumes that all the locations of the block move together, and overstates the risk of the
 block.
 
+Cells without data
+==================
+
+A partition can leave a location in a cell that holds none of the data, more often far from the
+data and with fine partitions. The decoder then has nothing to predict from. The theory's answer,
+which Spatialize follows on request, comes from the block-mark model (:doc:`blockmark`). Such a
+cell receives one value, drawn by default from the cells with data around it, shared by every
+location in it. The share of partitions in which it happens, the *residual weight*, measures how far a location lies outside the sample.
+
 The number of partitions
 ========================
 
@@ -137,4 +149,6 @@ In Spatialize
 :func:`~spatialize.gs.esi.esi_griddata` and :func:`~spatialize.gs.esi.esi_nongriddata` compute the
 ensemble with :math:`T` = ``n_partitions``. The members :math:`\hat z^{(t)}(v)` are
 ``esi_samples()`` of the result, and ``agg_function`` (:doc:`../reference/functions`) chooses the
-reading reported as the estimate.
+reading reported as the estimate. The session setting ``empty_cells`` (:mod:`spatialize.session`) chooses the treatment of cells
+without data, and ``empty_cell_fraction()`` of the result estimates the residual weight at each
+location.

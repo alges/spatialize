@@ -409,6 +409,10 @@ class ESIResult(EstimationResult):
         The session settings the result was computed with (see
         :mod:`spatialize.session`). Default: the settings in effect when the
         result is created.
+    partition : dict, optional
+        The partitions the members come from: ``p_process``, ``alpha`` (as
+        the engine took it, negative for Voronoi with uniform nuclei),
+        ``n_partitions`` and ``seed``. Needed by :meth:`empty_cell_fraction`.
 
     Attributes
     ----------
@@ -422,9 +426,11 @@ class ESIResult(EstimationResult):
         The original observed sample values, if provided.
     effective_config : dict
         The session settings the result was computed with.
+    partition : dict or None
+        The partitions the members come from, if known.
     """
     def __init__(self, estimation, esi_samples, griddata=False, original_shape=None, xi=None,
-                 points=None, values=None, effective_config=None):
+                 points=None, values=None, effective_config=None, partition=None):
         """Initialize the result with an aggregated estimate and its ESI samples.
 
         See the class docstring for parameter descriptions.
@@ -434,6 +440,7 @@ class ESIResult(EstimationResult):
         self._precision = None
         self.effective_config = (session.effective_config() if effective_config is None
                                  else dict(effective_config))
+        self.partition = None if partition is None else dict(partition)
         # query coordinates flattened to line up 1:1 with `esi_samples` rows, regardless of
         # whether `xi` is grid-shaped -- used to calibrate ensemble widening
         if xi is None:
@@ -442,6 +449,43 @@ class ESIResult(EstimationResult):
             self._xi_flat, _ = flatten_grid_data(xi)
         else:
             self._xi_flat = xi
+
+    def empty_cell_fraction(self):
+        """The share of partitions in which the cell of each location held no datum.
+
+        It estimates the theory's residual weight 1 − Σᵢ wᵢ at each location, the
+        probability under the partition law that its cell contains none of the
+        data: near 0 inside the sample, growing towards 1 away from it. Under
+        the session setting ``empty_cells="nan"`` it is also the share of NaN
+        members. It is read from the partitions themselves
+        (:func:`~spatialize.gs.partitions.cell_labels`), whatever the policy.
+
+        Returns
+        -------
+        ndarray
+            The fraction at each location, of shape $N_{x^*}$ for non-gridded
+            data, or `original_shape` for gridded data.
+
+        Raises
+        ------
+        SpatializeError
+            If the result does not know its data or its partitions (results
+            saved by earlier versions).
+        """
+        if self.partition is None or self.points is None or self._xi_flat is None:
+            raise SpatializeError("empty_cell_fraction needs the data and the partitions of the result, "
+                                  "which results saved by earlier versions do not keep")
+        pts = np.asarray(self.points, dtype=np.float32)
+        xi = np.asarray(self._xi_flat, dtype=np.float32)
+        part = self.partition
+        # the data join the queries: they lie in the box already, so the partitions do not change
+        with session.override(domain=self.effective_config.get("domain")):
+            labels = lib_spatialize_facade.cells(pts, np.vstack([xi, pts]), part["p_process"], part["alpha"],
+                                                 part["n_partitions"], part["seed"])
+        at_queries, at_data = labels[:len(xi)], labels[len(xi):]
+        empty = np.array([~np.isin(at_queries[:, t], at_data[:, t]) for t in range(labels.shape[1])]).T
+        fraction = empty.mean(axis=1)
+        return fraction.reshape(self.original_shape) if self.griddata else fraction
 
     def precision(self, loss_function=lf.mse_loss):
         """Calculate the precision (error) between the estimate and the ESI samples.
@@ -1111,9 +1155,9 @@ def esi_griddata(points, values, xi, **kwargs):
 
     """
     ng_xi, original_shape = flatten_grid_data(xi)
-    estimation, esi_samples = _call_libspatialize(points, values, ng_xi, **kwargs)
+    estimation, esi_samples, partition = _call_libspatialize(points, values, ng_xi, **kwargs)
     return ESIResult(estimation, esi_samples, griddata=True, original_shape=original_shape, xi=xi,
-                     points=points, values=values)
+                     points=points, values=values, partition=partition)
 
 
 def esi_nongriddata(points, values, xi, **kwargs):
@@ -1256,8 +1300,8 @@ def esi_nongriddata(points, values, xi, **kwargs):
     esi_pareto_hparams_search : Pareto-frontier search that produces a
         ``best_params_found`` dict for this function.
     """
-    estimation, esi_samples = _call_libspatialize(points, values, xi, **kwargs)
-    return ESIResult(estimation, esi_samples, xi=xi, points=points, values=values)
+    estimation, esi_samples, partition = _call_libspatialize(points, values, xi, **kwargs)
+    return ESIResult(estimation, esi_samples, xi=xi, points=points, values=values, partition=partition)
 
 
 @signature_overload(
@@ -1484,7 +1528,11 @@ def _call_libspatialize(points, values, xi, **kwargs):
 
     estimation = kwargs["agg_function"](esi_samples)
 
-    return estimation, esi_samples
+    # the partitions the members come from: alpha as the engine took it (negative for Voronoi with
+    # uniform nuclei), so that cells() can read them again
+    partition = {"p_process": kwargs["p_process"], "alpha": float(l_args[3]),
+                 "n_partitions": int(l_args[2]), "seed": int(kwargs["seed"])}
+    return estimation, esi_samples, partition
 
 
 def _validate_alpha(alpha):

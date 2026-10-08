@@ -98,6 +98,7 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
         effective_config['domain'] = tuple(tuple(b) for b in effective_config['domain'])
     esi_result = ESIResult(estimation, esi_samples,
                            effective_config=effective_config,
+                           partition=meta_data.get('partition'),
                            griddata=meta_data['griddata'],
                            original_shape=meta_data['original_shape'],
                            xi=xi, points=points, values=values)
@@ -221,6 +222,8 @@ def save_result(result_dir_path, result):
         pd.DataFrame(est_result.esi_samples(raw=True)).to_csv(fn, index=False, header=columns)
         meta_data['n_esi_samples'] = len(columns)
         meta_data['effective_config'] = est_result.effective_config
+        if est_result.partition is not None:
+            meta_data['partition'] = est_result.partition
 
     if isinstance(result, ESSResult):
         # save the simulations

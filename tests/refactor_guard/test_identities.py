@@ -111,3 +111,26 @@ def test_density_readings_do_not_depend_on_units(scale):
         eps_scaled = EmpiricalRobustnessBound(30, cases.ALPHA, "idw", "mondrian", cases.SEED).estimate(
             s, (v * scale).astype(np.float32))
     assert np.isclose(eps, eps_scaled, rtol=1e-4)
+
+
+@pytest.mark.parametrize("p_process,alpha,data_cond", [("mondrian", 0.9, True), ("mondrian-raw", 0.9, True),
+                                                       ("voronoi", 0.8, True), ("voronoi", 0.8, False)])
+@pytest.mark.parametrize("griddata", [False, True])
+def test_empty_cell_fraction_is_the_share_of_nan_members(p_process, alpha, data_cond, griddata):
+    """Under empty_cells="nan" a member is NaN exactly when its cell held no datum, so the share of
+    NaN members at each location equals empty_cell_fraction(), read from the partitions alone."""
+    from spatialize.gs.esi import esi_griddata, esi_nongriddata
+    s, v, q = DATA["2d"]
+    kw = dict(local_interpolator="idw", exponent=2.0, p_process=p_process, data_cond=data_cond, alpha=alpha,
+              n_partitions=cases.T, seed=cases.SEED, callback=lambda *a, **k: None)
+    if griddata:
+        grid = np.mgrid[0:1:15j, 0:1:15j]
+        r = esi_griddata(s, v, (grid[0], grid[1]), **kw)
+    else:
+        r = esi_nongriddata(s, v, q, **kw)
+    members = r.esi_samples(raw=True)
+    share = np.isnan(members).mean(axis=1)
+    fraction = np.asarray(r.empty_cell_fraction()).ravel()
+    # Voronoi with nuclei at the data has a datum in every cell; the other cases have empty cells
+    assert (share.max() == 0) if (p_process == "voronoi" and data_cond) else (share.max() > 0)
+    assert np.array_equal(share, fraction)

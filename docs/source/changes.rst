@@ -46,7 +46,8 @@ New
   Pareto search, the simulations and the ranking of the data, with results the same bit for bit for
   any number of threads or processes.
 - **Conformance tests** (:doc:`scenarios/index`), runnable with ``python -m spatialize.scenarios``,
-  which prints its progress as it runs.
+  which prints its progress as it runs. Scenario P10 holds the empty-cell policies to what they
+  declare (:ref:`scenario-P10`).
 - :func:`~spatialize.empirical.silverman_bandwidth`, the bandwidth of the kernel density estimates.
 
 Under study

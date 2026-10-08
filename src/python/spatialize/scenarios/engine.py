@@ -116,7 +116,7 @@ class Scenario:
         return EstimatorSpec(id=est["id"], encoder=est["encoder"], rate=est.get("rate"),
                              domain=tuple(map(tuple, self.spec["domain"]["box"])),
                              decoder=est["decoder"], params=dict(est.get("params", {})),
-                             empty_cells=est.get("empty_cells", "nan"))
+                             empty_cells=est.get("empty_cells", "nan"), mark=dict(est.get("mark", {})))
 
 
 def catalog(tier=None, ids=None):
@@ -847,9 +847,147 @@ def eval_locality(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _empty_cells_data(s):
+    """Data and queries of an empty_cells scenario, drawn from ``data.generator_seed`` (not pinned):
+    ``data.n`` data uniform in ``data.box``, a part of the domain, and a ``data.grid`` × ... grid of
+    cell centres over the domain as queries."""
+    rng = np.random.default_rng(int(s["data"]["generator_seed"]))
+    box = np.asarray(s["domain"]["box"], float)
+    sub = np.asarray(s["data"]["box"], float)
+    n, g = int(s["data"]["n"]), int(s["data"]["grid"])
+    pts = sub[:, 0] + rng.random((n, len(box))) * (sub[:, 1] - sub[:, 0])
+    u = (pts - box[:, 0]) / (box[:, 1] - box[:, 0])
+    # a smooth field plus noise: distinct values, so a value identifies the datum it came from
+    vals = np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1]) + 0.3 * rng.standard_normal(n)
+    axes = [lo + (np.arange(g) + 0.5) * (hi - lo) / g for lo, hi in box]
+    qry = np.stack([a.ravel() for a in np.meshgrid(*axes, indexing="ij")], axis=1)
+    return pts.astype(np.float32), vals.astype(np.float32), qry.astype(np.float32)
+
+
+#: Kinds of the evaluator ``empty_cells`` that read the cells of the partitions (``runner.cells``).
+_NEEDS_CELLS = ("nan_iff_empty", "one_per_cell", "cell_mean")
+
+
+def eval_empty_cells(sc: Scenario, runner: Runner, mode: str, seed: int,
+                     save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``empty_cells``: properties of the empty-cell policies (P10).
+
+    Every estimator is run with one seed, so a runner that shares partitions between estimators with
+    one seed computes them all on the same partitions. A policy estimator names, with the key
+    ``reference`` of its entry, the estimator with the same encoder and decoder under ``"nan"``,
+    whose NaN members mark the queries of empty cells. Kinds (key ``kind``), one outcome per
+    estimator of ``estimators``:
+
+    - ``nan_iff_empty`` — under ``"nan"``, a member is NaN exactly when no datum lies in the
+      query's cell (needs ``runner.cells``);
+    - ``unchanged`` — where the reference is finite, the member equals the reference's, up to
+      ``tolerance`` × data range;
+    - ``filled`` — no member is NaN;
+    - ``one_per_cell`` — in each partition, the queries of one empty cell share one value (needs
+      ``runner.cells``);
+    - ``observed`` — every member at a query of an empty cell is one of the data values;
+    - ``cell_mean`` — every member at a query of an empty cell is the mean of the data of a cell of
+      the same partition, up to ``tolerance`` × data range (needs ``runner.cells``; for the
+      ``cellmean`` decoder);
+    - ``data_law`` — goodness of fit: at the query nearest to the check's ``location``, the members
+      of the partitions where its cell is empty are drawn uniformly among the data. The Pearson
+      statistic of the count of each datum against its expectation (the number of such members over
+      n) is referred to :math:`\chi^2_{n-1}`. One query keeps the members independent, one
+      partition each.
+
+    The data lie in a part of the domain (``data.box``), so that the partitions have empty cells.
+    Reads ``data.n``, ``data.box``, ``data.grid``, ``data.generator_seed`` and ``estimators_T``.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    entries = {e["id"]: e for e in s["estimators"]}
+    ests = {eid: sc.estimator(e) for eid, e in entries.items()}
+    pts, vals, qry = _empty_cells_data(s)
+    rng_v = float(vals.max() - vals.min())
+    cache = {}
+
+    def members(eid):
+        if eid not in cache:
+            cache[eid] = np.asarray(runner.members(ests[eid], pts, vals, qry, n_members=T, seed=seed), float)
+        return cache[eid]
+
+    def labels(eid):
+        """Cell labels of the queries and of the data, (q, T) and (n, T)."""
+        key = ("cells", ests[eid].encoder, ests[eid].rate)
+        if key not in cache:
+            lab = np.asarray(runner.cells(ests[eid], pts, np.vstack([qry, pts]), n_members=T, seed=seed))
+            cache[key] = (lab[: len(qry)], lab[len(qry):])
+        return cache[key]
+
+    out = []
+    for check in s["checks"]:
+        kind, tol = check["kind"], float(check.get("tolerance", 0.0)) * rng_v
+        for eid in check["estimators"]:
+            est = ests[eid]
+            ref = entries[eid].get("reference", eid)
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            needed = [est, ests[ref]]
+            reason = ""
+            if not all(runner.supports(e) for e in needed):
+                reason = f"{runner.name} does not support " + ", ".join(
+                    f"{e.encoder}/{e.decoder}/{e.empty_cells}" for e in needed)
+            elif kind in _NEEDS_CELLS and not hasattr(runner, "cells"):
+                reason = f"{runner.name} does not give the cells of its partitions"
+            if reason:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=reason))
+                continue
+            m = members(eid)
+            empty = np.isnan(members(ref))
+            if kind == "nan_iff_empty":
+                at_q, at_s = labels(eid)
+                no_datum = np.array([~np.isin(at_q[:, t], at_s[:, t]) for t in range(T)]).T
+                r = families.almost_sure(int((np.isnan(m) != no_datum).sum()), m.size)
+            elif kind == "unchanged":
+                a, b = m[~empty], members(ref)[~empty]
+                r = families.almost_sure(int((~(np.abs(a - b) <= tol)).sum()), a.size)
+            elif kind == "filled":
+                r = families.almost_sure(int(np.isnan(m).sum()), m.size)
+            elif kind == "observed":
+                x = m[empty].astype(np.float32)
+                r = families.almost_sure(int((~np.isin(x, vals)).sum()), x.size)
+            elif kind == "one_per_cell":
+                at_q, _ = labels(eid)
+                bad = groups = 0
+                for t in range(T):
+                    for c in np.unique(at_q[empty[:, t], t]):
+                        x = m[(at_q[:, t] == c) & empty[:, t], t]
+                        groups += 1
+                        bad += int(len(np.unique(x)) > 1)
+                r = families.almost_sure(bad, groups)
+            elif kind == "data_law":
+                qi = int(np.argmin(np.sum((qry - np.asarray(check["location"], np.float32)) ** 2, axis=1)))
+                x = m[qi, empty[qi]].astype(np.float32)
+                counts = [int(np.sum(x == v)) for v in vals]
+                r = families.gof_counts(counts, [x.size / len(vals)] * len(vals), df=len(vals) - 1)
+            elif kind == "cell_mean":
+                at_q, at_s = labels(eid)
+                bad = checked = 0
+                for t in range(T):
+                    means = np.array([vals[at_s[:, t] == c].astype(float).mean() for c in np.unique(at_s[:, t])])
+                    x = m[empty[:, t], t]
+                    checked += x.size
+                    bad += int(sum(not (np.abs(means - xi) <= tol).any() for xi in x))
+                r = families.almost_sure(bad, checked)
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            if kind != "nan_iff_empty" and not empty.any():
+                r = families.TestResult(r.family, r.statistic, r.p_value, r.pass_if,
+                                        f"{r.detail}; no empty cell at the queries, nothing tested")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
-              "locality": eval_locality}
+              "locality": eval_locality, "empty_cells": eval_empty_cells}
 
 
 # ----------------------------------------------------------------------------- run

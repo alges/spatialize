@@ -94,8 +94,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - :ref:`P5 <scenario-P5>`
      - weights on the data plus residual weight sum to 1
-     - blocked
-     - empty-cell policy and its diagnostic (phase 3)
+     - ready
+     - derive the target for the implemented mark strategies
    * - :ref:`P6 <scenario-P6>`
      - the law at a location does not depend on the other queries
      - **implemented**
@@ -106,12 +106,16 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - derive the closed form independently
    * - :ref:`P8 <scenario-P8>`
      - empty cells share one mark
-     - blocked
-     - empty-cell policy (phase 3)
+     - ready
+     - derive the target for the implemented mark strategies
    * - :ref:`P9 <scenario-P9>`
      - cell-weighted marks are unbiased under preferential sampling
-     - blocked
-     - empty-cell policy (phase 3)
+     - ready
+     - derive the target for the implemented mark strategies
+   * - :ref:`P10 <scenario-P10>`
+     - each empty-cell policy does what it declares
+     - **implemented**
+     - —
    * - 
      - **T3 — geostatistical scenarios**
      - 

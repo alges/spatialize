@@ -9,8 +9,9 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2, P3 and P6 are implemented. P5, P8 and P9 need the empty-cell policy, a planned feature of
-Spatialize, while P1, P4 and P7 can be implemented now.
+P2, P3, P6 and P10 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
+law of the marks of empty cells, so their targets must first be derived for the mark strategies
+Spatialize implements (:doc:`../theory/blockmark`).
 
 .. _scenario-P1:
 
@@ -127,7 +128,7 @@ P4 — The estimated law is a law
 P5 — Residual weight of the decoders
 ====================================
 
-:Status: blocked — needs the empty-cell policy (planned)
+:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
 :Source in the theory: the limit law of the estimator as a mixture of the data values with the mark
   law
 :Claim: at a location, the weights on the observed values sum to one together with the *residual
@@ -193,7 +194,7 @@ P7 — Covariance of an uncorrelated field
 P8 — Data-free cells share one mark
 ===================================
 
-:Status: blocked — needs the empty-cell policy (planned)
+:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
 :Source in the theory: a cell without data contributes a single mark, shared by all its locations
 :Claim: with ``empty_cells="mark"``, two queries far from the data have members whose covariance
   equals the variance of the estimated mark law times their co-occurrence probability.
@@ -209,7 +210,7 @@ P8 — Data-free cells share one mark
 P9 — Mark law under preferential sampling
 =========================================
 
-:Status: blocked — needs the empty-cell policy (planned)
+:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
 :Source in the theory: the block-mark model has one mark per cell
 :Claim: under preferential sampling, estimating the mark law with one draw per data-bearing cell
   (``mark_source="cells"``) gives an unbiased estimate. Drawing among all data
@@ -222,3 +223,75 @@ domain.
 
 - *gof* of the cell-weighted estimate against the true mark law.
 - *paired-relation*. The data-weighted estimate lies farther from it.
+
+.. _scenario-P10:
+
+P10 — Empty-cell policies
+=========================
+
+:Status: **implemented**
+:Evaluator: ``empty_cells``
+:Source in the theory: the residual weight of the limit law goes to a mark, one per cell without
+  data (the block-mark model)
+:Claim: each empty-cell policy does what it declares, whatever the field. Under ``"nan"`` a member
+  is NaN exactly when no datum lies in the query's cell. ``"mark"`` and ``"coarsen"`` leave the
+  cells with data unchanged, with no member undefined. Under ``"mark"`` the locations of an
+  empty cell share one value.
+
+**Setup.** 40 data lie uniformly in :math:`[0, 0.6]^2`, 36 % of the unit square, so that many cells
+hold no datum. They carry the field of P2. The queries are the centres of a :math:`12 \times 12`
+grid over the whole square. Two partitions are used, the Mondrian partition of rate 4 (25 cells on
+average) and the Voronoi partition with nuclei uniform in the square, of intensity 12. On each, the
+IDW decoder runs under ``"nan"``, under ``"coarsen"`` and under ``"mark"`` with three strategies:
+
+- ``local``, the default, the prediction of a nearby cell's decoder at the empty cell (8 cells);
+- ``cells`` with ``datum``, one datum of a cell drawn among the cells with data (the block-mark
+  model);
+- ``data``, one datum drawn among all the data.
+
+The cell mean runs under ``"nan"``, ``"mark"`` (``local``) and ``"coarsen"``. Every estimator uses
+:math:`T = 200` members in ``ci`` and :math:`1\,000` in ``full``, with one seed, so all of them see
+the same partitions.
+
+**Reading the cells.** A query lies in an empty cell when the member of its estimator under
+``"nan"``, the *reference*, is NaN. The checks that compare the locations of one cell read the cells
+of the partitions through the runner (:doc:`extending`).
+
+**Checks.** All are almost sure except ``data-law``.
+
+- ``nan``. Under ``"nan"`` a member is NaN exactly when no datum shares the query's cell, for IDW and
+  the cell mean on both partitions.
+- ``unchanged``. Where the reference is finite, every policy gives the same member, bit for bit.
+- ``filled``. No member of ``"mark"`` or ``"coarsen"`` is NaN.
+- ``one-mark``. Under ``"mark"``, in each partition, the queries of one empty cell share one value,
+  for every strategy.
+- ``observed``. A mark drawn as a datum (``cells`` with ``datum``, and ``data``) is a data value.
+- ``cell-mean``. With the cell mean, a mark is the mean of the data of a cell of the same partition,
+  and so is the value ``"coarsen"`` gives on a Voronoi partition, where the coarser cell is the one
+  with data whose nucleus lies nearest. On a Mondrian partition the coarser cell is an ancestor in
+  the tree of cuts, a union of cells, so this check leaves it out.
+- ``data-law``, *gof-closed*. At the query nearest to the corner :math:`(1, 1)`, opposite the data,
+  the marks drawn among the data (``data``) are uniform over the 40 data. The members of the
+  partitions where the query's cell is empty, one per partition and so independent, are counted per
+  datum, and the Pearson statistic is referred to :math:`\chi^2_{39}`. The empty cells of one
+  partition draw distinct data, which by symmetry leaves the law at one location uniform.
+- *negative controls*. ``"coarsen"`` with IDW predicts at each location, so the queries of one empty
+  cell must not share one value. ``"mark"`` with the ``local`` strategy predicts with IDW at the
+  empty cell's point, so its marks must not be data values.
+
+The rule that the empty cells of one partition draw distinct source cells, while candidates remain,
+cannot be read from the queries alone, since the number of empty cells of a partition is unknown.
+The library's own tests check it for the strategy ``data``
+(``tests/refactor_guard/test_identities.py``).
+
+**Results.** On seeds 1 to 3, in both modes, every almost-sure check passes with no violation,
+among about 29 000 members per estimator in ``ci``, of which 40 % to 46 % lie in empty cells. The
+law of the marks drawn among the data passes with p between 0.15 and 0.93. The controls
+reject, with 80 % to 91 % of the empty cells holding several values under ``"coarsen"`` and 69 % to
+87 % of the IDW marks differing from every datum.
+
+The goodness-of-fit check has no negative control. The natural one, the block-mark strategy
+(``cells`` with ``datum``), weighs each datum by one over the occupancy of its cell, a law close to
+the uniform one on this design. With 1 000 members its counts are rejected on every seed tried
+(p at most :math:`10^{-8}`). With 200 they are not rejected reliably, so a control would fail in
+``ci``.

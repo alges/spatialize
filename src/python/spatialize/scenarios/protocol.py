@@ -36,7 +36,14 @@ class EstimatorSpec:
         pre-registered in the scenario, so runners do not fill in defaults.
     empty_cells : str
         Empty-cell policy; ``"nan"`` (a data-free cell yields NaN) is the only one every runner
-        must support.
+        must support. Spatialize's runner also supports ``"mark"`` (the cell takes one value, drawn
+        from a cell with data) and ``"coarsen"`` (the decoder predicts from a coarser cell with data).
+    mark : dict
+        How ``"mark"`` draws the value, every key explicit: ``source`` (``"local"``, among the
+        ``knn`` cells with data nearest to the empty cell; ``"cells"``, among every cell with data;
+        ``"data"``, one datum among all the data), ``knn`` and ``value`` (``"decoder"``, the
+        prediction of the drawn cell's decoder at the empty cell; ``"datum"``, one of the drawn
+        cell's data). Empty for the other policies.
     """
     id: str
     encoder: str
@@ -45,6 +52,7 @@ class EstimatorSpec:
     decoder: str
     params: Dict[str, Any] = field(default_factory=dict)
     empty_cells: str = "nan"
+    mark: Dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -60,6 +68,14 @@ class Runner(Protocol):
     ----------
     name : str
         Name of the implementation, shown in the report.
+
+    Notes
+    -----
+    A runner may also provide ``cells(estimator, samples, queries, *, n_members, seed)``, returning
+    an int array of shape ``(q, n_members)``: the label of each query's cell in each partition that
+    ``members`` draws with the same arguments, two queries sharing a cell of partition ``t`` exactly
+    when their labels in column ``t`` are equal. The checks that read cells (scenario P10) are
+    skipped for a runner without it.
     """
 
     name: str

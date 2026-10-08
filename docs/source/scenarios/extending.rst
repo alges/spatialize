@@ -47,6 +47,13 @@ A runner must meet three requirements.
 The suite computes everything else, from the readings of the law and the functionals to the tests
 and the error budget, identically for every implementation.
 
+A runner may also give the cells of its partitions, through a method
+``cells(est, samples, queries, *, n_members, seed)`` returning an integer array of shape
+``(n_queries, n_members)``. Two queries share a cell of partition :math:`t` exactly when their
+labels in column :math:`t` are equal, for the partitions ``members`` draws with the same arguments.
+The checks of scenario P10 that compare the locations of one cell need it. A runner without it has
+them skipped. Spatialize's runner reads the cells with ``lib_spatialize_facade.cells``.
+
 Testing a new spatialize decoder
 ================================
 

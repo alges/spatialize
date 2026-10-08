@@ -103,7 +103,16 @@ Estimators
        (``mae``/``mse``).
    * - ``empty_cells``
      - Policy for cells without data; ``nan`` (the cell yields NaN) is the only one every runner
-       must support.
+       must support. Spatialize's runner also supports ``mark`` and ``coarsen``
+       (:doc:`../theory/blockmark`).
+   * - ``mark``
+     - With ``empty_cells: mark``, how the mark is drawn, every key explicit: ``source``
+       (``local``, ``cells`` or ``data``), ``knn`` (the number of nearby cells of ``local``) and
+       ``value`` (``decoder`` or ``datum``), Spatialize's session settings ``mark_source``,
+       ``mark_knn`` and ``mark_value``.
+   * - ``reference``
+     - For the evaluator ``empty_cells``, the estimator with the same encoder and decoder under
+       ``nan``, run with the same seed, whose NaN members mark the queries of empty cells.
 
 Checks
 ======
@@ -209,6 +218,44 @@ P6).
 - ``data``: ``n`` data uniform in the domain, ``location``, the numbers ``few`` and ``many`` of other
   queries, ``beyond`` (how far past the domain the ``beyond`` queries reach) and ``generator_seed``.
 - per check: ``kind`` (``inside`` or ``beyond``) and ``estimators``.
+
+Evaluator ``empty_cells``
+-------------------------
+
+This evaluator decides properties of the empty-cell policies (scenario P10). Every estimator is
+run with one seed, so all of them see the same partitions.
+
+- ``truth``: ``generator: smooth_plus_noise``, drawn by the evaluator, not pinned.
+- ``data``: ``n`` data uniform in ``box``, a part of the domain, ``grid`` (queries on a
+  ``grid``×``grid`` lattice of cell centres over the domain) and ``generator_seed``.
+- per check, ``kind`` and ``estimators``, each policy estimator naming its ``reference``:
+
+  .. list-table::
+     :header-rows: 1
+     :widths: 22 78
+
+     * - ``kind``
+       - claim
+     * - ``nan_iff_empty``
+       - Under ``nan``, a member is NaN exactly when no datum lies in the query's cell.
+     * - ``unchanged``
+       - Where the reference is finite, the member equals it, up to ``tolerance`` × data range.
+     * - ``filled``
+       - No member is NaN.
+     * - ``one_per_cell``
+       - In each partition, the queries of one empty cell share one value.
+     * - ``observed``
+       - Every member at a query of an empty cell is a data value.
+     * - ``cell_mean``
+       - Every member at a query of an empty cell is the mean of the data of a cell of the same
+         partition, up to ``tolerance`` × data range.
+     * - ``data_law``
+       - With ``location``, goodness of fit (``gof-closed``). At the query nearest to it, the
+         members of the partitions where its cell is empty are uniform over the data values.
+
+  The kinds ``nan_iff_empty``, ``one_per_cell`` and ``cell_mean`` read the cells of the partitions
+  through the runner's optional method ``cells`` (:doc:`extending`). A runner without it has them
+  skipped.
 
 Evaluator ``draw_laws``
 -----------------------

@@ -24,6 +24,10 @@ PROFILES = {
     "voronoi-data": ("voronoi", True),     # Spatialize's Voronoi, nuclei among the samples (alpha >= 0)
 }
 
+#: Empty-cell policies this runner implements (Spatialize's session setting ``empty_cells``).
+POLICIES = ("nan", "mark", "coarsen")
+
+
 def alpha_from_rate(rate, domain):
     r"""Spatialize's Mondrian granularity α from a Mondrian rate λ and a box H.
 
@@ -90,9 +94,11 @@ def alpha_from_intensity(intensity, domain, n_samples):
 class SpatializeRunner:
     """:class:`~spatialize.scenarios.protocol.Runner` for spatialize's compiled estimators.
 
-    Supports the encoder profiles in :data:`PROFILES` with ``empty_cells="nan"``, for every decoder
-    the catalogue offers in the domain's dimension. The partition box is pinned to the scenario's
-    domain by adding its corners as extra queries.
+    Supports the encoder profiles in :data:`PROFILES` with the empty-cell policies ``"nan"``,
+    ``"mark"`` and ``"coarsen"`` (set through the session, :mod:`spatialize.session`), for every
+    decoder the catalogue offers in the domain's dimension. The partition box is pinned to the
+    scenario's domain by adding its corners as extra queries. :meth:`cells` gives the cell of each
+    query in the partitions :meth:`members` draws.
 
     Examples
     --------
@@ -106,8 +112,9 @@ class SpatializeRunner:
     name = "spatialize"
 
     def __init__(self):
-        from spatialize import gs
+        from spatialize import gs, session
         self._gs = gs
+        self._session = session
 
     def profile(self, encoder):
         """Canonical encoder profile name.
@@ -125,7 +132,9 @@ class SpatializeRunner:
 
     def supports(self, est: EstimatorSpec) -> bool:
         """Whether the catalogue offers the estimator's partition and decoder in its dimension."""
-        if est.encoder not in PROFILES or est.empty_cells != "nan":
+        if est.encoder not in PROFILES or est.empty_cells not in POLICIES:
+            return False
+        if est.empty_cells == "mark" and set(est.mark) != {"source", "knn", "value"}:
             return False
         return self._gs.supports(PROFILES[est.encoder][0], est.decoder, len(est.domain))
 
@@ -143,6 +152,36 @@ class SpatializeRunner:
         """
         if not self.supports(est):
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
+        partition, alpha, q = self._partition(est, samples, queries)
+        policy = {"empty_cells": est.empty_cells}
+        if est.empty_cells == "mark":
+            policy.update(mark_source=est.mark["source"], mark_knn=int(est.mark["knn"]),
+                          mark_value=est.mark["value"])
+        try:
+            with self._session.override(**policy):
+                _, out = self._gs.lib_spatialize_facade.run(samples, values, q, partition, est.decoder, est.params,
+                                                            alpha, int(n_members), int(seed))
+        except RuntimeError as e:
+            raise ValueError(f"{est.id}: {e}") from None
+        return np.asarray(out)[: len(queries)]
+
+    def cells(self, est, samples, queries, *, n_members, seed):
+        """The cell of each query in each partition :meth:`members` draws with the same arguments.
+
+        Returns
+        -------
+        ndarray of int, shape (q, n_members)
+            Two queries share a cell of partition t exactly when their labels in column t are equal.
+        """
+        if est.encoder not in PROFILES:
+            raise NotImplementedError(est.encoder)
+        partition, alpha, q = self._partition(est, samples, queries)
+        labels = self._gs.lib_spatialize_facade.cells(samples, q, partition, alpha, int(n_members), int(seed))
+        return np.asarray(labels)[: len(queries)]
+
+    def _partition(self, est, samples, queries):
+        """Spatialize's partition name and alpha for the estimator, and the queries with the corners
+        of the domain appended."""
         # Spatialize draws the partition on bbox(samples ∪ queries): pin it to the declared domain
         corners = np.array(list(itertools.product(*est.domain)), np.float32)
         q = np.vstack([np.asarray(queries, np.float32), corners])
@@ -156,9 +195,4 @@ class SpatializeRunner:
                                  f"{len(samples)} samples (spatialize's Voronoi needs λ_V·|H| < n/2)")
             if not data_cond:
                 alpha = -alpha  # spatialize's convention: negative alpha = nuclei uniform in the box
-        try:
-            _, out = self._gs.lib_spatialize_facade.run(samples, values, q, partition, est.decoder, est.params,
-                                                        alpha, int(n_members), int(seed))
-        except RuntimeError as e:
-            raise ValueError(f"{est.id}: {e}") from None
-        return np.asarray(out)[: len(queries)]
+        return partition, alpha, q

@@ -1,0 +1,113 @@
+id: P10-empty-cell-policies
+version: 1
+tier: T2
+evaluator: empty_cells
+book:
+  topic: "cells without data: the residual weight of the limit law goes to a mark, one per cell (block-mark model)"
+  draft_2026_10: "ch 12, the block-mark model and the higher-order estimator"   # the book is a draft
+purpose: >
+  The three empty-cell policies must do what they declare, whatever the field. Under "nan" a member
+  is NaN exactly when no datum lies in the query's cell. "mark" and "coarsen" leave the cells with
+  data untouched and leave no member undefined. Under "mark" every location of an empty cell shares
+  one value, a datum when the mark is drawn as a datum, and the mean of a cell with data under the
+  cell-mean decoder. Under "coarsen" an empty Voronoi cell takes, with the cell mean, the mean of
+  another cell of the partition. These checks are almost sure: a single violation is a defect. One
+  goodness-of-fit check reads the law of the marks drawn among the data far from them, uniform over
+  the data.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 40
+  box: [[0.0, 0.6], [0.0, 0.6]]     # the data cover 36 % of the domain: many cells without data
+  grid: 12                          # 12 × 12 cell centres over the domain as queries
+  generator_seed: 20261008
+estimators_T: {ci: 200, full: 1000}
+estimators:
+  # Mondrian rate 4 on the unit square: E[#cells] = (1 + 4)² = 25. Voronoi intensity 12 (below n/2).
+  # Every policy estimator names its "nan" reference, same encoder and decoder, run with the same seed.
+  - {id: m-nan, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: m-mark, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: m-nan}
+  - {id: m-mark-cells, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}, reference: m-nan}
+  - {id: m-mark-data, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: decoder}, reference: m-nan}
+  - {id: m-coarsen, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen,
+     reference: m-nan}
+  - {id: m-cm-nan, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: m-cm-mark, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: m-cm-nan}
+  - {id: m-cm-coarsen, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: coarsen,
+     reference: m-cm-nan}
+  - {id: v-nan, encoder: voronoi, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: v-mark, encoder: voronoi, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: v-nan}
+  - {id: v-mark-cells, encoder: voronoi, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}, reference: v-nan}
+  - {id: v-mark-data, encoder: voronoi, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: decoder}, reference: v-nan}
+  - {id: v-coarsen, encoder: voronoi, rate: 12.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen,
+     reference: v-nan}
+  - {id: v-cm-nan, encoder: voronoi, rate: 12.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: v-cm-mark, encoder: voronoi, rate: 12.0, decoder: cellmean, params: {}, empty_cells: mark,
+     mark: {source: local, knn: 8, value: decoder}, reference: v-cm-nan}
+  - {id: v-cm-coarsen, encoder: voronoi, rate: 12.0, decoder: cellmean, params: {}, empty_cells: coarsen,
+     reference: v-cm-nan}
+checks:
+  - id: nan
+    title: "under nan, a member is NaN exactly when the query's cell holds no datum"
+    kind: nan_iff_empty
+    family: almost-sure
+    estimators: [m-nan, m-cm-nan, v-nan, v-cm-nan]
+  - id: unchanged
+    title: "the cells with data keep the members of nan"
+    kind: unchanged
+    family: almost-sure
+    tolerance: 0.0                  # the same partitions and decoder: the same float32 members
+    estimators: [m-mark, m-mark-cells, m-mark-data, m-coarsen, m-cm-mark, m-cm-coarsen,
+                 v-mark, v-mark-cells, v-mark-data, v-coarsen, v-cm-mark, v-cm-coarsen]
+  - id: filled
+    title: "no member is NaN"
+    kind: filled
+    family: almost-sure
+    estimators: [m-mark, m-mark-cells, m-mark-data, m-coarsen, m-cm-mark, m-cm-coarsen,
+                 v-mark, v-mark-cells, v-mark-data, v-coarsen, v-cm-mark, v-cm-coarsen]
+  - id: one-mark
+    title: "the locations of an empty cell share one mark"
+    kind: one_per_cell
+    family: almost-sure
+    estimators: [m-mark, m-mark-cells, m-mark-data, m-cm-mark, v-mark, v-mark-cells, v-mark-data, v-cm-mark]
+  - id: observed
+    title: "a mark drawn as a datum is a data value"
+    kind: observed
+    family: almost-sure
+    estimators: [m-mark-cells, m-mark-data, v-mark-cells, v-mark-data]
+  - id: cell-mean
+    title: "with the cell mean, an empty cell takes the mean of a cell with data"
+    kind: cell_mean
+    family: almost-sure
+    tolerance: 1.0e-6               # × data range: float32 sums in another order
+    estimators: [m-cm-mark, v-cm-mark, v-cm-coarsen]
+  - id: data-law
+    title: "far from the data, a mark drawn among the data is uniform over them"
+    kind: data_law
+    family: gof-closed
+    location: [1.0, 1.0]            # the query nearest to the corner opposite the data
+    estimators: [m-mark-data, v-mark-data]
+  - id: control-one-mark
+    title: "negative control: coarsen predicts at each location, so an empty cell holds several values"
+    kind: one_per_cell
+    family: almost-sure
+    estimators: [m-coarsen, v-coarsen]
+    expect: {default: reject}
+  - id: control-observed
+    title: "negative control: a mark predicted by IDW at the cell's point is not a data value"
+    kind: observed
+    family: almost-sure
+    estimators: [m-mark, v-mark]
+    expect: {default: reject}
+provenance:
+  v1: >
+    2026-10-08: first version, with the empty-cell policies of phase 3; the almost-sure checks,
+    sizes and tolerances fixed before their first run. The check data-law was added the same day,
+    after the first runs of the almost-sure checks and before its own first run.

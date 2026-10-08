@@ -11,6 +11,7 @@
 #include <thread>
 #include <exception>
 #include <algorithm>
+#include <map>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -48,6 +49,44 @@ namespace sptlz{
 					}
 				}
 				return(out);
+			}
+
+			// empty_cells "coarsen": the locations `ids` (rows of `points`) of the empty cell `leaf` are
+			// predicted by the decoder from the coarser cell with usable data (Partition::coarser), the
+			// nearest ancestor for Mondrian or the nearest nucleus with data for Voronoi. An ancestor
+			// is fitted with Decoder::fit_cell on its usable data, keyed by `key` so that leave-one-out
+			// and each fold fit their own; the prediction for row r goes to results[r][t].
+			template <typename Usable>
+			void fill_coarse(int t, sptlz::Partition *mt, int leaf, std::vector<std::vector<float>> *points,
+			                 const std::vector<int> &ids, Usable usable, uint64_t key,
+			                 std::vector<std::vector<float>> &results){
+				std::function<bool(int)> use = usable;
+				std::map<int, std::pair<sptlz::Partition::Coarse, std::vector<int>>> groups;
+				sptlz::Partition::Coarse shared;
+				bool have_shared = false;
+				for(int r: ids){
+					sptlz::Partition::Coarse c;
+					if(have_shared){
+						c = shared;        // an ancestor serves every location of the cell
+					}else{
+						c = mt->coarser(leaf, points->at(r), use);
+						if(c.id >= 0 && !c.fitted){ shared = c; have_shared = true; }
+					}
+					if(c.id < 0) continue;
+					auto &g = groups[c.id];
+					if(g.second.empty()) g.first = c;
+					g.second.push_back(r);
+				}
+				for(auto &entry: groups){
+					auto &c = entry.second.first;
+					std::vector<float> params = c.fitted
+						? mt->leaf_params.at(c.id)
+						: this->decoder->fit_cell(&coords, &values, c.samples,
+						                          sptlz::mark_seed(this->seed, (static_cast<uint64_t>(c.id) << 32) ^ key));
+					auto pred = this->decoder->leaf_estimation(&coords, &values, &(c.samples), points, &(entry.second.second), &params,
+					                                           CellContext{t, c.id, this->seed});
+					for(size_t k=0; k<entry.second.second.size(); k++) results.at(entry.second.second.at(k)).at(t) = pred.at(k);
+				}
 			}
 
 			// The marks of one partition (empty_cells.hpp): each target, in the order given, draws a
@@ -276,12 +315,16 @@ namespace sptlz{
 					}
 					// make estimation by leaf (empty cells keep NaN, unless the policy fills them)
 					bool marking = this->empty_cells.kind == sptlz::EmptyCells::MARK;
+					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<sptlz::MarkTarget> targets;
 					for(size_t j=0; j<locations_by_leaf.size(); j++){
 						if(mt->samples_by_leaf.at(j).size()==0){
 							if(marking && !locations_by_leaf.at(j).empty()){
 								targets.push_back({static_cast<int>(j), mt->leaf_point(static_cast<int>(j)),
 								                   sptlz::mark_key_estimate(static_cast<int>(j)), locations_by_leaf.at(j)});
+							}
+							if(coarsening && !locations_by_leaf.at(j).empty()){
+								fill_coarse(i, mt, static_cast<int>(j), locations, locations_by_leaf.at(j), [](int){ return(true); }, 0ULL, results);
 							}
 							continue;
 						}
@@ -314,8 +357,16 @@ namespace sptlz{
 				for_each_tree(n, progress, [&](int i){
 					auto mt = forest.at(i);
 					bool marking = this->empty_cells.kind == sptlz::EmptyCells::MARK;
+					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<sptlz::MarkTarget> targets;
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
+						if(coarsening && mt->samples_by_leaf.at(j).size()==1){
+							// the held-out datum leaves its cell empty: predicted from the coarser cell without it
+							int held = mt->samples_by_leaf.at(j).at(0);
+							fill_coarse(i, mt, static_cast<int>(j), &coords, {held}, [held](int x){ return(x != held); },
+							            (static_cast<uint64_t>(held) << 1) | 1ULL, results);
+							continue;
+						}
 						if(marking && mt->samples_by_leaf.at(j).size()==1){
 							// the held-out datum leaves its cell empty: a mark from the other cells, read at
 							// the datum's location
@@ -359,6 +410,7 @@ namespace sptlz{
 				for_each_tree(n, progress, [&](int i){
 					auto mt = forest.at(i);
 					bool marking = this->empty_cells.kind == sptlz::EmptyCells::MARK;
+					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<std::vector<sptlz::MarkTarget>> targets_by_fold(marking ? k : 0);
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
 						auto &cell = mt->samples_by_leaf.at(j);
@@ -367,6 +419,19 @@ namespace sptlz{
 							for(size_t l=0; l<cell.size(); l++){
 								results.at(cell.at(l)).at(i) = predictions.at(l);
 							}
+						}
+						if(coarsening){
+							// a fold that takes every datum of the cell leaves it empty: its held-out data are
+							// predicted from the coarser cell, with the data outside the fold
+							for(int f=0; f<k; f++){
+								std::vector<int> rows;
+								bool any_out = false;
+								for(int d: cell){ if(folds.at(d)==f) rows.push_back(d); else any_out = true; }
+								if(rows.empty() || any_out) continue;
+								fill_coarse(i, mt, static_cast<int>(j), &coords, rows, [&folds, f](int x){ return(folds.at(x) != f); },
+								            (static_cast<uint64_t>(f) << 1), results);
+							}
+							continue;
 						}
 						if(!marking) continue;
 						// a fold that takes every datum of the cell leaves it empty: one mark per cell

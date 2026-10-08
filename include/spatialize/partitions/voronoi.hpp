@@ -72,6 +72,26 @@ namespace sptlz{
 				}
 			}
 
+			// the nearest nucleus, other than the leaf's own, whose cell holds usable data: the Voronoi
+			// tessellation of the nuclei with data, read at the point
+			Coarse coarser(int leaf, const std::vector<float> &point, const std::function<bool(int)> &usable){
+				Coarse out;
+				float best = INFINITY;
+				for(int c=0; c<static_cast<int>(nuclei_coords.size()); c++){
+					if(c == leaf) continue;
+					bool any = false;
+					for(int d: samples_by_leaf.at(c)) if(usable(d)){ any = true; break; }
+					if(!any) continue;
+					float dist = distance(&nuclei_coords.at(c), const_cast<std::vector<float>*>(&point));
+					if(dist < best){ best = dist; out.id = c; }
+				}
+				if(out.id >= 0){
+					out.fitted = true;
+					for(int d: samples_by_leaf.at(out.id)) if(usable(d)) out.samples.push_back(d);
+				}
+				return(out);
+			}
+
 			std::vector<float> leaf_point(int leaf){
 				return(this->nuclei_coords.at(leaf));
 			}

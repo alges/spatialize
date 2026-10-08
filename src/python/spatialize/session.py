@@ -32,26 +32,32 @@ The settings are the following.
     The number of threads, or processes, when ``parallel`` is true. With ``None``, the default, the
     runtime uses every processor, or the number set by the environment variable ``OMP_NUM_THREADS``.
 
-``empty_cells`` (``"nan"`` or ``"mark"``)
+``empty_cells`` (``"nan"``, ``"mark"`` or ``"coarsen"``)
     What a member is when the cell of its location holds no datum, in estimation, leave-one-out and
     k-fold. Unlike the settings above, it changes **which law is estimated**, not only how it is
     computed, so it also changes the results of the hyperparameter searches.
 
     - ``"nan"``, the default, leaves the member NaN. Every reading drops it, so the law at a location
       is the one conditioned on its cell having data. Far from the data, where most cells are empty,
-      it rests on few members, and the cross-validation scores are computed on the data whose cells
+      it rests on few members. The cross-validation scores are then computed on the data whose cells
       keep other data, which favours partitions that are too fine.
     - ``"mark"`` gives the empty cell one value, shared by every location in that cell of that
       partition (see ``mark_source``). It follows the theory's law, which sends the weight of the
       partitions that leave a location without data to the law of the marks. Every member is
       defined, and two locations in one empty cell move together, as they should.
+    - ``"coarsen"`` predicts the locations of an empty cell with the decoder, from a coarser cell
+      that holds data. For Mondrian partitions it is the nearest ancestor of the cell in the tree
+      whose region holds data, the cell an earlier cut would have left whole, so every location of
+      the empty cell uses the same data. For Voronoi partitions each location goes to the nearest
+      nucleus whose cell holds data, which is the Voronoi partition of the nuclei with data. The
+      decoder's parameters are fitted on the coarser cell when it has none of its own (a Mondrian
+      ancestor). Every member is defined, varying with the location inside the empty cell as the decoder's predictions do elsewhere.
 
     :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction` tells, at each location, the share of
     partitions concerned.
 
 ``mark_source`` (``"local"``, ``"cells"`` or ``"data"``)
-    Where the mark of an empty cell comes from, under ``empty_cells="mark"``. A cell holding data is
-    drawn, and it gives the mark as ``mark_value`` says.
+    Where the mark of an empty cell comes from, under ``empty_cells="mark"``. A cell holding data is drawn, which gives the mark as ``mark_value`` says.
 
     - ``"local"``, the default, draws among the ``mark_knn`` cells with data nearest to the empty
       cell, so the mark follows the level of the field around it.
@@ -146,7 +152,7 @@ def _choice(name, options):
 
 
 _VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_threads": _validate_num_threads,
-               "empty_cells": _choice("empty_cells", ("nan", "mark")),
+               "empty_cells": _choice("empty_cells", ("nan", "mark", "coarsen")),
                "mark_source": _choice("mark_source", ("local", "cells", "data")),
                "mark_knn": _validate_num_threads_like("mark_knn"),
                "mark_value": _choice("mark_value", ("decoder", "datum"))}

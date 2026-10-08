@@ -37,6 +37,14 @@ namespace sptlz{
 			                 std::function<int(std::string)> visitor,
 			                 std::string class_name){}
 
+			// The parameters of one region fitted on the given data (a coarser cell standing for an
+			// empty one); none for the decoders without per-cell parameters. `seed` replaces the
+			// generator of fit(), so the result does not depend on the order of the regions.
+			virtual std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+			                                    const std::vector<int> &samples, unsigned int seed){
+				return(std::vector<float>());
+			}
+
 			virtual std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
 				throw std::runtime_error("must override");
 			}

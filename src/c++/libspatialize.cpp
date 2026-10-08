@@ -325,8 +325,6 @@ EsiOutput run(py::array_t<float> samples, py::array_t<float> values, py::array_t
     if (num_threads < 0)
         throw std::runtime_error("num_threads must be 0 (the runtime's default) or positive");
     auto policy = sptlz::EmptyCellPolicy::from(empty_cells, mark_source, mark_knn, mark_value);
-    if (policy.kind == sptlz::EmptyCells::COARSEN)
-        throw std::runtime_error("empty_cells='coarsen' is not available yet");
     sptlz::Decoder *dec = ds.make(d, params, m);
     OmpThreads threads(num_threads);
     return(run_ensemble_py(samples, values, queries, partition, alpha, forest_size, seed, dec, m, k, folding_seed, visitor, partition + "/" + decoder, policy));

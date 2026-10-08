@@ -4,6 +4,7 @@
 #include <sstream>
 #include <random>
 #include <queue>
+#include <algorithm>
 #include <string>
 #include <functional>
 #include <stdexcept>
@@ -120,6 +121,8 @@ namespace sptlz{
 			int height, axis;
 			MondrianNode* left;
 			MondrianNode* right;
+			MondrianNode* parent = NULL;   // set once the tree is built
+			int node_id = -1;              // the node's number in the tree, leaves included
 
 			MondrianNode(){}
 
@@ -281,10 +284,12 @@ namespace sptlz{
 				// put the root in the queue (it should be empty)
 				bft.push(root);
 				// visit all nodes
+				int n_nodes = 0;
 				while(!bft.empty()){
 					// get the node
 					cur_node = bft.front();
 					bft.pop();
+					cur_node->node_id = n_nodes++;
 
 					if((cur_node->left==NULL) && (cur_node->right==NULL)){
 						cur_node->leaf_id = (int) this->leaves.size();
@@ -292,6 +297,8 @@ namespace sptlz{
 						this->samples_by_leaf.push_back({});
 						this->leaf_params.push_back({});
 					}else{
+						cur_node->left->parent = cur_node;
+						cur_node->right->parent = cur_node;
 						bft.push(cur_node->left);
 						bft.push(cur_node->right);
 					}
@@ -317,6 +324,33 @@ namespace sptlz{
 			   std::vector<std::vector<int>>().swap(this->samples_by_leaf);
 			   std::vector<std::vector<float>>().swap(this->leaf_params);
 			}
+
+  		// the nearest ancestor of the leaf whose region holds usable data (the same for every point)
+  		Coarse coarser(int leaf, const std::vector<float> &point, const std::function<bool(int)> &usable){
+  			Coarse out;
+  			for(MondrianNode *node = leaves.at(leaf)->parent; node != NULL; node = node->parent){
+  				std::vector<MondrianNode*> stack{node};
+  				std::vector<int> samples;
+  				while(!stack.empty()){
+  					MondrianNode *n = stack.back();
+  					stack.pop_back();
+  					if(n->leaf_id >= 0){
+  						for(int d: samples_by_leaf.at(n->leaf_id)) if(usable(d)) samples.push_back(d);
+  					}else{
+  						stack.push_back(n->right);
+  						stack.push_back(n->left);
+  					}
+  				}
+  				if(!samples.empty()){
+  					std::sort(samples.begin(), samples.end());
+  					out.id = node->node_id;
+  					out.fitted = false;
+  					out.samples = samples;
+  					return(out);
+  				}
+  			}
+  			return(out);
+  		}
 
   		std::vector<float> leaf_point(int leaf){
   			std::vector<float> c;

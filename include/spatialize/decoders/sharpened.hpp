@@ -208,6 +208,11 @@ namespace sptlz{
       SharpenedWeights(int dim, std::string metric, float kappa_r, float kappa_g, float rho_max):
         decoder(dim, metric, kappa_r, kappa_g, rho_max){}
 
+      std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                  const std::vector<int> &samples, unsigned int seed){
+        return(decoder.fit_cell(coords, values, samples, seed));
+      }
+
       void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
                std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){
         decoder.fit(forest, coords, values, rng, visitor, class_name);

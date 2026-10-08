@@ -64,6 +64,16 @@ def public_cases():
     add("esi_nongriddata_mark_cells", "2d", with_marks("cells"))
     add("esi_nongriddata_mark_data", "2d", with_marks("data"))
     add("esi_nongriddata_mark_blockmark", "2d", with_marks("cells", "datum"))
+
+    def coarsened(li, **kw):
+        def fn(s, v, q):
+            from spatialize import session
+            q_wide = np.vstack([q, q * 1.6 - 0.3]).astype(np.float32)   # locations beyond the data, in empty cells
+            with session.override(empty_cells="coarsen"):
+                return _esi(esi_nongriddata(s, v, q_wide, local_interpolator=li, **kw, **common))
+        return fn
+    add("esi_nongriddata_coarsen_idw", "2d", coarsened("idw", exponent=EXP))
+    add("esi_nongriddata_coarsen_voronoi", "2d", coarsened("idw", exponent=EXP, p_process="voronoi", data_cond=False))
     for d in ("2d", "3d"):
         add(f"esi_nongriddata_adaptive_{d}", d, lambda s, v, q: _esi(esi_nongriddata(
             s, v, q, local_interpolator="adaptiveidw", n_partitions=T_ADAPTIVE, alpha=ALPHA, seed=SEED, **NULL)))

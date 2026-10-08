@@ -239,6 +239,44 @@ agree, since the residual weight is small. Far from the data they part. :math:`F
 rests on the few partitions that reach some datum and keeps the values of the nearest data, while
 :math:`F_v` turns towards the mark law, a spread that grows with the distance to the sample.
 
+Coarser cells, ``"coarsen"``
+----------------------------
+
+This policy fills an empty cell with the decoder, from the data of a coarser cell. The member of
+partition :math:`t` at :math:`v` becomes
+
+.. math::
+
+   \hat z^{(t)}(v) =
+   \begin{cases}
+   g\big(v;\, O_{\Pi^{(t)}}(v)\big) & \text{if the cell } C \text{ of } v \text{ holds data},\\
+   g\big(v;\, O \cap C^\ast(v)\big) & \text{if it holds none},
+   \end{cases}
+
+with :math:`C^\ast(v)` the coarser cell, which depends on the partition process.
+
+- **Mondrian partitions.** :math:`C^\ast` is the nearest ancestor of :math:`C` in the tree of cuts
+  whose region holds data, the cell that an earlier stop of the recursion would have left whole.
+  It is the same for every location of :math:`C`, so they are all predicted from the same data.
+- **Voronoi partitions.** Each location goes to the nearest nucleus whose cell holds data, and
+  :math:`C^\ast(v)` is that cell. The locations of one empty cell may go to different cells, which
+  amounts to the Voronoi partition of the nuclei with data.
+
+A Mondrian ancestor is not a cell of the partition, so the decoders with parameters fitted per cell
+(adaptive IDW, the sharpened decoder, their draws and the decoders written in Python) fit them on
+the ancestor's data first. The fit takes its random numbers from the seed of the run, the partition
+and the region, so the result does not depend on the number of threads. In leave-one-out, a datum
+alone in its cell is predicted from the coarser cell without it. In k-fold, the held-out data of a
+cell emptied by their fold are predicted from the coarser cell with the data outside the fold.
+
+The policy departs from the model. It does not draw a fresh value for the empty cell, so the
+residual term of :math:`F_v` is not realised. It replaces the partition locally by a coarser one
+around the empty cell, the members of that cell continuing the decoder's predictions of the data
+nearby. The members then vary with the location inside the empty cell, as the decoder's predictions
+do elsewhere, while under ``"mark"`` every location of the cell takes one value. Prefer
+``"coarsen"`` when a smooth continuation of the field beyond the data is wanted, and ``"mark"``
+when the law far from the data should show how little the data say there.
+
 The share of members concerned
 -------------------------------
 
@@ -252,7 +290,7 @@ The effect on model selection
 Cross-validation predicts each datum from the others, so a datum alone in its cell faces an empty
 cell. Under ``"nan"`` its members are dropped, so the scores are computed on the data that keep
 neighbours, the easy ones, and partitions finer than the data can support look better than they
-are. Under ``"mark"`` those data are predicted by marks, which the scores count.
+are. Under ``"mark"`` and ``"coarsen"`` those data are predicted, by marks or from a coarser cell, which the scores count.
 
 The following example measures the effect. The field is :math:`z = \sin x + y/5 + \epsilon`, with
 :math:`\epsilon` Gaussian noise of standard deviation 0.1, sampled at 200 locations drawn uniformly
@@ -284,16 +322,22 @@ the table.
      - 0.187
      - 0.233
      - 0.457
+   * - ``"coarsen"``
+     - 0.182
+     - 0.174
+     - 0.169
+     - 0.181
 
 Under ``"nan"`` the finest partitions look nearly as good as any. The local marks predict an
 isolated datum from the cells around it, much as a coarser partition would, so they penalise fine
-partitions mildly. The marks of the model come from anywhere in the field, so they penalise fine
+partitions mildly. Coarser cells do the same with the decoder, so they penalise fine partitions
+mildly too. The marks of the model come from anywhere in the field, so they penalise fine
 partitions strongly, as the residual weight of the theory does.
 
 In Spatialize
 =============
 
-The policy is the session setting ``empty_cells``, with ``mark_source``, ``mark_knn`` and
-``mark_value`` for the marks (:mod:`spatialize.session`). The residual weight is
+The policy is the session setting ``empty_cells`` (``"nan"``, ``"mark"`` or ``"coarsen"``), with
+``mark_source``, ``mark_knn`` and ``mark_value`` for the marks (:mod:`spatialize.session`). The residual weight is
 :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction`. The decoders that read the model inside
 the cells, the uniform and weighted draws, are in :doc:`decoders`.

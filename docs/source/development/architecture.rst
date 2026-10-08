@@ -170,11 +170,23 @@ so a draw depends neither on the number of threads nor on the other queries. Wit
 the same partitions as the averaging decoders.
 
 Cells without data are handled once, in ``Ensemble`` (``include/spatialize/empty_cells.hpp``), so
-every decoder on every partition follows the session setting ``empty_cells``. The decoder is never
-called on an empty cell. Under ``"mark"`` the loop draws one datum for the cell, from the cells that
-hold data or from all the data, with random numbers keyed by the seed, the tree and the cell (the
-held-out datum in leave-one-out, the cell and the fold in k-fold). The held-out data never serve as
-marks. ``run`` takes the policy as ``empty_cells`` and ``mark_source``.
+every decoder on every partition follows the session setting ``empty_cells``, which ``run`` takes
+with ``mark_source``, ``mark_knn`` and ``mark_value``. The decoder is never called on an empty cell
+itself.
+
+- Under ``"mark"``, ``fill_marks`` draws for each empty cell a source cell holding data, among the
+  ``mark_knn`` nearest to the cell's ``leaf_point`` or among all of them, without repetition within
+  a partition, then takes the source's decoder prediction at that point, or one of its data. The
+  random numbers depend only on the seed, the tree and a key (the cell in estimation, the held-out
+  datum in leave-one-out, the cell and the fold in k-fold).
+- Under ``"coarsen"``, ``fill_coarse`` asks the partition for the coarser cell with data,
+  ``Partition::coarser`` (the nearest ancestor for ``MondrianTree``, which keeps parent pointers,
+  the nearest nucleus with data for ``VoronoiTree``), and predicts there with the decoder. An
+  ancestor has no fitted parameters, so ``Decoder::fit_cell`` fits them on its data, with a seed
+  derived from the run's seed, the region and the key.
+
+In both, the held-out data of leave-one-out and k-fold take no part. A new partition implements
+``leaf_point`` and ``coarser``, and a new decoder with per-cell parameters implements ``fit_cell``.
 
 The public functions offer every decoder except ``custom``, which categorical ESI uses. Their
 argument lists keep the historical order for ``idw``, ``kriging`` and ``adaptiveidw``, while the

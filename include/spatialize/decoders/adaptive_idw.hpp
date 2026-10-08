@@ -360,6 +360,15 @@ namespace sptlz{
         return(result);
       }
 
+      std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                  const std::vector<int> &samples, unsigned int seed){
+        std::vector<std::vector<float>> c;
+        std::vector<float> v;
+        for(int d: samples){ c.push_back(coords->at(d)); v.push_back(values->at(d)); }
+        std::mt19937 rng(seed);
+        return(get_params2(&c, &v, rng));
+      }
+
       // Fits the per-cell parameters (exponent, anisotropy) of every cell of every tree.
       void fit(std::vector<Partition*> *forest,
                std::vector<std::vector<float>> *coords,

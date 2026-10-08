@@ -56,6 +56,15 @@ namespace sptlz{
         return(result);
       }
 
+      std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                  const std::vector<int> &samples, unsigned int seed){
+        if(post_creation == NULL) return(std::vector<float>());
+        std::vector<std::vector<float>> c;
+        std::vector<float> v;
+        for(int d: samples){ c.push_back(coords->at(d)); v.push_back(values->at(d)); }
+        return(post_creation(&c, &v));
+      }
+
       // Computes per-cell parameters with the user's post-creation callback, if any.
       void fit(std::vector<Partition*> *forest,
                std::vector<std::vector<float>> *coords,

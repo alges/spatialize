@@ -16,7 +16,8 @@ xi = rng.uniform(0, 10, (50, 2))
 
 policies = {"nan": dict(empty_cells="nan"),
             "mark, defaults": dict(empty_cells="mark"),
-            "mark, the model": dict(empty_cells="mark", mark_source="cells", mark_value="datum")}
+            "mark, the model": dict(empty_cells="mark", mark_source="cells", mark_value="datum"),
+            "coarsen": dict(empty_cells="coarsen")}
 for name, policy in policies.items():
     with session.override(**policy):
         errors = [esi_hparams_search(points, values, xi, local_interpolator="idw", griddata=False, k=-1,

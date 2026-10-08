@@ -66,6 +66,9 @@ namespace sptlz{
       // per-cell fitting, run once after the forest is drawn (as Decoder::fit)
       virtual void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
                        std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){}
+      // the parameters of one region (see Decoder::fit_cell)
+      virtual std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                          const std::vector<int> &samples, unsigned int seed){ return(std::vector<float>()); }
   };
 
   // every datum equally likely (the block-mark decoder)
@@ -163,6 +166,11 @@ namespace sptlz{
     public:
       WeightedMeanDecoder(CellWeights *_weights): weights(_weights){}
 
+      std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                  const std::vector<int> &samples, unsigned int seed){
+        return(weights->fit_cell(coords, values, samples, seed));
+      }
+
       void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
                std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){
         weights->fit(forest, coords, values, rng, visitor, class_name);
@@ -223,6 +231,11 @@ namespace sptlz{
 
     public:
       DrawDecoder(CellWeights *_weights): weights(_weights){}
+
+      std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                  const std::vector<int> &samples, unsigned int seed){
+        return(weights->fit_cell(coords, values, samples, seed));
+      }
 
       void fit(std::vector<Partition*> *forest, std::vector<std::vector<float>> *coords, std::vector<float> *values,
                std::mt19937 &rng, std::function<int(std::string)> visitor, std::string class_name){

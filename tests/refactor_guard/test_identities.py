@@ -185,3 +185,40 @@ def test_mark_fills_each_empty_cell_with_one_value(partition, alpha, mark_source
     assert np.array_equal(mark, run("mark", threads=1))
     for method in ("loo", "kfold"):
         assert not np.isnan(run("mark", method, queries=s)).any()
+
+
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("mondrian-raw", 0.9), ("voronoi", -0.8)])
+@pytest.mark.parametrize("decoder,params", [("cellmean", {}), ("idw", {"exponent": 2.0}), ("adaptiveidw", {}),
+                                            ("sharpidw", {}), ("wdraw_adaptiveidw", {}), ("draw", {})])
+def test_coarsen_predicts_empty_cells_from_a_coarser_cell(partition, alpha, decoder, params):
+    """Under empty_cells="coarsen" the cells with data keep the members of "nan" and every member is
+    defined; with the cell mean, all the locations of an empty Mondrian cell take one value (one
+    ancestor serves the cell) and a location of an empty Voronoi cell takes the mean of another cell
+    of the partition (the nearest nucleus with data); leave-one-out and k-fold have no NaN; the
+    result does not depend on the number of threads."""
+    s, v, _ = DATA["2d"]
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    v = rng.normal(size=len(v)).astype(np.float32)
+    q = rng.uniform(-0.3, 1.3, (300, 2)).astype(np.float32)
+    forest = cases.T_ADAPTIVE if "adaptive" in decoder or "sharp" in decoder else cases.T
+    run = lambda policy, method="estimate", threads=0, queries=q: np.asarray(LIB.run(
+        s, v, queries, partition, alpha, forest, cases.SEED, decoder, params, method, cases.K,
+        cases.FSEED, None, threads, policy)[1])
+    coarse, nan = run("coarsen"), run("nan")
+    labels = np.asarray(LIB.cells(s, np.vstack([q, s]), partition, alpha, forest, cases.SEED))
+    at_q, at_s = labels[:len(q)], labels[len(q):]
+    empty = np.array([~np.isin(at_q[:, t], at_s[:, t]) for t in range(forest)]).T
+    assert empty.any() and not np.isnan(coarse).any()
+    assert np.array_equal(coarse[~empty], nan[~empty])
+    if decoder == "cellmean":
+        for t in range(forest):
+            means = {c: v[at_s[:, t] == c].mean() for c in np.unique(at_s[:, t])}
+            for c in np.unique(at_q[empty[:, t], t]):
+                values = coarse[at_q[:, t] == c, t]
+                if partition.startswith("mondrian"):
+                    assert len(set(values)) == 1
+                else:
+                    assert all(np.isclose(x, list(means.values()), atol=1e-6).any() for x in values)
+    assert np.array_equal(coarse, run("coarsen", threads=1))
+    for method in ("loo", "kfold"):
+        assert not np.isnan(run("coarsen", method, queries=s)).any()

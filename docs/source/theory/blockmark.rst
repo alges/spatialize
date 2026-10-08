@@ -334,6 +334,14 @@ partitions mildly. Coarser cells do the same with the decoder, so they penalise 
 mildly too. The marks of the model come from anywhere in the field, so they penalise fine
 partitions strongly, as the residual weight of the theory does.
 
+The searches make the effect visible whatever the policy. For every configuration they record the
+share of the data left out of the score, ``left_out``, a datum being left out when it has fewer
+valid members than the score needs (one for the absolute and squared errors, 30 for the negative
+log-likelihood, two for the CRPS), and the share of undefined members, ``nan_members``. When some
+configurations leave out more than the session setting ``max_left_out`` (5 % by default), a warning
+lists all of them and marks the best one, or those on the Pareto frontier. Under ``"mark"`` and
+``"coarsen"`` no datum is left out.
+
 In Spatialize
 =============
 

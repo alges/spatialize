@@ -25,7 +25,10 @@ New
 - **Cells without data.** The default, ``empty_cells="nan"``, keeps the behaviour of 1.2.0.``empty_cells="mark"`` gives each such cell one value shared by its locations, drawn by default
   from the nearby cells through their decoder, or following the block-mark model exactly.
   ``empty_cells="coarsen"`` predicts its locations with the decoder from a coarser cell holding data,
-  the nearest ancestor for Mondrian partitions or the nearest nucleus with data for Voronoi ones. :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction` reports, at
+  the nearest ancestor for Mondrian partitions or the nearest nucleus with data for Voronoi ones.
+  The hyperparameter searches record, per configuration, the share of the data left out of the
+  cross-validation score and the share of undefined members, warning when configurations leave out
+  more than the session setting ``max_left_out``. :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction` reports, at
   each location, the share of partitions concerned.
 - **Partition laws** (:mod:`spatialize.gs.partitions`). The cells of given locations, the
   co-occurrence of sets and the law of groupings, with the closed forms of the Mondrian process.

@@ -83,6 +83,18 @@ The settings are the following.
 
     With ``mark_source="data"`` the mark is always a datum.
 
+``max_left_out`` (number between 0 and 1)
+    The share of the data that a hyperparameter search may leave out of its cross-validation score
+    before it warns. Under ``empty_cells="nan"`` a datum alone in its cell (leave-one-out), or a cell
+    whose data all fall in one fold (k-fold), gives NaN members, and the scores drop a datum with
+    too few valid members: one for the mean absolute and squared errors, 30 for the negative
+    log-likelihood, two for the CRPS. The data dropped are the isolated ones, the hardest to
+    predict, so a fine partition is scored on the easy data only and looks better than it is.
+    The searches record, for every configuration, the share of the data left out (``left_out``) and
+    the share of NaN members (``nan_members``). They warn when some configurations leave out more
+    than this share, listing all of them and marking the best. The default is 0.05. Under
+    ``empty_cells="mark"`` or ``"coarsen"`` no datum is left out.
+
 Examples
 --------
 >>> import spatialize
@@ -90,7 +102,7 @@ Examples
 >>> with spatialize.session.override(domain=None):     # restored on exit
 ...     pass
 >>> spatialize.session.effective_config()
-{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder'}
+{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder', 'max_left_out': 0.05}
 >>> spatialize.session.reset()
 """
 import contextlib
@@ -101,7 +113,7 @@ import numpy as np
 from spatialize import SpatializeError
 
 _DEFAULTS = {"domain": None, "parallel": True, "num_threads": None, "empty_cells": "nan",
-             "mark_source": "local", "mark_knn": 8, "mark_value": "decoder"}
+             "mark_source": "local", "mark_knn": 8, "mark_value": "decoder", "max_left_out": 0.05}
 
 _global = {}
 _overrides = contextvars.ContextVar("spatialize_session_overrides", default={})
@@ -143,6 +155,13 @@ def _validate_num_threads_like(name):
     return validate
 
 
+def _validate_share(value):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)) \
+            or not 0 <= value <= 1:
+        raise SpatializeError(f"max_left_out must be a number between 0 and 1; got {value!r}")
+    return float(value)
+
+
 def _choice(name, options):
     def validate(value):
         if value not in options:
@@ -155,7 +174,8 @@ _VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_
                "empty_cells": _choice("empty_cells", ("nan", "mark", "coarsen")),
                "mark_source": _choice("mark_source", ("local", "cells", "data")),
                "mark_knn": _validate_num_threads_like("mark_knn"),
-               "mark_value": _choice("mark_value", ("decoder", "datum"))}
+               "mark_value": _choice("mark_value", ("decoder", "datum")),
+               "max_left_out": _validate_share}
 
 
 def _validated(settings):

@@ -314,7 +314,9 @@ class ParetoOptimizer:
         -------
         list of dict
             One entry per evaluated configuration with keys ``"params"``,
-            ``"epsilon"`` (ε̂), and ``"decoder_error"`` (R_CV).
+            ``"epsilon"`` (ε̂), ``"decoder_error"`` (R_CV), ``"left_out"`` (the
+            share of the data left out of R_CV) and ``"nan_members"`` (the
+            share of NaN cross-validation members).
             Wrap with :class:`~spatialize.gs.esi.ESIParetoResult` to access
             the Pareto frontier and selection strategies.
         """
@@ -382,11 +384,14 @@ class ParetoOptimizer:
                 _, cv_samples = cv_fn(*l_args)
 
             r_cv = float(scoring_fn(values, cv_samples))
+            out, nan = sf.left_out(cv_samples, scoring_fn)
 
             all_results.append({
                 "params":        cfg,
                 "epsilon":       eps_hat,
                 "decoder_error": r_cv,
+                "left_out":      out,
+                "nan_members":   nan,
             })
 
             self.callback(logging.progress.inform())

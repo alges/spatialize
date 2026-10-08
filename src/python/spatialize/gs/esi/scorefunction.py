@@ -181,3 +181,58 @@ def crps(true_values, samples):
 
     return total_crps / valid_points
   
+
+# The fewest valid (non-NaN) members each scorer needs to score a datum. A datum with fewer is left
+# out of its score: under the session setting empty_cells="nan", the members of a datum whose cell is
+# left empty by cross-validation are NaN.
+mae.min_valid = 1
+mse.min_valid = 1
+rmse.min_valid = 1
+neg_log_likelihood.min_valid = 30
+crps.min_valid = 2
+
+
+def left_out(samples, scoring):
+    """How much of the cross-validation the score could not use.
+
+    Parameters
+    ----------
+    samples : array-like, shape (n_points, n_partitions)
+        The cross-validation members of each datum.
+    scoring : callable
+        The scoring function. Its attribute ``min_valid`` gives the fewest valid members it needs to
+        score a datum (1 when it has none).
+
+    Returns
+    -------
+    data : float
+        The share of the data with fewer valid members than ``scoring`` needs, left out of the score.
+    members : float
+        The share of NaN members.
+    """
+    samples = np.asarray(samples, dtype=float)
+    valid = np.isfinite(samples).sum(axis=1)
+    need = getattr(scoring, "min_valid", 1)
+    return float(np.mean(valid < need)), float(np.mean(~np.isfinite(samples)))
+
+
+def warn_left_out(rows, labels, best, max_left_out, best_name="the best"):
+    """Warn about the configurations of a search whose score left out more than ``max_left_out`` of
+    the data, listing all of them and marking ``best`` (a set of row positions).
+
+    ``rows`` holds ``(left_out_share, nan_member_share)`` per configuration and ``labels`` a short
+    description of each."""
+    import warnings
+    over = [i for i, (d, _) in enumerate(rows) if d > max_left_out]
+    if not over:
+        return
+    lines = [f"  {labels[i]}: {100 * rows[i][0]:.1f} % of the data left out, "
+             f"{100 * rows[i][1]:.1f} % of the members NaN{f'  <- {best_name}' if i in best else ''}"
+             for i in over]
+    warnings.warn(
+        f"{len(over)} of {len(rows)} configurations left more than {100 * max_left_out:g} % of the data "
+        "out of the cross-validation score, since their cells were left empty (session setting "
+        "empty_cells=\"nan\"). Their scores rest on the data that keep neighbours, which favours "
+        "partitions too fine for the data:\n" + "\n".join(lines) +
+        "\nSetting empty_cells=\"mark\" or \"coarsen\" (spatialize.session), or a smaller alpha, avoids "
+        "it; the threshold is the session setting max_left_out.", UserWarning, stacklevel=3)

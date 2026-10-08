@@ -222,3 +222,26 @@ def test_coarsen_predicts_empty_cells_from_a_coarser_cell(partition, alpha, deco
     assert np.array_equal(coarse, run("coarsen", threads=1))
     for method in ("loo", "kfold"):
         assert not np.isnan(run("coarsen", method, queries=s)).any()
+
+
+def test_left_out_counts_the_data_a_scorer_cannot_use():
+    """A datum is left out of a score when it has fewer valid members than the scorer needs (1 for
+    the absolute and squared errors, 30 for the NLL, 2 for the CRPS); the warning of the searches
+    lists every configuration over the threshold and marks the best."""
+    import warnings
+    from spatialize.gs.esi import scorefunction as sf
+    samples = np.ones((4, 40))
+    samples[0, :] = np.nan            # no valid member
+    samples[1, 1:] = np.nan           # one
+    samples[2, 20:] = np.nan          # twenty
+    assert sf.left_out(samples, sf.mae) == (0.25, (40 + 39 + 20) / 160)
+    assert sf.left_out(samples, sf.crps)[0] == 0.5
+    assert sf.left_out(samples, sf.neg_log_likelihood)[0] == 0.75
+    assert sf.left_out(samples, lambda t, s: 0.0)[0] == 0.25      # a scorer without min_valid needs 1
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        sf.warn_left_out([(0.0, 0.0), (0.2, 0.3), (0.5, 0.6)], ["a", "b", "c"], {1}, 0.05)
+        sf.warn_left_out([(0.01, 0.02)], ["d"], {0}, 0.05)
+    assert len(caught) == 1
+    text = str(caught[0].message)
+    assert "2 of 3" in text and "b: 20.0 %" in text and "<- the best" in text and "\n  a:" not in text

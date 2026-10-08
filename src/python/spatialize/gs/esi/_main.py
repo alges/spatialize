@@ -102,7 +102,9 @@ class ESIParetoResult:
     all_results : list of dict
         One entry per evaluated parameter configuration.  Keys:
         ``"params"`` (dict), ``"epsilon"`` (float, ε̂), ``"decoder_error"``
-        (float, R_CV).
+        (float, R_CV), ``"left_out"`` (float, the share of the data left out
+        of R_CV) and ``"nan_members"`` (float, the share of NaN
+        cross-validation members).
     frontier : list of dict
         Non-dominated subset of ``all_results`` (lower is better for both
         objectives).
@@ -889,7 +891,12 @@ def esi_hparams_search(points, values, xi, **kwargs):
     ESIGridSearchResult
         The grid search result, wrapping the cross-validation error for
         every evaluated combination and exposing the best one via
-        :meth:`ESIGridSearchResult.best_result`.
+        :meth:`ESIGridSearchResult.best_result`. Its table also records, per
+        combination, the share of the data left out of the score
+        (``left_out``) and the share of NaN cross-validation members
+        (``nan_members``); a warning lists the combinations that leave out
+        more than the session setting ``max_left_out`` (see
+        :mod:`spatialize.session`, ``empty_cells``).
 
     Examples
     --------
@@ -975,7 +982,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         _, cv = cross_validate(*l_args)     # returns esi samples for the input data
 
-        results[i] = kwargs["scoring"](values, cv)
+        results[i] = (kwargs["scoring"](values, cv),) + sf.left_out(cv, kwargs["scoring"])
 
         kwargs["callback"](logging.progress.inform())
 
@@ -986,10 +993,12 @@ def esi_hparams_search(points, values, xi, **kwargs):
     kwargs["callback"](logging.progress.stop())
 
     # create a dataframe with all results
-    result_data = pd.DataFrame(columns=list(grid.keys()) + ["cv_error"])
+    result_data = pd.DataFrame(columns=list(grid.keys()) + ["cv_error", "left_out", "nan_members"])
     c = 0
-    for idx, v in results.items():
+    for idx, (v, out, nan) in results.items():
         d = {"cv_error": v,
+             "left_out": out,
+             "nan_members": nan,
              "local_interpolator": kwargs["local_interpolator"],
              }
         d.update(param_grid[idx])
@@ -998,7 +1007,12 @@ def esi_hparams_search(points, values, xi, **kwargs):
         else:
             result_data = pd.DataFrame(d, index=[c])
         c += 1
-    return ESIGridSearchResult(result_data, kwargs["p_process"])
+    search = ESIGridSearchResult(result_data, kwargs["p_process"])
+    best = {list(result_data.index).index(search.best_result()["result_data_index"])}
+    sf.warn_left_out([(r["left_out"], r["nan_members"]) for _, r in result_data.iterrows()],
+                     [", ".join(f"{k}={result_data.loc[i, k]}" for k in grid.keys()) for i in result_data.index],
+                     best, session.get("max_left_out"))
+    return search
 
 
 def esi_griddata(points, values, xi, **kwargs):
@@ -1465,7 +1479,12 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         callback            = kwargs["callback"],
     )
     all_results = optimizer.fit(points, values)
-    return ESIParetoResult(all_results, kwargs["p_process"], kwargs["local_interpolator"])
+    result = ESIParetoResult(all_results, kwargs["p_process"], kwargs["local_interpolator"])
+    on_frontier = {i for i, r in enumerate(all_results) if any(r is f for f in result.frontier)}
+    sf.warn_left_out([(r["left_out"], r["nan_members"]) for r in all_results],
+                     [", ".join(f"{k}={v}" for k, v in r["params"].items()) for r in all_results],
+                     on_frontier, session.get("max_left_out"), best_name="on the frontier")
+    return result
 
 
 # =========================================== END of PUBLIC API ======================================================

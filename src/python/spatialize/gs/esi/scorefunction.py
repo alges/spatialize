@@ -92,6 +92,17 @@ def neg_log_likelihood(true_values, samples, min_points=30):
     float
         Average negative log-likelihood. Lower values indicate better fit.
         When true_values is provided, this is the MLE score.
+
+    Notes
+    -----
+    It is the logarithmic score, the one the theory's error decomposition is
+    written with: its cross-validation risk estimates the irreducible entropy
+    plus the decoder and encoder errors, which gives the Pareto search its
+    guarantees. It judges the calibration of the members' law. With an
+    averaging decoder the members are too close together, missing the
+    dispersion within the cells, so the score favours configurations that add
+    spread; the drawing decoder of the same weights keeps that dispersion. See
+    the theory page on error and the choice of a model.
     """
     from sklearn.neighbors import KernelDensity      # local import to avoid circularities
     from spatialize.empirical import silverman_bandwidth

@@ -44,9 +44,10 @@ minimised at an intermediate granularity, which model selection looks for.
 What cross-validation sees
 ==========================
 
-Cross-validation predicts each datum from the others. With a strictly proper score its risk
-:math:`R_{\mathrm{CV}}(\lambda)`, for a configuration :math:`\lambda` of the hyperparameters,
-estimates :math:`H(Z \mid X) + \delta + \varepsilon`, so
+Cross-validation predicts each datum from the others. Scored with the logarithmic score, the
+negative log-likelihood of the held-out value, its risk :math:`R_{\mathrm{CV}}(\lambda)` for a
+configuration :math:`\lambda` of the hyperparameters estimates the expected log-loss,
+:math:`H(Z \mid X) + \delta + \varepsilon`, the irreducible entropy plus the two errors, so
 
 .. math::
 
@@ -109,8 +110,26 @@ while the negative log-likelihood and the continuous ranked probability score ju
    \qquad
    S = \int_{-\infty}^{\infty} \big(\hat F_{v_i}(z) - \mathbf 1\{z \ge z_i\}\big)^2\, dz,
 
-with :math:`\hat f` a density fitted to the members. The scores of the law need enough partitions to
+with :math:`\hat f` a density fitted to the members, a Gaussian kernel density whose bandwidth
+follows Silverman's rule on the members' own spread. The scores of the law need enough partitions to
 estimate it at each datum, a few tens at least.
+
+The negative log-likelihood is the score the theory is written with. The total approximation error
+is an excess of log-loss, so only under this score does the cross-validation risk estimate
+:math:`H(Z \mid X) + \delta + \varepsilon`. The floor set by the encoder error, and the optimality of
+the selection under a constraint on :math:`\hat\varepsilon`, are guarantees of that score. The
+continuous ranked probability score is also proper, judging the whole law without a density, but its
+risk does not split into the two errors. The absolute and squared errors judge only a point of the
+law and carry no such guarantee.
+
+The negative log-likelihood judges the calibration of the predictive law as the members give it,
+which depends on the decoder. A drawing decoder keeps the dispersion of the values within each
+cell, so its members spread as the data do (:doc:`decoders`). An averaging decoder keeps only the
+variation between cells, so its members are too close together for the field (:doc:`esi`). The held-out value then falls in the tail of a narrow law, so the score rewards any configuration that
+adds spread to the members, whatever the reason, such as very fine partitions whose empty cells
+draw marks from elsewhere. With an averaging decoder the selection can therefore be made with the drawing decoder of the same
+weights, whose members keep the dispersion within the cells, or with the absolute error when only
+the map matters.
 
 In Spatialize
 =============

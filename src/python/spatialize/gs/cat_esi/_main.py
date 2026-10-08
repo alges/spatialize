@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import ParameterGrid, KFold
 
-from spatialize import EstimationResult, GridSearchResult, SpatializeError
+from spatialize import EstimationResult, GridSearchResult, SpatializeError, session
 from spatialize.gs import lib_spatialize_facade
 from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
@@ -649,11 +649,19 @@ class CatESIGridSearchResult(GridSearchResult):
 #  Internal C++ call
 # ─────────────────────────────────────────────────────────────
 
+def _engine_alpha(kwargs):
+    """alpha as the engine takes it: negative for Voronoi with uniform nuclei."""
+    alpha = kwargs["alpha"]
+    return -alpha if kwargs.get("p_process") == "voronoi" and not kwargs.get("data_cond", True) else alpha
+
+
 @signature_overload(
     pivot_arg=("classifier", "knn_pca", "classifier"),
     common_args={
         "n_partitions": 300,
         "alpha": 0.8,
+        "p_process": "mondrian",
+        "data_cond": True,
         "seed": None,
         "agg_function": 'mv',
         "ordinal_order": None,
@@ -705,17 +713,10 @@ def _call_custom_esi(points, values, xi, **kwargs):
     )
 
     try:
-        _, esi_samples_raw = lib_spatialize_facade.get_custom_esi_operator()(
-            np.float64(points),
-            encoded_values,
-            kwargs["n_partitions"],
-            kwargs["alpha"],
-            kwargs["seed"],
-            np.float64(xi),
-            set_cell_params_fn,
-            classifier_fn,
-            kwargs["callback"],
-        )
+        _, esi_samples_raw = lib_spatialize_facade.run(
+            np.float64(points), encoded_values, np.float64(xi), kwargs["p_process"], "custom",
+            {"post_creation": set_cell_params_fn, "estimation": classifier_fn},
+            _engine_alpha(kwargs), kwargs["n_partitions"], kwargs["seed"], callback=kwargs["callback"])
     except Exception as e:
         raise SpatializeError(e)
 
@@ -744,6 +745,11 @@ def cat_esi_griddata(points, values, xi, **kwargs) -> CatESIResult:
     agg_function : callable, default aggregate_with_mv
     n_partitions : int, default 300
     alpha : float, default 0.8
+    p_process : {"mondrian", "mondrian-raw", "voronoi"}, default "mondrian"
+        Partition process, as in :func:`~spatialize.gs.esi.esi_griddata`.
+    data_cond : bool, default True
+        For ``"voronoi"``, whether the nuclei are drawn among the data or
+        uniformly in the box.
     seed : int
     callback : progress callback
     n_neighbors : int (knn_pca only) – fix k neighbours
@@ -808,6 +814,11 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
     agg_function : callable, default aggregate_with_mv
     n_partitions : int, default 300
     alpha : float, default 0.8
+    p_process : {"mondrian", "mondrian-raw", "voronoi"}, default "mondrian"
+        Partition process, as in :func:`~spatialize.gs.esi.esi_griddata`.
+    data_cond : bool, default True
+        For ``"voronoi"``, whether the nuclei are drawn among the data or
+        uniformly in the box.
     seed : int
     callback : progress callback
     n_neighbors : int (knn_pca only)
@@ -861,6 +872,9 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
     pivot_arg=("classifier", "knn_pca", "classifier"),
     common_args={
         "k": 5,                                # number of CV folds
+        "cv": "engine",                        # "engine" (cells of one ensemble) or "refit" (per fold)
+        "p_process": "mondrian",
+        "data_cond": True,
         "n_partitions": [100, 300],
         "alpha": [0.7, 0.8, 0.9],
         "scoring": "f1_macro",
@@ -888,9 +902,13 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     """
     Hyperparameter search for categorical ESI via k-fold cross-validation.
 
-    k-fold CV is implemented in Python (no C++ LOO/kfold for custom ESI).
-    For each parameter combination, trains on k-1 folds and evaluates on
-    the held-out fold using categorical accuracy.
+    For each parameter combination, predicts every datum from the others
+    (see ``cv``) and scores the predicted categories. The result also records
+    the share of the data that got no category (``left_out``, members of
+    cells without data under the session setting ``empty_cells="nan"``) and,
+    with ``cv="engine"``, the share of undefined members (``nan_members``); a
+    warning lists the configurations over the session setting
+    ``max_left_out``.
 
     Parameters
     ----------
@@ -900,6 +918,17 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
         not used during CV (held-out fold points serve as query locations)
     classifier : {'knn_pca', 'scikit-learn'}
     k : int, number of CV folds (default 5)
+    cv : {"engine", "refit"}, default "engine"
+        How the cross-validation is done. ``"engine"`` draws the partitions
+        once on all the data and, in each cell, predicts the held-out data
+        with the classifier trained on the cell's other data, as
+        :func:`~spatialize.gs.esi.esi_hparams_search` does; leave-one-out
+        (``k=-1``) and the session's empty-cell policies apply.
+        ``"refit"`` trains the whole ensemble again on the data outside each
+        fold, its partitions drawn on them, and predicts the fold. The two
+        schemes can select different configurations.
+    p_process, data_cond
+        As in :func:`cat_esi_griddata`.
     n_partitions : list of int
     alpha : list of float
     scoring : str or callable, default ``'f1_macro'``
@@ -957,77 +986,102 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     if k == -1 or k == n:
         k = n
 
-    rng = np.random.default_rng(kwargs["folding_seed"])
-    kf = KFold(n_splits=k, shuffle=True, random_state=int(rng.integers(0, 9999)))
-    fold_splits = list(kf.split(points))
+    def combo_for(param_set):
+        combo = {
+            "classifier": kwargs["classifier"],
+            "n_partitions": param_set["n_partitions"],
+            "alpha": param_set["alpha"],
+            "p_process": kwargs["p_process"],
+            "data_cond": kwargs["data_cond"],
+            "seed": kwargs["seed"],
+            "agg_function": kwargs["agg_function"],
+            "ordinal_order": kwargs.get("ordinal_order"),
+            "callback": singleton_null_callback,
+            "best_params_found": None,
+        }
+        if kwargs["classifier"] == "knn_pca":
+            combo["n_neighbors"] = param_set.get("n_neighbors")
+            combo["max_points"] = param_set.get("max_points")
+            combo["n_cv_splits"] = param_set.get("n_cv_splits")
+        elif kwargs["classifier"] == "scikit-learn":
+            combo["sklearn_classifier"] = kwargs["sklearn_classifier"]
+        elif kwargs["classifier"] in SKLEARN_CLASSIFIER_PARAMS:
+            for param in SKLEARN_CLASSIFIER_PARAMS[kwargs["classifier"]]:
+                combo[param] = param_set.get(param)
+            if kwargs["classifier"] in SKLEARN_RANDOM_STATE_CLASSIFIERS:
+                combo["random_state"] = kwargs.get("random_state")
+        return combo
+
+    def score(true, pred):
+        """The score on the data that got a category, with the share of those that did not."""
+        pred = np.asarray(pred, dtype=object)
+        got = np.array([x is not None for x in pred], dtype=bool)
+        value = scorer(np.asarray(true)[got], pred[got]) if got.any() else 1.0
+        return value, float(np.mean(~got))
+
+    def engine_cv(param_set):
+        # one ensemble on all the data; in each cell the held-out data are predicted by the classifier
+        # trained on the cell's other data (or on those outside the fold), as in esi_hparams_search
+        combo = combo_for(param_set)
+        encoded, _, code_to_cat = _make_encoder(values)
+        set_fn, clf_fn = get_classifier_fns(combo["classifier"], **{k_: v for k_, v in combo.items() if k_ != "classifier"})
+        _, raw = lib_spatialize_facade.run(
+            np.float64(points), encoded, np.float64(points), kwargs["p_process"], "custom",
+            {"post_creation": set_fn, "estimation": clf_fn}, _engine_alpha(combo), combo["n_partitions"],
+            kwargs["seed"], method="loo" if k == n else "kfold", k=0 if k == n else k,
+            folding_seed=int(kwargs["folding_seed"]), callback=singleton_null_callback)
+        members = _decode_samples(raw, code_to_cat)
+        estimation = _resolve_agg_fn(kwargs["agg_function"], kwargs.get("ordinal_order"))(members)
+        value, left = score(values, estimation)
+        return value, left, float(np.mean(members == None))  # noqa: E711 (object array)
+
+    def refit_cv(param_set):
+        # the whole ensemble trained again on the data outside each fold, its partitions drawn on them
+        rng = np.random.default_rng(kwargs["folding_seed"])
+        kf = KFold(n_splits=k, shuffle=True, random_state=int(rng.integers(0, 9999)))
+        all_true, all_pred = [], []
+        for tr_idx, te_idx in kf.split(points):
+            try:
+                estimation, _ = _call_custom_esi(np.ascontiguousarray(points[tr_idx]), values[tr_idx],
+                                                 np.ascontiguousarray(points[te_idx]), **combo_for(param_set))
+                all_true.append(values[te_idx])
+                all_pred.append(estimation)
+            except Exception:
+                pass  # skip failed folds
+        if not all_true:
+            warnings.warn(f"All folds failed for param set {param_set}; assigning worst score.",
+                          RuntimeWarning, stacklevel=3)
+            return 1.0, 1.0, np.nan
+        value, left = score(np.concatenate(all_true), np.concatenate(all_pred))
+        return value, left, np.nan
+
+    if kwargs["cv"] not in ("engine", "refit"):
+        raise ValueError(f"cv must be 'engine' or 'refit'; got {kwargs['cv']!r}")
+    run_cv = engine_cv if kwargs["cv"] == "engine" else refit_cv
 
     results = {}
     n_combos = len(param_grid)
     kwargs["callback"](logging.progress.init(n_combos, 1))
-
     for i, param_set in enumerate(param_grid):
-        all_true = []
-        all_pred = []
-
-        for tr_idx, te_idx in fold_splits:
-            tr_pts = np.ascontiguousarray(points[tr_idx])
-            tr_vals = values[tr_idx]
-            te_pts = np.ascontiguousarray(points[te_idx])
-            te_vals = values[te_idx]
-
-            combo = {
-                "classifier": kwargs["classifier"],
-                "n_partitions": param_set["n_partitions"],
-                "alpha": param_set["alpha"],
-                "seed": kwargs["seed"],
-                "agg_function": kwargs["agg_function"],
-                "ordinal_order": kwargs.get("ordinal_order"),
-                "callback": singleton_null_callback,
-                "best_params_found": None,
-            }
-            if kwargs["classifier"] == "knn_pca":
-                combo["n_neighbors"] = param_set.get("n_neighbors")
-                combo["max_points"] = param_set.get("max_points")
-                combo["n_cv_splits"] = param_set.get("n_cv_splits")
-            elif kwargs["classifier"] == "scikit-learn":
-                combo["sklearn_classifier"] = kwargs["sklearn_classifier"]
-            elif kwargs["classifier"] in SKLEARN_CLASSIFIER_PARAMS:
-                for param in SKLEARN_CLASSIFIER_PARAMS[kwargs["classifier"]]:
-                    combo[param] = param_set.get(param)
-                if kwargs["classifier"] in SKLEARN_RANDOM_STATE_CLASSIFIERS:
-                    combo["random_state"] = kwargs.get("random_state")
-
-            try:
-                estimation, _ = _call_custom_esi(tr_pts, tr_vals, te_pts, **combo)
-                all_true.append(te_vals)
-                all_pred.append(estimation)
-            except Exception:
-                pass  # skip failed folds
-
-        # Score on all holdout predictions combined (mirrors spatialize's kfold CV structure)
-        if all_true:
-            results[i] = scorer(
-                np.concatenate(all_true),
-                np.concatenate(all_pred),
-            )
-        else:
-            warnings.warn(
-                f"All folds failed for param set {param_set}; assigning worst score.",
-                RuntimeWarning, stacklevel=2,
-            )
-            results[i] = 1.0
-
+        results[i] = run_cv(param_set)
         kwargs["callback"](logging.progress.inform())
-
     kwargs["callback"](logging.progress.stop())
 
     rows = []
     for i, param_set in enumerate(param_grid):
-        row = {"cv_error": results[i], "classifier": kwargs["classifier"]}
+        row = {"cv_error": results[i][0], "left_out": results[i][1], "nan_members": results[i][2],
+               "classifier": kwargs["classifier"], "p_process": kwargs["p_process"],
+               "data_cond": kwargs["data_cond"]}
         row.update(param_set)
         rows.append(row)
 
     result_data = pd.DataFrame(rows)
+    from spatialize.gs.esi import scorefunction as sf
+    best = {int(np.argmin(result_data["cv_error"].to_numpy()))}
+    sf.warn_left_out([(r["left_out"], 0.0 if np.isnan(r["nan_members"]) else r["nan_members"])
+                      for _, r in result_data.iterrows()],
+                     [", ".join(f"{key}={p[key]}" for key in p) for p in param_grid],
+                     best, session.get("max_left_out"))
     return CatESIGridSearchResult(result_data, kwargs["classifier"],
                                   ordinal_order=kwargs.get("ordinal_order"),
                                   sklearn_classifier=kwargs.get("sklearn_classifier"),

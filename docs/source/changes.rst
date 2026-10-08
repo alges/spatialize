@@ -22,6 +22,10 @@ New
   (``estimation``, and optionally ``post_creation``, ``loo`` and ``kfold``) in the estimation
   functions and the searches, on any partition and in any dimension. Leave-one-out and k-fold are
   derived from ``estimation`` when not given.
+- **Categorical estimation on every partition.** The categorical functions take ``p_process`` and
+  ``data_cond``. Their search cross-validates on the cells of one ensemble by default, as the
+  continuous search does (``cv="engine"``), or by training the ensemble again for each fold
+  (``cv="refit"``, the previous behaviour, which can select differently).
 - **Partitions.** The theory's Mondrian process, ``p_process="mondrian-raw"``. Every partition now works in any dimension, adaptive IDW, the sharpened decoder and their draws in one, two and three dimensions (on a line only the exponent is fitted).
 - **Session settings** (:mod:`spatialize.session`). A fixed partition ``domain``; ``parallel`` and
   ``num_threads`` for every parallel computation; ``empty_cells``, with ``mark_source``,
@@ -71,6 +75,9 @@ Results that change
   separate bins, which overstated them, so independent variables showed a mutual information
   between 0.8 and 2.6 bits. The marginals are now integrated out of the joint density, and the members
   of cells without data are left out of the entropies.
+- **Categorical search.** :func:`~spatialize.gs.cat_esi.cat_esi_hparams_search` now cross-validates
+  on the cells of one ensemble by default, so it can select differently than before;
+  ``cv="refit"`` restores the previous scheme.
 - **IDW on Voronoi partitions** uses the weights :math:`1/d^p`, as on Mondrian partitions (it used
   :math:`1/(1 + d^p)`, close to a cell mean on small domains).
 - **Cross-validation.** Kriging's leave-one-out applied its weights to the wrong data, and k-fold

@@ -63,7 +63,10 @@ obtain each marginal,
    \hat f_U(u) = \sum_{c\,:\,u \in c_U} \frac{p_c}{|c_U|},
 
 with :math:`p_c` the share of members in cell :math:`c` and :math:`c_U` its side along :math:`U`. The
-three entropies then come from one density, so the estimate is never negative.
+three entropies then come from one density, so the estimate is never negative. Members of cells without data, undefined under ``empty_cells="nan"`` (:doc:`blockmark`), carry no
+value and are left out, the shares :math:`p_c` being taken over the valid members. A location with
+fewer than two valid members gets no entropy (NaN). For the mutual information, a pair counts only
+when both of its members are valid.
 
 In Spatialize
 =============

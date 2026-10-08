@@ -21,12 +21,14 @@ It splits exactly into two parts,
 
 .. math::
 
+   \begin{gathered}
    \mathrm{TAE} = \underbrace{\delta(\eta, \theta)}_{\text{decoder error}}
    + \underbrace{\varepsilon(\eta)}_{\text{encoder error}},
-   \qquad
+   \\
    \varepsilon(\eta) = I(X; Z \mid U),
    \qquad
    \delta(\eta, \theta) = \mathbb E_U\, D\big(\mu_{Z \mid U} \,\big\Vert\, q^\theta_{Z \mid U}\big).
+   \end{gathered}
 
 - The *encoder error* :math:`\varepsilon` is the information about :math:`Z` that the exact
   location carries beyond its cell. It vanishes when the law of :math:`Z` is the same everywhere

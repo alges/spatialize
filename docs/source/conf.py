@@ -140,6 +140,7 @@ pygments_style = "sphinx"
 #html_theme = 'alabaster'
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
+html_css_files = ['custom.css']
 # Drop Sphinx's default "<project> vX.Y documentation" long form in the
 # sidebar/browser-tab title; just "Spatialize <version>".
 html_title = f"Spatialize {version}"

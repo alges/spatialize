@@ -299,7 +299,9 @@ class SpatialEntropy:
         Returns
         -------
         entropies : ndarray, shape (n_targets,)
-            Spatial entropy estimates for each target location.
+            Spatial entropy estimates for each target location. Members of cells
+            without data (NaN, see :mod:`spatialize.session`, ``empty_cells``) are
+            left out; a location with fewer than 2 valid members gets NaN.
 
         Examples
         --------
@@ -644,7 +646,10 @@ class SpatialMutualInformation:
         Returns
         -------
         mutual_information : ndarray, shape (n_targets,)
-            Mutual information estimates for each target location.
+            Mutual information estimates for each target location. Only the pairs
+            of members that are both valid count (members of cells without data
+            are NaN under ``empty_cells="nan"``); a location with fewer than 2
+            such pairs gets NaN.
 
         Examples
         --------

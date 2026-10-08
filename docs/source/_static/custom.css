@@ -1,0 +1,10 @@
+/* Display formulas wider than the text column scroll sideways instead of being clipped. */
+div.math {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+mjx-container[display="true"] {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}

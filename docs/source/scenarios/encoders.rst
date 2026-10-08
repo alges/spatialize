@@ -52,8 +52,11 @@ which differs from the rate :math:`\lambda`. The Mondrian budget is derived from
 
 .. math::
 
+   \begin{gathered}
    \lambda(\alpha) = \frac{1}{\mu(H)\,(1-\alpha)}, \qquad \mu(H) = \sum_i (b_i - a_i),
-   \qquad\text{equivalently}\qquad \alpha = 1 - \frac{1}{\lambda\,\mu(H)} .
+   \\
+   \text{equivalently}\quad \alpha = 1 - \frac{1}{\lambda\,\mu(H)} .
+   \end{gathered}
 
 The same :math:`\alpha` therefore gives different rates on different boxes. The value
 :math:`\alpha = 0` gives the coarsest partition (:math:`\lambda = 1/\mu(H)`), while

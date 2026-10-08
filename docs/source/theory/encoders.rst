@@ -47,9 +47,11 @@ form
 
 .. math::
 
-   e(S) = \exp\Big(-\lambda \sum_{c=1}^d \operatorname{range}_c(S)\Big),
-   \qquad
-   e(\{x, y\}) = \exp\big(-\lambda \lVert x - y \rVert_1\big),
+   \begin{aligned}
+   e(S) &= \exp\Big(-\lambda \sum_{c=1}^d \operatorname{range}_c(S)\Big),
+   \\
+   e(\{x, y\}) &= \exp\big(-\lambda \lVert x - y \rVert_1\big),
+   \end{aligned}
 
 with :math:`\operatorname{range}_c(S)` the extent of :math:`S` along axis :math:`c`. Distance is
 measured axis by axis, so the level curves of :math:`e(\{0, h\})` are diamonds and not circles.

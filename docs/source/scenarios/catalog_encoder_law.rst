@@ -202,9 +202,12 @@ across cells. Writing :math:`q = e^{-s}` for the probability of no cut in a gap,
 
 .. math::
 
-   \kappa_4 = \underbrace{q^2 + q^3 + q^3}_{E[Z_1Z_2Z_3Z_4]}
+   \begin{aligned}
+   \kappa_4 &= \underbrace{q^2 + q^3 + q^3}_{E[Z_1Z_2Z_3Z_4]}
    - \underbrace{(q\cdot q + q^2\cdot q^2 + q^3\cdot q)}_{\text{pairings of covariances}}
-   = 2q^3(1-q) = 2e^{-3s}(1-e^{-s}),
+   \\
+   &= 2q^3(1-q) = 2e^{-3s}(1-e^{-s}),
+   \end{aligned}
 
 which is largest, :math:`27/128`, at :math:`s = \log(4/3)`.
 

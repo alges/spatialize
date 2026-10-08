@@ -19,10 +19,12 @@ larger, the law of the field given the data,
 
 .. math::
 
+   \begin{gathered}
    F_v(z) = \Pr\big(Z(v) \le z \mid O\big) \quad\text{at every } v,
-   \qquad\text{and}\qquad
+   \\
    \Pr\big(Z(v_1) \le z_1, \dots, Z(v_N) \le z_N \mid O\big)
    \quad\text{for any } v_1, \dots, v_N .
+   \end{gathered}
 
 Many practical questions are functionals of these laws and not of a map.
 

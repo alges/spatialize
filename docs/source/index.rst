@@ -1,19 +1,30 @@
 Spatialize
 ==========
 
-Spatialize is an open source Python/C++ library for **Ensemble Spatial Analysis
-(ESA)**, a family of methods that combine the simplicity of basic interpolation
-techniques with the power of classical geostatistical tools such as Kriging. It
-bridges the gap between expert and non-expert users of geostatistics by providing
-automated tools that rival traditional methods, with a Python 3.x API and a C++
-core for performance.
+Spatialize estimates a spatial variable by its law. At every location it returns a whole
+distribution of possible values instead of a single number, the distributions at different locations coming out tied together. Questions about one place, such as the probability of exceeding a
+limit, and questions about many places at once, such as an area, a block average or a simulated
+field, are then answered from one coherent estimate.
 
-ESA encompasses two complementary approaches. **Ensemble Spatial Interpolation
-(ESI)** generates multiple estimates for each target location by building many
-random space partitions of the sample data and applying a local interpolator within
-each subset; these local estimates are then aggregated into robust predictions.
-**Ensemble Spatial Simulation (ESS)** extends this framework to stochastic
-simulation.
+The method is simple to state. Draw a random partition of the domain, fit a light local model in
+each cell from the data it holds, and repeat many times. Each repetition gives one candidate field. Their collection, the ensemble, is the estimate. Its empirical law at a location is the
+*predictive law*. Locations that share cells move together in the ensemble, which couples them with
+a dependence of every order, beyond what a covariance can express. The theory, set out in the book
+*A General Theory of Higher-Order Geostatistics* (Egaña, Díaz, Navarro and Ehrenfeld), writes the law the ensemble converges to. It also tells how to choose the partitions and the local models. The
+:doc:`Theory <theory/index>` pages present it without code.
+
+.. figure:: _static/home.png
+   :width: 100%
+   :alt: From 400 scattered samples of an anisotropic field, 300 random partitions with an adaptive
+         local model in each cell, their median map and the probability of exceeding 1
+
+Spatialize implements this approach, **Ensemble Spatial Analysis (ESA)**, as an open source Python
+library with a C++ core. **Ensemble Spatial Interpolation (ESI)** builds the ensemble and reads
+maps, intervals and probabilities from it. **Ensemble Spatial Simulation (ESS)** draws simulated
+fields from the local laws, widened to the variability of the data. Around them sit the
+hyperparameter searches, including a Pareto search between the errors of the partition and of the
+local model, the posterior analysis of the data, the estimation of categorical variables, and the
+spatial entropy and mutual information.
 
 Features
 ------------
@@ -73,6 +84,7 @@ ensemble spatial interpolation with an IDW local interpolator.
 
 The :doc:`Theory <theory/index>` pages explain the method and how to choose its partitions and
 local models, while the :doc:`API Reference <reference/index>` lists every function and parameter.
+The :doc:`release notes <changes>` list what each version adds and which results it changes.
 
 .. _citation:
 
@@ -94,3 +106,4 @@ If you use Spatialize in your research, please cite:
    scenarios/index
    reference/index
    development/index
+   changes

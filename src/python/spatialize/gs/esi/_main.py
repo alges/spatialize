@@ -13,7 +13,7 @@ import spatialize.gs.esi.scorefunction as sf
 from spatialize._util import signature_overload, random_seed
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, \
-    with_more_decoders, decoder_params, _LEGACY_ARGUMENTS
+    with_more_decoders, decoder_params, decoder_callables, decoder_arguments, _LEGACY_ARGUMENTS
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 from spatialize.viz import plot_colormap_array, PlotStyle
 
@@ -824,6 +824,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
         :func:`esi_griddata` (default ``"idw"``). Determines which of the
         interpolator-specific parameters below are accepted, as lists of
         candidates.
+        With ``"custom"``, the functions ``estimation`` (and optionally
+        ``post_creation``, ``loo``, ``kfold``) are given as single values,
+        the same for every configuration searched.
     k : int, optional
         Number of cross-validation folds. If `k` equals the number of
         points or is ``-1``, leave-one-out (LOO) cross-validation is used
@@ -971,6 +974,8 @@ def esi_hparams_search(points, values, xi, **kwargs):
         param_set["seed"] = kwargs["seed"]
         param_set["callback"] = singleton_null_callback
         param_set["p_process"] = kwargs["p_process"]
+        for name in decoder_callables(kwargs["local_interpolator"]):   # a custom decoder's functions
+            param_set[name] = kwargs.get(name)
 
         if kwargs["p_process"] == partitioning_process.MONDRIAN:
             param_set["data_cond"] = True
@@ -1045,14 +1050,17 @@ def esi_griddata(points, values, xi, **kwargs):
 
     Other Parameters
     ----------------
-    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging"}, optional
+    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging", "custom"}, optional
          Which local interpolator (decoder) to use within each partition
          cell. ``"idw"``, ``"kriging"``, ``"adaptiveidw"`` and
          ``"sharpidw"`` average the cell's data with weights, while
          ``"cellmean"`` averages them equally. The ``"draw"`` decoders
          return a datum of the cell instead, drawn uniformly or with the
          weights of the decoder they name, so that the ensemble carries the
-         dispersion within the cell.
+         dispersion within the cell. ``"custom"`` is a decoder written in
+         Python, given by ``estimation`` and, optionally, ``post_creation``,
+         ``loo`` and ``kfold`` (see the developer guide, *Writing a decoder in
+         Python*).
          Determines which of the interpolator-specific parameters below are
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
@@ -1134,6 +1142,21 @@ def esi_griddata(points, values, xi, **kwargs):
     rho_max : float, optional
          Cap of the cell's dimensionless gradient. Only used by
          ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``3.0``.
+    estimation : callable, optional
+         ``estimation(points, values, queries, params) -> predictions``, the
+         prediction of the ``"custom"`` decoder at the queries of one cell
+         from its data, an array with one value per query. Required by
+         ``"custom"``.
+    post_creation : callable, optional
+         ``post_creation(points, values) -> params``, the parameters of one
+         cell, fitted once on its data and handed to the other functions.
+         Only used by ``"custom"``. Default: none (empty parameters).
+    loo, kfold : callable, optional
+         ``loo(points, values, params)`` and ``kfold(k, points, values,
+         folds, params)``, the cross-validation of one cell, one prediction
+         per datum. Only used by ``"custom"``. When absent, each held-out
+         datum is predicted by ``estimation`` from the other data of its
+         cell.
 
     Returns
     -------
@@ -1205,14 +1228,17 @@ def esi_nongriddata(points, values, xi, **kwargs):
 
     Other Parameters
     ----------------
-    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging"}, optional
+    local_interpolator : {"idw", "kriging", "adaptiveidw", "sharpidw", "cellmean", "draw", "wdraw_idw", "wdraw_adaptiveidw", "wdraw_sharpidw", "wdraw_kriging", "custom"}, optional
          Which local interpolator (decoder) to use within each partition
          cell. ``"idw"``, ``"kriging"``, ``"adaptiveidw"`` and
          ``"sharpidw"`` average the cell's data with weights, while
          ``"cellmean"`` averages them equally. The ``"draw"`` decoders
          return a datum of the cell instead, drawn uniformly or with the
          weights of the decoder they name, so that the ensemble carries the
-         dispersion within the cell.
+         dispersion within the cell. ``"custom"`` is a decoder written in
+         Python, given by ``estimation`` and, optionally, ``post_creation``,
+         ``loo`` and ``kfold`` (see the developer guide, *Writing a decoder in
+         Python*).
          Determines which of the interpolator-specific parameters below are
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
@@ -1294,6 +1320,21 @@ def esi_nongriddata(points, values, xi, **kwargs):
     rho_max : float, optional
          Cap of the cell's dimensionless gradient. Only used by
          ``"sharpidw"`` and ``"wdraw_sharpidw"``. Default: ``3.0``.
+    estimation : callable, optional
+         ``estimation(points, values, queries, params) -> predictions``, the
+         prediction of the ``"custom"`` decoder at the queries of one cell
+         from its data, an array with one value per query. Required by
+         ``"custom"``.
+    post_creation : callable, optional
+         ``post_creation(points, values) -> params``, the parameters of one
+         cell, fitted once on its data and handed to the other functions.
+         Only used by ``"custom"``. Default: none (empty parameters).
+    loo, kfold : callable, optional
+         ``loo(points, values, params)`` and ``kfold(k, points, values,
+         folds, params)``, the cross-validation of one cell, one prediction
+         per datum. Only used by ``"custom"``. When absent, each held-out
+         datum is predicted by ``estimation`` from the other data of its
+         cell.
 
     Returns
     -------
@@ -1362,6 +1403,9 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         Training sample values.
     local_interpolator : str, optional
         Any of those of :func:`esi_griddata` (default ``"idw"``).
+        With ``"custom"``, the functions ``estimation`` (and optionally
+        ``post_creation``, ``loo``, ``kfold``) are given as single values,
+        the same for every configuration searched.
     p_process : str, optional
         Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
         or ``"voronoi"``. Both errors, ε̂ and R_CV, are computed on its
@@ -1446,7 +1490,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
 
     # Fixed (non-searchable) interpolator kwargs — execution flags that are
     # forwarded as-is to every ESI call, not iterated over in the grid.
-    fixed_interp_kwargs = {}
+    fixed_interp_kwargs = {name: kwargs.get(name) for name in decoder_callables(kwargs["local_interpolator"])}
 
     _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
     if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
@@ -1611,8 +1655,8 @@ def build_arg_list(points, values, xi, nonpos_args):
 
     if nonpos_args["local_interpolator"] not in _LEGACY_ARGUMENTS:
         # the other decoders: their parameters in the catalogue's order, then the seed
-        for name in decoder_params(nonpos_args["local_interpolator"]):
-            l_args.insert(-2, nonpos_args[name])
+        for name in decoder_arguments(nonpos_args["local_interpolator"]):
+            l_args.insert(-2, nonpos_args.get(name))
         l_args.insert(-2, nonpos_args["seed"])
 
     return l_args

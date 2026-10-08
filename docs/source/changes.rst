@@ -18,6 +18,10 @@ New
   (``wdraw_idw``, ``wdraw_kriging``, ``wdraw_adaptiveidw``, ``wdraw_sharpidw``) and the sharpened
   adaptive IDW (``sharpidw``, with ``kappa_r``, ``kappa_g`` and ``rho_max``), described in
   :doc:`theory/decoders`.
+- **Decoders written in Python.** ``local_interpolator="custom"`` takes the functions of a decoder
+  (``estimation``, and optionally ``post_creation``, ``loo`` and ``kfold``) in the estimation
+  functions and the searches, on any partition and in any dimension. Leave-one-out and k-fold are
+  derived from ``estimation`` when not given.
 - **Partitions.** The theory's Mondrian process, ``p_process="mondrian-raw"``. Every partition now works in any dimension, adaptive IDW, the sharpened decoder and their draws in one, two and three dimensions (on a line only the exponent is fitted).
 - **Session settings** (:mod:`spatialize.session`). A fixed partition ``domain``; ``parallel`` and
   ``num_threads`` for every parallel computation; ``empty_cells``, with ``mark_source``,

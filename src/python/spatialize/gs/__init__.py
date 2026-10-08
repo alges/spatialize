@@ -27,6 +27,7 @@ class local_interpolator:
     DRAW = "draw"                                       # a datum drawn uniformly
     WDRAW_IDW, WDRAW_ADAPTIVE_IDW = "wdraw_idw", "wdraw_adaptiveidw"
     WDRAW_SHARP_IDW, WDRAW_KRIGING = "wdraw_sharpidw", "wdraw_kriging"
+    CUSTOM = "custom"                                   # a decoder given by Python functions
 
 
 class partitioning_process:
@@ -79,8 +80,21 @@ _LEGACY_ARGUMENTS = {"idw", "kriging", "adaptiveidw"}
 
 
 def decoder_params(decoder):
-    """Names of a decoder's parameters, in the catalogue's order (Python callables left out)."""
+    """Names of a decoder's parameters, in the catalogue's order (Python callables left out): the
+    parameters a hyperparameter search can vary."""
     return [p["name"] for p in _DECODERS[decoder]["params"] if p["type"] != "callable"]
+
+
+def decoder_callables(decoder):
+    """Names of a decoder's parameters that are Python functions (those of ``custom``), fixed during a
+    search."""
+    return [p["name"] for p in _DECODERS[decoder]["params"] if p["type"] == "callable"]
+
+
+def decoder_arguments(decoder):
+    """Names of every parameter of a decoder, callables included, in the catalogue's order: the
+    arguments the facade hands to ``run``."""
+    return [p["name"] for p in _DECODERS[decoder]["params"]]
 
 
 def more_decoders(idw, kriging, adaptive, grid=False):
@@ -102,6 +116,8 @@ def more_decoders(idw, kriging, adaptive, grid=False):
         local_interpolator.SHARP_IDW: sharp,
         local_interpolator.WDRAW_ADAPTIVE_IDW: dict(adaptive),
         local_interpolator.WDRAW_SHARP_IDW: dict(sharp),
+        # the custom decoder's functions are given by the user, never searched over
+        local_interpolator.CUSTOM: {"post_creation": None, "estimation": None, "loo": None, "kfold": None},
     }
 
 
@@ -284,7 +300,7 @@ def _through_run(partition, decoder, operation):
             params = {"metric": metric}
         else:
             *given, seed = rest
-            params = dict(zip(decoder_params(decoder), given))
+            params = dict(zip(decoder_arguments(decoder), given))
         return _run(partition, decoder, operation, samples, values, queries, alpha, n_partitions, seed, params,
                     k, folding_seed, visitor, _num_threads())
 

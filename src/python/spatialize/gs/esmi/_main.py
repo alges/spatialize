@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from spatialize import SpatializeError, logging
-from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_params
+from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_params, decoder_arguments
 from spatialize._util import signature_overload
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
 
@@ -90,7 +90,7 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
         l_args.append(kwargs["seed"])
         l_args.append(kwargs["metric"])
     else:  # the other decoders: their parameters in the catalogue's order, then the seed
-        l_args.extend(kwargs[name] for name in decoder_params(interp_type))
+        l_args.extend(kwargs.get(name) for name in decoder_arguments(interp_type))
         l_args.append(kwargs["seed"])
 
     l_args.extend([xi, kwargs["callback"]])

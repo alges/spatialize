@@ -245,3 +245,37 @@ def test_left_out_counts_the_data_a_scorer_cannot_use():
     assert len(caught) == 1
     text = str(caught[0].message)
     assert "2 of 3" in text and "b: 20.0 %" in text and "<- the best" in text and "\n  a:" not in text
+
+
+def _python_idw(points, values, queries, params):
+    """IDW with exponent 2 written in Python, the custom decoder of the tests."""
+    d = np.sqrt(((queries[:, None, :] - points[None, :, :]) ** 2).sum(-1))
+    out = np.empty(len(queries))
+    for i in range(len(queries)):
+        at = d[i] == 0
+        if at.any():
+            out[i] = values[at].mean()
+            continue
+        w = 1 / d[i] ** 2
+        out[i] = (w * values).sum() / w.sum()
+    return out.astype(np.float32)
+
+
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.8), ("voronoi", -0.6)])
+@pytest.mark.parametrize("method", ["estimate", "loo", "kfold"])
+def test_custom_decoder_from_estimation_alone_matches_idw(partition, alpha, method):
+    """A custom decoder given only `estimation` reproduces the built-in decoder it implements, its
+    leave-one-out and k-fold derived from the estimation; with the empty-cell policies its
+    cross-validation has no undefined member."""
+    s, v, q = DATA["2d"]
+    queries = q if method == "estimate" else s
+    args = (s, v, queries, partition, alpha, cases.T, cases.SEED)
+    tail = (method, cases.K, cases.FSEED, None, 0)
+    custom = np.asarray(LIB.run(*args, "custom", {"estimation": _python_idw}, *tail)[1])
+    idw = np.asarray(LIB.run(*args, "idw", {"exponent": 2.0}, *tail)[1])
+    assert np.array_equal(np.isnan(custom), np.isnan(idw))
+    assert np.nanmax(np.abs(custom - idw)) < 1e-4
+    if method != "estimate":
+        for policy in ("mark", "coarsen"):
+            filled = np.asarray(LIB.run(*args, "custom", {"estimation": _python_idw}, *tail, policy)[1])
+            assert not np.isnan(filled).any()

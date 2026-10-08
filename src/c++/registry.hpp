@@ -119,31 +119,41 @@ namespace registry {
         return(sptlz::ndarray_to_vector_1d(&res));
       };
     }
+    // `estimation` serves every method: it predicts at the queries, it fills empty cells under the
+    // empty_cells policies, and it gives leave-one-out and k-fold when `loo` or `kfold` is not given
+    // (each held-out datum predicted from the other data of its cell, see CustomDecoder).
     sptlz::CustomDecoder::Estimation _est = NULL;
     sptlz::CustomDecoder::Loo _loo = NULL;
     sptlz::CustomDecoder::Kfold _kfold = NULL;
-    if (method == Method::ESTIMATE){
-      py::object f = callable("estimation", true);
-      _est = [f, d](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<std::vector<float>>* loc, std::vector<float>* p){
-        auto res = (py::array_t<float>) f(sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
-                                         sptlz::vector_2d_to_ndarray(loc, d), sptlz::vector_1d_to_ndarray(p));
-        return(sptlz::ndarray_to_vector_1d(&res));
-      };
-    }else if (method == Method::LOO){
-      py::object f = callable("loo", true);
-      _loo = [f, d](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<float>* p){
-        auto res = (py::array_t<float>) f(sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
-                                         sptlz::vector_1d_to_ndarray(p));
-        return(sptlz::ndarray_to_vector_1d(&res));
-      };
-    }else{
-      py::object f = callable("kfold", true);
-      _kfold = [f, d](int k, std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<int>* fld, std::vector<float>* p){
-        auto res = (py::array_t<float>) f(k, sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
-                                         sptlz::vector_1d_to_ndarray(fld), sptlz::vector_1d_to_ndarray(p));
+    py::object est = callable("estimation", false);
+    py::object loo = callable("loo", false);
+    py::object kfold = callable("kfold", false);
+    if (!est.is_none()){
+      _est = [est, d](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<std::vector<float>>* loc, std::vector<float>* p){
+        auto res = (py::array_t<float>) est(sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
+                                           sptlz::vector_2d_to_ndarray(loc, d), sptlz::vector_1d_to_ndarray(p));
         return(sptlz::ndarray_to_vector_1d(&res));
       };
     }
+    if (!loo.is_none()){
+      _loo = [loo, d](std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<float>* p){
+        auto res = (py::array_t<float>) loo(sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
+                                           sptlz::vector_1d_to_ndarray(p));
+        return(sptlz::ndarray_to_vector_1d(&res));
+      };
+    }
+    if (!kfold.is_none()){
+      _kfold = [kfold, d](int k, std::vector<std::vector<float>>* pos, std::vector<float>* val, std::vector<int>* fld, std::vector<float>* p){
+        auto res = (py::array_t<float>) kfold(k, sptlz::vector_2d_to_ndarray(pos, d), sptlz::vector_1d_to_ndarray(val),
+                                             sptlz::vector_1d_to_ndarray(fld), sptlz::vector_1d_to_ndarray(p));
+        return(sptlz::ndarray_to_vector_1d(&res));
+      };
+    }
+    if (est.is_none() && (method == Method::ESTIMATE || (method == Method::LOO && loo.is_none())
+                          || (method == Method::KFOLD && kfold.is_none())))
+      throw std::runtime_error(std::string("decoder 'custom' needs 'estimation'") +
+                               (method == Method::ESTIMATE ? "" : (method == Method::LOO ? " or 'loo'" : " or 'kfold'")) +
+                               " for this method");
     return(new sptlz::CustomDecoder(_post, _est, _loo, _kfold));
   }
 
@@ -208,8 +218,8 @@ namespace registry {
        1, ANY, false,
        {{"post_creation", "callable", "post_creation(coords, values) -> cell parameters", false, py::none(), {}},
         {"estimation", "callable", "estimation(coords, values, queries, params) -> predictions (method 'estimate')", false, py::none(), {}},
-        {"loo", "callable", "loo(coords, values, params) -> predictions (method 'loo')", false, py::none(), {}},
-        {"kfold", "callable", "kfold(k, coords, values, folds, params) -> predictions (method 'kfold')", false, py::none(), {}}},
+        {"loo", "callable", "loo(coords, values, params) -> predictions (method 'loo'; derived from estimation when absent)", false, py::none(), {}},
+        {"kfold", "callable", "kfold(k, coords, values, folds, params) -> predictions (method 'kfold'; derived from estimation when absent)", false, py::none(), {}}},
        nullptr});
     specs.push_back({"draw", "A datum of the cell drawn uniformly (the block-mark decoder).",
        1, ANY, true,

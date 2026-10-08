@@ -34,6 +34,7 @@ namespace sptlz{
       bool thread_safe(){ return false; }
 
       std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
+        if(!estimation_by_leaf) throw std::runtime_error("decoder 'custom' needs 'estimation' to predict at locations");
         auto _coords = slice(coords, samples_id);
         auto _values = slice(values, samples_id);
         auto _locations = slice(locations, locations_id);
@@ -41,18 +42,52 @@ namespace sptlz{
         return(result);
       }
 
+      // Without a `loo` callback, each datum of the cell is predicted by `estimation` from the other
+      // data of the cell, with the cell's parameters (as the C++ decoders do): one call per datum.
       std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
-        auto _coords = slice(coords, samples_id);
-        auto _values = slice(values, samples_id);
-        auto result = loo_by_leaf(&_coords, &_values, params);
+        if(loo_by_leaf){
+          auto _coords = slice(coords, samples_id);
+          auto _values = slice(values, samples_id);
+          return(loo_by_leaf(&_coords, &_values, params));
+        }
+        std::vector<float> result(samples_id->size(), NAN);
+        for(size_t i=0; i<samples_id->size(); i++){
+          std::vector<std::vector<float>> c, q{coords->at(samples_id->at(i))};
+          std::vector<float> v;
+          for(size_t j=0; j<samples_id->size(); j++){
+            if(j == i) continue;
+            c.push_back(coords->at(samples_id->at(j)));
+            v.push_back(values->at(samples_id->at(j)));
+          }
+          if(c.empty()) continue;
+          result.at(i) = estimation_by_leaf(&c, &v, &q, params).at(0);
+        }
         return(result);
       }
 
+      // Without a `kfold` callback, the data of each fold are predicted by `estimation` from the data of
+      // the cell outside that fold, with the cell's parameters: one call per fold present in the cell.
       std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *folds, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
-        auto _coords = slice(coords, samples_id);
-        auto _values = slice(values, samples_id);
-        auto _folds = slice(folds, samples_id);
-        auto result = kfold_by_leaf(k, &_coords, &_values, &_folds, params);
+        if(kfold_by_leaf){
+          auto _coords = slice(coords, samples_id);
+          auto _values = slice(values, samples_id);
+          auto _folds = slice(folds, samples_id);
+          return(kfold_by_leaf(k, &_coords, &_values, &_folds, params));
+        }
+        std::vector<float> result(samples_id->size(), NAN);
+        for(int f=0; f<k; f++){
+          std::vector<std::vector<float>> c, q;
+          std::vector<float> v;
+          std::vector<size_t> held;
+          for(size_t j=0; j<samples_id->size(); j++){
+            int d = samples_id->at(j);
+            if(folds->at(d) == f){ q.push_back(coords->at(d)); held.push_back(j); }
+            else{ c.push_back(coords->at(d)); v.push_back(values->at(d)); }
+          }
+          if(held.empty() || c.empty()) continue;
+          auto pred = estimation_by_leaf(&c, &v, &q, params);
+          for(size_t h=0; h<held.size(); h++) result.at(held.at(h)) = pred.at(h);
+        }
         return(result);
       }
 

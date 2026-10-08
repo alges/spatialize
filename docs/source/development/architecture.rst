@@ -50,8 +50,8 @@ The headers follow the same roles under ``include/spatialize/``, with the three 
 (``partition.hpp``, ``decoder.hpp``, ``ensemble.hpp``), one file per partition process in
 ``partitions/`` and one per decoder in ``decoders/``. No file holds a particular combination, so
 Voronoi with kriging comes from ``partitions/voronoi.hpp`` together with ``decoders/kriging.hpp``,
-assembled at run time. Two separate engines keep their own folders. Co-estimation lives in
-``coesi/custom_coesi.hpp``, whose ``CUSTOM_COESI`` runs one ``CUSTOM_ESI`` ensemble per variable, while
+assembled at run time. Two separate engines keep their own folders. Co-estimation, experimental (``spatialize.futures.coesi``), lives in ``coesi/custom_coesi.hpp``, whose
+``CUSTOM_COESI`` runs one ``CUSTOM_ESI`` ensemble per variable on the former engine, while
 the non-ensemble nearest-neighbour IDW lives in ``nn/``. Shared utilities stay at the top
 (``utils.hpp``, ``kdtree.hpp``, ``callback*.hpp``), together with ``grad_descent.hpp``, the optimiser
 used by adaptive IDW.

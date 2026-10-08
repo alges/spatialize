@@ -4,6 +4,7 @@ from spatialize import SpatializeError, logging
 from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_params, decoder_arguments
 from spatialize._util import signature_overload
 from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
+from spatialize.futures import _experimental
 
 # ============================================================================
 # Shared utility functions
@@ -258,6 +259,7 @@ class SpatialEntropy:
         SpatializeError
             If T or M are non-positive, or alpha values are outside [0, 1].
         """
+        _experimental("SpatialEntropy")
         if T <= 0:
             raise SpatializeError(f"T must be positive, got {T}")
         if M <= 0:
@@ -489,6 +491,7 @@ class SpatialMutualInformation:
         SpatializeError
             If T or M are non-positive, or alpha values are outside [0, 1].
         """
+        _experimental("SpatialMutualInformation")
         if T <= 0:
             raise SpatializeError(f"T must be positive, got {T}")
         if M <= 0:

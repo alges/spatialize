@@ -40,7 +40,6 @@ New
   each location, the share of partitions concerned.
 - **Partition laws** (:mod:`spatialize.gs.partitions`). The cells of given locations, the
   co-occurrence of sets and the law of groupings, with the closed forms of the Mondrian process.
-- **Spatial entropy and mutual information** (:doc:`reference/esmi`).
 - **Pareto search on any partition.** The encoder error is computed on Mondrian and Voronoi
   partitions alike, with ``data_cond`` for Voronoi.
 - **Parallel computation.** The trees of the ensemble run in parallel, as do the Python loops of the
@@ -49,6 +48,18 @@ New
 - **Conformance tests** (:doc:`scenarios/index`), runnable with ``python -m spatialize.scenarios``,
   which prints its progress as it runs.
 - :func:`~spatialize.empirical.silverman_bandwidth`, the bandwidth of the kernel density estimates.
+
+Under study
+-----------
+
+A new module, :mod:`spatialize.futures` (:doc:`reference/futures`), holds features whose theory or
+design is still being settled, so their interface and results may change without notice. Each
+warns once per session when first used.
+
+- **Spatial entropy and mutual information**, ``spatialize.futures.esmi``.
+- **Co-estimation**, ``spatialize.futures.coesi``, a variable predicted from several others through
+  two stages of ensembles, with a Python interface for the first time and the number of auxiliary
+  locations as a parameter.
 
 Results that change
 -------------------

@@ -40,7 +40,12 @@ pointer to the :doc:`../theory/index` page that explains the method behind it.
    ess
    empirical
    spa
-   esmi
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Under study
+
+   futures
 
 .. toctree::
    :maxdepth: 2

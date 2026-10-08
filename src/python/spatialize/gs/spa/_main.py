@@ -113,7 +113,7 @@ class PosteriorSampleAnalyzer:
             target_var = target_var_arr[i] if target_var_arr is not None else None
             target_skew = target_skew_arr[i] if target_skew_arr is not None else None
             # derive a per-point seed so widening doesn't draw identical noise at every
-            # sample (mirrors the `self.seed + i` pattern used elsewhere, e.g. gs/esmi/_main.py)
+            # sample (mirrors the `self.seed + i` pattern used elsewhere, e.g. futures/esmi/_main.py)
             point_seed = (fitted_model_factory.seed + i
                           if fitted_model_factory.seed is not None else None)
             emodel = EmpiricalModel(sample=data, fitted_model_factory=fitted_model_factory,

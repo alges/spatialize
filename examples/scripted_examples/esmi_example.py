@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from spatialize.viz import plot_colormap_data, PlotStyle
-from spatialize.gs.esmi import SpatialEntropy
+from spatialize.futures.esmi import SpatialEntropy
 
 # Prepare functions for generating synthetic scenario
 def generate_regular_grid(ranges, step):

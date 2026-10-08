@@ -354,9 +354,11 @@ py::array_t<int> cells(py::array_t<float> samples, py::array_t<float> queries, s
     return(sptlz::vector_2d_to_ndarray(&r));
 }
 
-std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> co_post_creation, py::function co_estimation, std::optional<py::function> ind_post_creation, py::function ind_estimation, py::function ind_aggregation, std::optional<py::function> visitor){
+std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<float> samples, py::array_t<float> values, int forest_size, float alpha, int seed, py::array_t<float> queries, std::optional<py::function> co_post_creation, py::function co_estimation, std::optional<py::function> ind_post_creation, py::function ind_estimation, py::function ind_aggregation, std::optional<py::function> visitor, int n_aux){
     py::buffer_info smp_info = samples.request(), val_info = values.request(), qry_info = queries.request();
 
+    if (n_aux < 1)
+        throw std::runtime_error("n_aux must be a positive number of auxiliary locations");
     if (smp_info.ndim != 3)
         throw std::runtime_error("[1] samples must be a 3 dimensions array");
     if (val_info.ndim != 2)
@@ -403,7 +405,7 @@ std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<f
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
 
-    sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, 100, bbox, _co_post,
+    sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, n_aux, bbox, _co_post,
         [co_estimation, n, m](std::vector<std::vector<float>>* pos, std::vector<std::vector<float>>* val, std::vector<std::vector<float>>* loc, std::vector<float>* params){
             auto _pos = sptlz::vector_2d_to_ndarray(pos, n);
             auto _val = sptlz::vector_2d_to_ndarray(val, m);
@@ -614,7 +616,10 @@ PYBIND11_MODULE(libspatialize, m) {
     m.def(
       "estimation_custom_coesi",
       &estimation_custom_coesi,
-      "Custom COESI to estimate"
+      "Custom COESI to estimate (experimental, see spatialize.futures.coesi)",
+      py::arg("samples"), py::arg("values"), py::arg("forest_size"), py::arg("alpha"), py::arg("seed"),
+      py::arg("queries"), py::arg("co_post_creation"), py::arg("co_estimation"), py::arg("ind_post_creation"),
+      py::arg("ind_estimation"), py::arg("ind_aggregation"), py::arg("visitor"), py::arg("n_aux") = 100
     );
     m.def(
       "marginal_loo_custom_coesi",

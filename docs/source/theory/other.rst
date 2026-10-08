@@ -74,4 +74,5 @@ In Spatialize
 Posterior analysis is :func:`~spatialize.gs.spa.cv_sample_pred_posterior` and its
 ``rank_samples`` (:doc:`../reference/spa`), categorical estimation the functions of
 :doc:`../reference/cat_esi`, and the entropy and mutual information the estimators of
-:doc:`../reference/esmi`.
+:doc:`../reference/futures`, where they are experimental: their interface and results may still
+change.

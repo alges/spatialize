@@ -36,7 +36,7 @@ def public_cases():
     from spatialize.gs.cat_esi import cat_esi_nongriddata
     from spatialize.gs.idw import idw_nongriddata, idw_hparams_search
     from spatialize.gs.spa import cv_sample_pred_posterior
-    from spatialize.gs.esmi import SpatialEntropy, SpatialMutualInformation
+    from spatialize.futures.esmi import SpatialEntropy, SpatialMutualInformation
 
     c = []
     add = lambda name, ds, fn: c.append((f"api.{name}", ds, fn))
@@ -130,6 +130,18 @@ def public_cases():
         return {"mi": np.asarray(mi, np.float64), "h_u": np.asarray(smi.entropies_u, np.float64),
                 "h_joint": np.asarray(smi.entropies_joint, np.float64)}
     add("spatial_mutual_information", "2d", mutual_information)
+
+    def coesi(s, v, q):
+        from spatialize.futures.coesi import coesi_nongriddata
+        import cases as _c
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = coesi_nongriddata([s, s], [v, np.log(v)], q, n_aux=60,
+                                  co_estimation=lambda c_, v_, l_, p_: np.full(len(l_), v_[:, 0].mean() - v_[:, 1].mean(), np.float32),
+                                  estimation=_c._estimation, post_creation=_c._post_creation,
+                                  n_partitions=T, alpha=ALPHA, seed=SEED)
+        return {"members": np.asarray(r.esi_samples(raw=True), np.float32)}
+    add("coesi_nongriddata", "2d", coesi)
 
     def cat(s, v, q):
         cats = np.where(v > np.median(v), "high", "low")

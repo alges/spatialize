@@ -6,4 +6,5 @@ from ._util import SingletonType, in_notebook
 from .result import GridSearchResult, EstimationResult
 from . import session
 
-__all__ = ["gs", "gs.idw", "gs.esi", "gs.esi.aggfunction"]
+__all__ = ["SpatializeError", "__version__", "session", "GridSearchResult", "EstimationResult", "SingletonType",
+           "in_notebook"]

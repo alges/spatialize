@@ -7,7 +7,6 @@ a model chosen beforehand. :func:`posterior_audit` computes these laws and retur
 names of version 1.2, are kept on top of it.
 """
 import random as rd
-import warnings
 from copy import deepcopy
 
 import matplotlib

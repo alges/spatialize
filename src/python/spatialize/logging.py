@@ -1,10 +1,7 @@
 import json
 import logging
-import os
-import re
 import time
 
-import numpy as np
 
 from spatialize._util import SingletonType
 

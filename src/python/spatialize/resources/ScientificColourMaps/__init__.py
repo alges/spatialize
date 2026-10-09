@@ -17,17 +17,16 @@
 """
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 folder = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 
-__all__ = {'acton', 'bam', 'bamako', 'bamO', 'batlow', 'batlowK', 'batlowW', 'berlin', 'bilbao', 'broc',
+__all__ = sorted({'acton', 'bam', 'bamako', 'bamO', 'batlow', 'batlowK', 'batlowW', 'berlin', 'bilbao', 'broc',
 	   'brocO', 'buda', 'bukavu', 'cork', 'corkO',
            'davos', 'devon', 'fes', 'glasgow', 'grayC', 'hawaii', 'imola', 'lajolla',
            'lapaz', 'lisbon', 'lipari', 'managua', 'navia', 'nuuk', 'oleron',
            'oslo', 'roma', 'romaO', 'tofino',
-           'tokyo', 'turku', 'vanimo', 'vik', 'vikO'}
+           'tokyo', 'turku', 'vanimo', 'vik', 'vikO'})
 
 for name in __all__:
     file = os.path.join(folder, 'palettes', name + '.txt')

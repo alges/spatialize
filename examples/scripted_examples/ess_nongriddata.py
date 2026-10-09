@@ -1,15 +1,10 @@
-import numpy as np
-import pandas as pd
-
 import matplotlib.pyplot as plt
 
 from spatialize import logging
-from spatialize.data import load_simulated_anisotropic_data, load_result, save_result
+from spatialize.data import load_simulated_anisotropic_data
 from spatialize.gs.ess import ess_sample
 from spatialize.gs.esi import esi_nongriddata
-from spatialize.gs.ess._main import ess_sample
 from spatialize.empirical import FittedModelFactory
-from spatialize.viz import plot_colormap_data
 
 # for a more explanatory output of the spatialize functions
 logging.log.setLevel("INFO")

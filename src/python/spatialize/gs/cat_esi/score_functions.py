@@ -17,7 +17,6 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     cohen_kappa_score,
-    log_loss,
 )
 
 

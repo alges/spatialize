@@ -86,7 +86,7 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
         esi_samples = None
 
     if esi_samples is None:
-        log_message(logging.logger.info(f"an instances of EstimationResult was loaded"))
+        log_message(logging.logger.info("an instances of EstimationResult was loaded"))
         return EstimationResult(estimation,
                                 griddata=meta_data['griddata'],
                                 original_shape=meta_data['original_shape'],
@@ -104,7 +104,7 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
                            xi=xi, points=points, values=values)
 
     if meta_data["main_result"] == "estimation" or just_esi_result:
-        log_message(logging.logger.info(f"an instance of ESIResult was loaded"))
+        log_message(logging.logger.info("an instance of ESIResult was loaded"))
         return esi_result
 
     if not simulation_desc is None:

@@ -46,23 +46,6 @@ def orientation_coherence(z, sigma=2.0):
     return theta, coherence
 
 
-def angular_error(theta, target):
-    """Smallest absolute difference between two axial directions.
-
-    Parameters
-    ----------
-    theta, target : float
-        Directions in degrees, as axes (period 180°).
-
-    Returns
-    -------
-    float
-        Angle in [0, 90].
-    """
-    d = abs(theta - target) % 180.0
-    return min(d, 180.0 - d)
-
-
 def contrast_ratio(z, truth):
     """Spread of a map relative to the truth.
 

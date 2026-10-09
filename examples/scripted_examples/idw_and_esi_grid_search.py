@@ -5,7 +5,6 @@ from matplotlib.pyplot import colorbar
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from spatialize import logging
-import spatialize.gs.esi.aggfunction as af
 from spatialize.gs.esi import esi_hparams_search, esi_griddata
 from spatialize.gs.idw import idw_hparams_search, idw_griddata
 

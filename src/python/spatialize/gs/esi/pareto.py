@@ -29,7 +29,7 @@ import spatialize.gs.esi.scorefunction as sf
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 from spatialize.gs.esi._main import build_arg_list
 from spatialize._parallel import map_chunks
-from spatialize.empirical import EmpiricalModel, FittedModelFactory
+from spatialize.empirical import FittedModelFactory
 from spatialize.logging import singleton_null_callback, log_message
 from spatialize import logging
 
@@ -498,100 +498,6 @@ def _kl_from_models(
     p_j_floor = 1.0 / ((x_max - x_min) * support_sample_size * 10.0)
     p_j_safe = np.maximum(p_j[mask], p_j_floor)
     return max(float(np.sum(p_i[mask] * (np.log(p_i[mask]) - np.log(p_j_safe))) * dx), 0.0)
-
-
-def _fitted_kl(
-    samples_i,
-    samples_j,
-    factory: FittedModelFactory | None = None,
-    support_sample_size: int = 500,
-) -> float:
-    """D_KL(p̂_i ‖ p̂_j) via fitted continuous density models.
-
-    Each sample vector is fitted with an :class:`EmpiricalModel` (KDE / GMM
-    by default).  KL is integrated numerically over a shared grid.
-
-    Parameters
-    ----------
-    samples_i : array-like, shape (T,)
-        ESI samples for training point x_i.
-    samples_j : array-like, shape (T,)
-        ESI samples for training point x_j.
-    factory : FittedModelFactory, optional
-        Density factory.  Defaults to KDE with NaN-ignore strategy.
-    support_sample_size : int
-        Number of points in the shared evaluation grid.
-
-    Returns
-    -------
-    float
-        D_KL(p̂_i ‖ p̂_j) ≥ 0.
-    """
-    if factory is None:
-        factory = FittedModelFactory(nan_model_name="ignore", point_model_name="kde")
-
-    samples_i = np.asarray(samples_i, dtype=np.float64)
-    samples_j = np.asarray(samples_j, dtype=np.float64)
-
-    samples_i = samples_i[~np.isnan(samples_i)]
-    samples_j = samples_j[~np.isnan(samples_j)]
-
-    if len(samples_i) < 2 or len(samples_j) < 2:
-        return 0.0
-
-    def _clone(f: FittedModelFactory) -> FittedModelFactory:
-        return FittedModelFactory(
-            nan_model_name        = f.nan_model_name,
-            nan_replace_func_name = getattr(f, "nan_replace_func_name", "median"),
-            point_model_name      = f.point_model_name,
-            kernel                = getattr(f, "kernel", "gaussian"),
-            bgm_sample_size       = getattr(f, "bgm_sample_size", 1000),
-            bgm_max_iter          = getattr(f, "bgm_max_iter", 100),
-            n_components          = getattr(f, "n_components", 3),
-            widening              = getattr(f, "widening", False),
-            widening_knn          = getattr(f, "widening_knn", 12),
-            seed                  = getattr(f, "seed", None),
-        )
-
-    try:
-        model_i = EmpiricalModel(
-            sample=samples_i,
-            support_sample_size=support_sample_size,
-            fitted_model_factory=_clone(factory),
-        )
-        model_j = EmpiricalModel(
-            sample=samples_j,
-            support_sample_size=support_sample_size,
-            fitted_model_factory=_clone(factory),
-        )
-    except Exception:
-        return 0.0
-
-    x_min = min(model_i.d_min, model_j.d_min)
-    x_max = max(model_i.d_max, model_j.d_max)
-    if x_max <= x_min:
-        return 0.0
-
-    x_shared, dx = np.linspace(x_min, x_max, support_sample_size, retstep=True)
-
-    p_i = np.nan_to_num(model_i.pdf(x_shared), nan=0.0).clip(0.0)
-    p_j = np.nan_to_num(model_j.pdf(x_shared), nan=0.0).clip(0.0)
-
-    sum_i = p_i.sum() * dx
-    sum_j = p_j.sum() * dx
-    if sum_i == 0.0 or sum_j == 0.0:
-        return 0.0
-
-    p_i = p_i / sum_i
-    p_j = p_j / sum_j
-
-    mask      = p_i > 0.0
-    # a floor for p̂_j: the density of a uniform law on the grid carrying 1/(10 N) of the mass, a
-    # density (1/length), so the divergence does not depend on the units of the variable
-    p_j_floor = 1.0 / ((x_max - x_min) * support_sample_size * 10.0)
-    p_j_safe  = np.where(p_j[mask] > 0.0, p_j[mask], p_j_floor)
-    kl = float(np.sum(p_i[mask] * (np.log(p_i[mask]) - np.log(p_j_safe))) * dx)
-    return max(kl, 0.0)
 
 
 def _iter_param_grid(param_grid: dict):

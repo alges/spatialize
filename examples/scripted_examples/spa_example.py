@@ -6,7 +6,6 @@ written next to the script's working directory.
 import matplotlib
 
 matplotlib.use("Agg")
-import numpy as np
 
 from spatialize import logging
 from spatialize.data import load_drill_holes_andes_2D

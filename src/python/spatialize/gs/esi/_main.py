@@ -1,4 +1,3 @@
-import tempfile
 from copy import deepcopy
 
 import numpy as np
@@ -922,7 +921,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
                               n_partitions=100,     # overwritten at call
                               best_params_found=search_result.best_result())
     """
-    log_message(logging.logger.debug(f"searching best params ..."))
+    log_message(logging.logger.debug("searching best params ..."))
 
     method, k = "kfold", kwargs["k"]
     if k == points.shape[0] or k == -1:

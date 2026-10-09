@@ -15,7 +15,7 @@ from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotSt
 
 from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision, categorical_precision_cube
 from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
-from .score_functions import resolve_scoring, SCORING_OPTIONS
+from .score_functions import resolve_scoring
 
 
 # ─────────────────────────────────────────────────────────────

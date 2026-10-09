@@ -2,7 +2,6 @@
 
 Unit tests on this checkout's in-place build (see tests/unit/conftest.py)."""
 import numpy as np
-import pytest
 
 import cases
 import snapshot_lib as sl

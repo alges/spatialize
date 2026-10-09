@@ -1,9 +1,9 @@
 import numpy as np
 import math
 from spatialize import SpatializeError, logging
-from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_params, decoder_arguments
+from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_arguments
 from spatialize._util import signature_overload
-from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
+from spatialize.logging import log_message, default_singleton_callback
 from spatialize.futures import _experimental
 
 # ============================================================================
@@ -386,7 +386,7 @@ class SpatialEntropy:
             self.callback(logging.progress.inform())
 
         self.callback(logging.progress.stop())
-        log_message(logging.logger.debug(f'spatial entropy calculation complete'))
+        log_message(logging.logger.debug('spatial entropy calculation complete'))
 
         return entropies
  
@@ -754,7 +754,7 @@ class SpatialMutualInformation:
         self.entropies_v = entropies_v
         self.entropies_joint = entropies_joint
 
-        log_message(logging.logger.debug(f'spatial mutual information calculation complete'))
+        log_message(logging.logger.debug('spatial mutual information calculation complete'))
 
         return mutual_information
  

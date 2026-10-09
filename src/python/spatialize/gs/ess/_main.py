@@ -1,6 +1,4 @@
 import numpy as np
-from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
-from sklearn.neighbors import KernelDensity
 from sklearn.exceptions import ConvergenceWarning
 
 # just to turn warnings off
@@ -8,7 +6,7 @@ import warnings
 
 from spatialize import logging
 from spatialize._parallel import map_chunks
-from spatialize.empirical import (FittedModelFactory, EmpiricalModel, _local_target_variance,
+from spatialize.empirical import (FittedModelFactory, _local_target_variance,
                                    _local_target_skewness)
 from spatialize.logging import log_message, default_singleton_callback
 from spatialize.viz import plot_colormap_array, PlotStyle

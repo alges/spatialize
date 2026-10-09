@@ -1,6 +1,3 @@
-import numpy as np
-import pandas as pd
-
 import matplotlib.pyplot as plt
 
 from spatialize import logging
@@ -8,7 +5,6 @@ from spatialize.data import load_simulated_anisotropic_data, load_result, save_r
 from spatialize.gs.ess import ess_sample
 from spatialize.gs.esi import esi_nongriddata
 from spatialize.empirical import FittedModelFactory
-from spatialize.viz import plot_colormap_data
 
 # for a more explanatory output of the spatialize functions
 logging.log.setLevel("INFO")
@@ -58,7 +54,7 @@ if __name__ == '__main__':
 
         for sim_result in sim_results:
             seed = sim_result.quick_plot(n_imgs=9, n_cols=3, norm_lims=False, title_prefix="Scenario")
-    except Exception as e:
+    except Exception:
         n_sims = 10
         sim_result = ess_sample(esi_result=result, n_sims=n_sims, fitted_model_factory=FittedModelFactory(
                                      point_model_name="kde",

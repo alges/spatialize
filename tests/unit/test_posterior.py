@@ -40,7 +40,7 @@ def test_posterior_audit_readings_are_consistent():
     brings the 90 % coverage of the widened laws to nominal; every scale maps back to the values;
     every tail model gives a reading at every datum."""
     from spatialize.gs.spa import posterior_audit, cv_sample_pred_posterior
-    from spatialize.gs.spa._main import _scale_maps, _fit_spread
+    from spatialize.gs.spa._main import _scale_maps
     from spatialize.empirical import FittedModelFactory
     s, v, _ = DATA["2d"]
     v = np.exp(v - v.mean()).astype(np.float32)

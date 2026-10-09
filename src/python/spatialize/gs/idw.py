@@ -141,7 +141,7 @@ def idw_hparams_search(points, values, xi,
         The grid search results, one row per evaluated ``(radius,
         exponent)`` combination.
     """
-    log_message(logging.logger.debug(f"searching best params ..."))
+    log_message(logging.logger.debug("searching best params ..."))
 
     if folding_seed is None:
         folding_seed = int(np.random.randint(1000, 10000))

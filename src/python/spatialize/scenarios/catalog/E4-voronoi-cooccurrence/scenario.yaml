@@ -1,0 +1,46 @@
+id: E4-voronoi-cooccurrence
+version: 1
+tier: T1
+evaluator: partition_law
+book:
+  topic: "co-occurrence function of the Poisson–Voronoi partition"
+  draft_2026_10: "ch 5, co-occurrence of the partitions"   # the book is a draft
+purpose: >
+  Two locations share a cell of a Poisson–Voronoi partition when their nearest nucleus is the same.
+  On a line with nuclei of rate ρ this happens with probability (1 + ρh) exp(−2ρh) at distance h:
+  either no nucleus lies between them and the nearest one lies on the same side for both, or exactly
+  one lies between them, nearer to each than the nuclei outside. The co-occurrence therefore decays
+  faster than the Mondrian process's exp(−ρh) for the same mean cell length 1/ρ. In the plane the
+  partition is isotropic, so the co-occurrence at a given distance is the same along an axis and
+  along the diagonal, where the Mondrian process, measuring distance in ℓ1, differs. Spatialize's
+  Voronoi partition with nuclei uniform in the box is a Poisson–Voronoi partition, its number of
+  nuclei being Poisson. The cells are read through the runner's method cells, with filler data so
+  that the partition can reach its intensity.
+estimators:
+  # rate: the Voronoi intensity (nuclei per unit length or area); the Mondrian rate for the controls
+  - {id: v-line, encoder: voronoi, rate: 20.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: m-line, encoder: mondrian, rate: 20.0, decoder: cellmean, params: {}, empty_cells: nan}
+checks:
+  - id: line
+    title: "on a line, the co-occurrence is (1 + ρh) exp(−2ρh)"
+    kind: voronoi_line
+    family: gof-closed
+    rho: 20.0
+    estimators: [v-line]
+    n_members: {ci: 20000, full: 80000}
+  - id: control-line
+    title: "negative control: the Mondrian process of the same mean cell length decays as exp(−ρh)"
+    kind: voronoi_line
+    family: gof-closed
+    rho: 20.0
+    estimators: [m-line]
+    n_members: {ci: 20000, full: 80000}
+    expect: {default: reject}
+domain: {box: [[0.0, 1.0]]}
+data:
+  n: 200                                 # filler data: 20 nuclei on average, far below n
+  origin: 0.4                            # at least 0.4 from either end: edge effects below e^-8
+  distances: [0.02, 0.05, 0.1, 0.2]
+  generator_seed: 20261009
+provenance:
+  v1: "2026-10-09: first version; the closed form checked against a direct simulation of a Poisson–Voronoi line (200 000 draws per distance, within two standard errors) before the first run; sizes fixed before the first run. The planar isotropy check is the separate scenario E4b."

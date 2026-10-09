@@ -61,17 +61,17 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented**
      - —
    * - :ref:`E4 <scenario-E4>`
-     - Poisson–Voronoi co-occurrence (isotropy in 2D, decay in 1D)
-     - needs a reading method
-     - a single datum gives a single Voronoi nucleus, so E2's reading does not apply
+     - Poisson–Voronoi co-occurrence (decay in 1D, isotropy in 2D as E4b)
+     - **implemented**
+     - —
    * - :ref:`E5 <scenario-E5>`
      - fourth joint cumulant of a block-mark field on a line
      - **implemented**
      - —
    * - :ref:`E6 <scenario-E6>`
-     - conditional covariance under one uniform cut
-     - negative control
-     - targets on the theory's Mondrian; derive the value independently
+     - conditional covariance under one uniform cut, through the Mondrian process and the partition of version 1.2
+     - **implemented**
+     - —
    * - 
      - **T2 — estimator properties**
      - 

@@ -1,0 +1,55 @@
+id: E6-conditional-covariance
+version: 1
+tier: T1
+evaluator: partition_law
+book:
+  topic: "conditioning on an observed value under a random partition"
+  draft_2026_10: "ch 5, worked example of one uniform cut"   # the book is a draft
+purpose: >
+  For a block-mark field with iid marks of mean 0 and variance 1, observing Z_b = β at a location b
+  between x and y gives Cov(Z_x, Z_y | Z_b = β) = β² [P(x~y) − P(x~b) P(b~y)]. The theory's example
+  cuts the interval once at a uniform position, so that x and y never share a cell and the
+  covariance is −(b − x)(y − b) β², −0.21 β² for b = 0.3. On a line the Mondrian process cuts at the
+  points of a Poisson process, independent on disjoint intervals, so the covariance is 0. The
+  Mondrian partition of version 1.2 always cuts the whole domain once at a uniform position, then
+  as the Poisson process, giving −(b − x)(y − b) exp(−λ(y − x)) β², the example's value as λ → 0.
+  Both closed forms are tested, each implementation passing its own and failing the other.
+domain: {box: [[0.0, 1.0]]}
+data:
+  points: [[0.0], [0.3], [1.0]]          # x, b, y; x and y at the ends of the domain
+estimators:
+  - {id: cm, encoder: mondrian, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cm-legacy, encoder: mondrian-legacy, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
+checks:
+  - id: poisson
+    title: "the Mondrian process: the conditional covariance is 0"
+    kind: conditional_independence
+    family: identity
+    target: poisson
+    estimators: [cm]
+    n_members: {ci: 20000, full: 80000}
+  - id: forced-cut
+    title: "the partition of version 1.2: one forced uniform cut gives −(b−x)(y−b) exp(−λ(y−x))"
+    kind: conditional_independence
+    family: identity
+    target: forced_cut
+    estimators: [cm-legacy]
+    n_members: {ci: 20000, full: 80000}
+  - id: control-poisson
+    title: "negative control: the partition of version 1.2 does not give 0"
+    kind: conditional_independence
+    family: identity
+    target: poisson
+    estimators: [cm-legacy]
+    n_members: {ci: 20000, full: 80000}
+    expect: {default: reject}
+  - id: control-forced-cut
+    title: "negative control: the Mondrian process does not give the forced-cut value"
+    kind: conditional_independence
+    family: identity
+    target: forced_cut
+    estimators: [cm]
+    n_members: {ci: 20000, full: 80000}
+    expect: {default: reject}
+provenance:
+  v1: "2026-10-09: first version, the theory's single uniform cut read through its Mondrian analogue and through the partition of version 1.2; sizes fixed before the first run."

@@ -736,9 +736,25 @@ def eval_partition_law(sc: Scenario, runner: Runner, mode: str, seed: int,
     - ``fourth_cumulant`` (``data.spacings``, four points on a line) — identity: the fourth joint
       cumulant of a block-mark field with standard Gaussian marks, drawn by the evaluator on the
       estimator's partitions, equals :math:`2q^3(1-q)`, :math:`q = e^{-\lambda s}`, with a bootstrap
-      standard error.
+      standard error;
+    - ``conditional_independence`` (``data.points``, three points :math:`x < b < y` on a line, ``x``
+      and ``y`` at the ends of the domain) — identity: :math:`D = P(x \sim y) - P(x \sim b)\,
+      P(b \sim y)`, the conditional covariance :math:`\mathrm{Cov}(Z_x, Z_y \mid Z_b = \beta)` of a
+      block-mark field over :math:`\beta^2`, equals ``target``: ``poisson`` (0, cuts independent on
+      disjoint intervals) or ``forced_cut`` (:math:`-(b - x)(y - b)\, e^{-\lambda (y - x)}`, one
+      uniform cut of the whole domain added to the Poisson cuts), with a bootstrap standard error;
+    - ``voronoi_line`` (``data.n`` filler data, ``data.origin``, ``data.distances``, on a line) —
+      goodness of fit of the share of partitions putting the origin and the origin plus each
+      distance in one cell to the Poisson–Voronoi closed form :math:`(1 + \rho h)\, e^{-2\rho h}`,
+      :math:`\rho` the rate of the check (``rho``);
+    - ``isotropy`` (``data.n`` filler data, ``data.centre``, ``data.distances``, in the plane) —
+      identity: at each distance the share of partitions putting the centre and a point along the
+      first axis in one cell equals the share for a point along the diagonal, paired by partition.
 
-    Reads ``n_members`` (per mode) of each check.
+    The kinds ``voronoi_line`` and ``isotropy`` run each distance with its own seed, so that their
+    statistics are independent. The kinds ``voronoi_line`` and ``isotropy`` read the cells through the runner's optional method
+    ``cells``, with ``data.n`` data uniform in the domain, so that a Voronoi partition can reach its
+    intensity. Reads ``n_members`` (per mode) of each check.
     """
     s = sc.spec
     out = []
@@ -794,6 +810,46 @@ def eval_partition_law(sc: Scenario, runner: Runner, mode: str, seed: int,
                     q = np.exp(-lam * sp)
                     z.append((k4(Z) - 2 * q ** 3 * (1 - q)) / np.std(boot, ddof=1))
                 r = families.identity(z, "κ4 − 2q³(1−q)")
+            elif kind == "conditional_independence":
+                pts = np.asarray(s["data"]["points"], float)
+                same = _same_cell(runner, est, pts, n, seed)
+                xy, xb, by = same[:, 0, 2].astype(float), same[:, 0, 1].astype(float), same[:, 1, 2].astype(float)
+                d_of = lambda i: xy[i].mean() - xb[i].mean() * by[i].mean()
+                rng = np.random.default_rng(seed)
+                boot = [d_of(rng.integers(0, n, n)) for _ in range(500)]
+                x, b, y = pts[:, 0]
+                target = 0.0 if check["target"] == "poisson" else -(b - x) * (y - b) * np.exp(-lam * (y - x))
+                r = families.identity([(d_of(slice(None)) - target) / np.std(boot, ddof=1)],
+                                      f"(D − {target:.4f})/se, D={d_of(slice(None)):+.4f}")
+            elif kind in ("voronoi_line", "isotropy"):
+                if not hasattr(runner, "cells"):
+                    out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                            skipped=f"{runner.name} does not give the cells of its partitions"))
+                    continue
+                d = s["data"]
+                box = np.asarray(s["domain"]["box"], float)
+                rng = np.random.default_rng(int(d["generator_seed"]))
+                filler = (box[:, 0] + rng.random((int(d["n"]), len(box))) * (box[:, 1] - box[:, 0])).astype(np.float32)
+                dist = np.asarray(d["distances"], float)
+                # one run per distance, each with its own seed: independent proportions
+                if kind == "voronoi_line":
+                    o = float(d["origin"])
+                    p_hat = []
+                    for i, h in enumerate(dist):
+                        q = np.array([[o], [o + h]], np.float32)
+                        lab = np.asarray(runner.cells(est, filler, q, n_members=n, seed=_sub_seed(seed, i)))
+                        p_hat.append(float(np.mean(lab[1] == lab[0])))
+                    u = float(check["rho"]) * dist
+                    r = families.gof_proportions(np.array(p_hat), (1 + u) * np.exp(-2 * u), n)
+                else:
+                    c = np.asarray(d["centre"], float)
+                    z = []
+                    for i, h in enumerate(dist):
+                        q = np.vstack([c, c + [h, 0.0], c + np.array([h, h]) / np.sqrt(2)]).astype(np.float32)
+                        lab = np.asarray(runner.cells(est, filler, q, n_members=n, seed=_sub_seed(seed, i)))
+                        diff = (lab[1] == lab[0]).astype(float) - (lab[2] == lab[0]).astype(float)
+                        z.append(diff.mean() / (diff.std(ddof=1) / np.sqrt(n)))
+                    r = families.identity(z, "(axis − diagonal)/se")
             else:
                 raise ValueError(f"unknown check kind {kind}")
             out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),

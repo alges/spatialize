@@ -164,24 +164,48 @@ ordinary check and on the Mondrian partition of version 1.2 as a negative contro
 E4 — Poisson–Voronoi co-occurrence
 ==================================
 
-:Status: needs a reading method (not yet implemented)
+:Status: **implemented** (E4 on a line, E4b in the plane)
+:Evaluator: ``partition_law``
 :Source in the theory: co-occurrence function of the Poisson–Voronoi partition
 :Claim: in 2D the co-occurrence of two locations depends only on their distance (isotropy). In 1D
   it decays with distance faster than for the Mondrian process of the same mean cell length.
 
-**Setup.** A Poisson–Voronoi partition of intensity 3 in 2D, with pairs at equal distances along the
-axes and the diagonals, and of intensity 1 in 1D.
+**Setup.** Spatialize's Voronoi partition with nuclei uniform in the box is a Poisson–Voronoi
+partition, its number of nuclei being Poisson. On the line :math:`[0, 1]` the intensity is
+:math:`\rho = 20`, the origin 0.4 and the distances 0.02, 0.05, 0.1 and 0.2. In the unit square the
+intensity is 60, the centre :math:`(0.5, 0.5)` and the distances 0.05, 0.1 and 0.15. Each check
+uses :math:`20\,000` partitions in ``ci`` and :math:`80\,000` in ``full``.
+
+**Target.** Two locations share a cell when their nearest nucleus is the same. On a line, at
+distance :math:`h`, either no nucleus lies between them and the nearest one lies on the same side
+for both, with probability :math:`e^{-2\rho h}`, or exactly one lies between them, nearer to each
+than the nuclei outside, with probability :math:`\rho h\, e^{-2\rho h}`. Hence
+
+.. math::
+
+   e_V(h) = (1 + \rho h)\, e^{-2\rho h} < e^{-\rho h},
+
+the right-hand side being the Mondrian process with the same mean cell length :math:`1/\rho`. The
+closed form was checked against a direct simulation of a Poisson–Voronoi line, 200 000 draws per
+distance, within two standard errors. The origin lies at least 0.4 from either end, which keeps the
+edge effects below :math:`e^{-8}`.
 
 **Checks.**
 
-- *two-sample* (2D). The co-occurrence along the axes equals that along the diagonals at the same
-  distance.
-- *gof-closed* (1D) against a high-precision reference that the evaluator computes by simulating the
-  theory's process.
+- *gof-closed* (E4, ``line``). The share of partitions putting the origin and each other location
+  in one cell against :math:`e_V(h)`, each distance with its own seed, combined as
+  :math:`\sum z^2 \sim \chi^2_4`.
+- *identity* (E4b, ``isotropy``). At each distance the share along the first axis equals the share
+  along the diagonal, paired by partition.
+- *negative controls*. The Mondrian process of rate :math:`\rho` must reject :math:`e_V`, and the
+  Mondrian process in the plane, measuring distance in :math:`\ell_1`, must reject the isotropy.
 
-**Reading.** E2's single-datum reading does not apply to Spatialize's Voronoi partitions, since one
-datum gives at most one nucleus, whose cell then holds every query. A reading with many data, which
-asks whether two given locations fall in the cell of the same nucleus, has to be designed first.
+**Reading.** E2's single-datum reading does not apply to Voronoi partitions, since one datum gives
+at most one nucleus. The runner's method ``cells`` gives the cells instead, with filler data
+uniform in the domain (200 on the line, 400 in the plane), so that the partition can reach its
+intensity.
+
+**Results.** Not run yet.
 
 .. _scenario-E5:
 
@@ -233,23 +257,45 @@ partition of version 1.2 rejects with p at most :math:`10^{-9}`.
 E6 — Conditional covariance under one random cut
 ================================================
 
-:Status: negative control (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``partition_law``
 :Source in the theory: conditioning on an observed value under a random partition
 :Claim: observing a value at one location induces a negative covariance between two others that it
   can never share a cell with together.
 
-**Setup.** The interval :math:`(0, 1)` is cut once at a uniform position, with marks iid
-:math:`\mathcal N(0,1)` and locations :math:`x = 0`, :math:`b = 0.3`, :math:`y = 1`, so that :math:`x`
-and :math:`y` always fall in different cells.
+**Setup.** Locations :math:`x = 0`, :math:`b = 0.3` and :math:`y = 1` on the interval :math:`[0, 1]`,
+with marks iid of mean 0 and variance 1. The theory's example cuts the interval once at a uniform
+position. Spatialize offers no such partition, so the scenario reads the same quantity on the
+Mondrian process of rate 1 and on the Mondrian partition of version 1.2, with :math:`20\,000`
+partitions in ``ci`` and :math:`80\,000` in ``full``.
 
-**Target.** :math:`b` shares the left cell with probability 0.7 whatever its value
-:math:`\beta`, so :math:`E[Z_x \mid Z_b=\beta] = 0.7\beta`, :math:`E[Z_y \mid Z_b=\beta] =
-0.3\beta` and :math:`E[Z_xZ_y \mid Z_b=\beta] = 0`, giving
+**Target.** Given the partition, :math:`Z_x` equals :math:`\beta` when :math:`x` shares
+:math:`b`'s cell and is an independent mark otherwise, and likewise :math:`Z_y`. Hence
 
 .. math::
 
-   \mathrm{Cov}(Z_x, Z_y \mid Z_b = \beta) = -0.21\,\beta^2 .
+   \mathrm{Cov}(Z_x, Z_y \mid Z_b = \beta) = \beta^2 \big[P(x \sim y) - P(x \sim b)\, P(b \sim y)\big]
+   = \beta^2 D .
 
-**Check.**
+- One uniform cut, the theory's example: :math:`P(x \sim y) = 0`, :math:`P(x \sim b) = 0.7`,
+  :math:`P(b \sim y) = 0.3`, so :math:`D = -0.21`.
+- The Mondrian process: on a line its cuts are a Poisson process, independent on disjoint
+  intervals, so :math:`D = 0`.
+- The partition of version 1.2: it always cuts the whole domain once at a uniform position, then as
+  the Poisson process, so :math:`D = -(b - x)(y - b)\, e^{-\lambda (y - x)}`, the example's value as
+  :math:`\lambda \to 0`.
 
-- *identity* per bin of :math:`\beta`.
+Both closed forms were checked against a direct simulation, 400 000 draws each (:math:`D` within
+:math:`5 \times 10^{-4}`).
+
+**Checks.**
+
+- *identity* (``poisson``). On the Mondrian process, :math:`\hat D = 0`, with a bootstrap standard
+  error over the partitions.
+- *identity* (``forced-cut``). On the partition of version 1.2, :math:`\hat D` equals its closed
+  form.
+- *negative controls*. Each implementation must reject the other's closed form.
+
+**Reading.** Which of the three locations share a cell is read through the estimator, as in E1.
+
+**Results.** Not run yet.

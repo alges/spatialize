@@ -204,13 +204,18 @@ Evaluator ``partition_law``
 ---------------------------
 
 This evaluator reads the law of the partition of a few locations through the estimator (scenarios
-E1, E3 and E5), its estimators using the ``cellmean`` decoder.
+E1, E3, E4, E4b, E5 and E6), its estimators using the ``cellmean`` decoder.
 
-- ``data.points`` — locations on a line (``line_groupings``, ``interval_only``); ``data.sets`` — sets
-  of locations (``set_cooccurrence``); ``data.spacings`` and ``data.origin`` — four equally spaced
-  points (``fourth_cumulant``).
+- ``data.points`` — locations on a line (``line_groupings``, ``interval_only``,
+  ``conditional_independence``); ``data.sets`` — sets of locations (``set_cooccurrence``);
+  ``data.spacings`` and ``data.origin`` — four equally spaced points (``fourth_cumulant``);
+  ``data.n``, ``data.distances``, ``data.generator_seed`` and ``data.origin`` (``voronoi_line``) or
+  ``data.centre`` (``isotropy``) — filler data uniform in the domain and the distances read.
 - per check: ``kind`` (``line_groupings``, ``interval_only``, ``set_cooccurrence``,
-  ``fourth_cumulant``), ``estimators`` and ``n_members`` (per mode).
+  ``fourth_cumulant``, ``conditional_independence`` with ``target`` ``poisson`` or ``forced_cut``,
+  ``voronoi_line`` with ``rho``, ``isotropy``), ``estimators`` and ``n_members`` (per mode).
+- ``voronoi_line`` and ``isotropy`` read the cells through the runner's optional method ``cells``,
+  each distance with its own seed.
 
 Evaluator ``locality``
 ----------------------

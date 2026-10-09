@@ -108,10 +108,10 @@ Adding a scenario
 6. Run the suite (:doc:`running`) in both modes with several seeds, recording the calibration in the
    descriptor's ``provenance``.
 
-The refactor guard, outside the suite
-=====================================
+The guard checks, outside the suite
+===================================
 
-The repository also holds ``tests/refactor_guard``, a bitwise snapshot of the compiled library's
+The repository also holds ``tests/guard``, the guard checks, a bitwise snapshot of the compiled library's
 outputs on fixed inputs. It detects any change in the numbers during internal refactors. It works
 the opposite way to this suite, comparing realisations on one platform and one build, so it serves
 as no acceptance criterion and does not ship with the package.

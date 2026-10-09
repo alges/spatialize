@@ -2,7 +2,7 @@
 
 Run ONLY on the code BEFORE a refactor (snapshots describe that code, bugs included):
 
-    make && DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python tests/refactor_guard/make_snapshots.py
+    make && DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python tests/guard/make_snapshots.py
 
 (the DYLD_LIBRARY_PATH is needed on macOS with a conda Python, see the README).
 """

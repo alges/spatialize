@@ -282,7 +282,7 @@ of the partitions through the runner (:doc:`extending`).
 The rule that the empty cells of one partition draw distinct source cells, while candidates remain,
 cannot be read from the queries alone, since the number of empty cells of a partition is unknown.
 The library's own tests check it for the strategy ``data``
-(``tests/refactor_guard/test_identities.py``).
+(``tests/unit/test_empty_cells.py``).
 
 **Results.** On seeds 1 to 3, in both modes, every almost-sure check passes with no violation,
 among about 29 000 members per estimator in ``ci``, of which 40 % to 46 % lie in empty cells. The

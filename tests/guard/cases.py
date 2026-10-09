@@ -1,4 +1,4 @@
-"""Cases of the internal refactor guard (bitwise snapshots of the C++ extension).
+"""Cases of the guard checks (bitwise snapshots of the C++ extension).
 
 Every function exported by ``libspatialize`` is called with fixed inputs, parameters and seeds.
 The inputs are small geostatistical datasets (piecewise-constant Voronoi block-mark fields, the

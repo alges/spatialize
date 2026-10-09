@@ -1,4 +1,4 @@
-# Refactor guard (internal)
+# Guard checks (internal)
 
 Bitwise snapshots of every function exported by the C++ extension `libspatialize`, used to prove
 that a **pure refactor** (e.g. the encoder/decoder split) changes no output on the machine that
@@ -31,12 +31,15 @@ seed explicit. They pin the facade between Python and C++ (`spatialize.gs`), so 
 facade can be shown to leave every result unchanged. They import the package from this checkout's
 `src/python`, never an installed one.
 
+The unit tests of `tests/unit` (properties that must hold exactly, by topic) share the data and
+constants of `cases.py` and the loader of `snapshot_lib.py`.
+
 ## Usage (macOS, conda Python)
 ```bash
 python setup.py build_ext --inplace             # header edits are tracked since 2026-10-06
-DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python -m pytest -q tests/refactor_guard
+DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python -m pytest -q tests/guard
 # (re)generate, only on pre-refactor code:
-DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python tests/refactor_guard/make_snapshots.py [--only CASE ...]
+DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib python tests/guard/make_snapshots.py [--only CASE ...]
 ```
 `DYLD_LIBRARY_PATH` makes the in-place build load Homebrew's libomp instead of conda's older one.
 The guard refuses to run against a binary older than any `.cpp`/`.hpp` source.

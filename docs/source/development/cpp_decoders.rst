@@ -218,12 +218,12 @@ Step 7. Tests
 
 Three layers check a new decoder (:doc:`testing`).
 
-- **Properties that must hold exactly.** ``tests/refactor_guard/test_identities.py`` gathers them,
+- **Properties that must hold exactly.** The unit tests of ``tests/unit`` gather them,
   for instance that the median decoder gives, in every partition, the median of the data of each
   cell, read with :func:`~spatialize.gs.partitions.cell_labels`.
 - **Bitwise snapshots.** Adding the decoder to the list of cases in
-  ``tests/refactor_guard/cases.py`` and running
-  ``python tests/refactor_guard/make_snapshots.py --only CASE`` pins its outputs, so a later
+  ``tests/guard/cases.py`` and running
+  ``python tests/guard/make_snapshots.py --only CASE`` pins its outputs, so a later
   refactor that changes them is caught.
 - **Conformance scenarios.** A scenario names its estimators by catalogue name and parameters in
   its ``scenario.yaml``, for instance ``{id: med, encoder: mondrian, rate: 5.0, decoder: cellmedian,

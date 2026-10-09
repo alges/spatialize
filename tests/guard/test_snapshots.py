@@ -1,4 +1,4 @@
-"""Internal refactor guard: every libspatialize function must reproduce its snapshot bit for bit.
+"""Guard checks: every libspatialize function must reproduce its snapshot bit for bit.
 
 Snapshots are machine-specific (compiler, libm, OpenMP); the test is skipped on platforms without
 snapshots. See README.md.
@@ -14,7 +14,7 @@ import public_cases  # noqa: E402
 import snapshot_lib as sl  # noqa: E402
 
 if not os.path.isdir(sl.snap_dir()):
-    pytest.skip(f"no refactor-guard snapshots for platform {sl.platform_tag()}", allow_module_level=True)
+    pytest.skip(f"no guard-check snapshots for platform {sl.platform_tag()}", allow_module_level=True)
 
 LIB = sl.load_lib()
 CASES = {name: fn for name, _, fn in cases.cases(LIB)}

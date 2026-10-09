@@ -37,8 +37,9 @@ Building for tests
 
    python setup.py build_ext --inplace --force
 
-``build_ext`` does not track the headers under ``include/spatialize/``, so after editing one only
-``--force`` makes the change reach the compiled library. On macOS with a conda Python, setting
+``build_ext`` rebuilds the extension when a header under ``include/spatialize/`` changes, the
+headers being declared as its dependencies. ``--force`` rebuilds everything, which costs a few
+seconds more and removes any doubt. On macOS with a conda Python, setting
 ``DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib`` makes the in-place build load Homebrew's OpenMP
 runtime.
 

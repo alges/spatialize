@@ -11,8 +11,9 @@ SNAP_ROOT = os.path.join(os.path.dirname(__file__), "snapshots")
 
 
 def _check_fresh_build():
-    """Refuse a stale binary: `setup.py build_ext` does not track header dependencies, so editing a
-    .hpp and running `make` silently keeps the old extension (verified 2026-10-05)."""
+    """Refuse a stale binary, older than any C++ source. `setup.py build_ext` declares the headers as
+    dependencies (since 2026-10-06), but a build that failed or was skipped would otherwise leave an
+    old extension in place unnoticed (as happened on 2026-10-05, before the headers were declared)."""
     import glob
     so = glob.glob(os.path.join(REPO, "libspatialize*.so")) + glob.glob(os.path.join(REPO, "libspatialize*.pyd"))
     if not so:

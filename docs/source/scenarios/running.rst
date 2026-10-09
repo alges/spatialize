@@ -59,8 +59,8 @@ installation.
    export PYTHONPATH=.:src/python             # in-place build first, then the sources
    python -m spatialize.scenarios
 
-``build_ext`` does not track the C++ headers, so without ``--force`` a change to a header alone is not
-recompiled and you would be testing the old library.
+``build_ext`` rebuilds the extension when a C++ header changes, the headers being declared as its
+dependencies. ``--force`` rebuilds everything, so the suite never runs against an old library.
 
 .. note::
 

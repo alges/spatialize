@@ -105,9 +105,12 @@ Building from source
 
 These concern developers working on Spatialize itself (:doc:`development/index`).
 
-- **An edited header has no effect.** ``python setup.py build_ext`` does not track the headers under
-  ``include/spatialize``, so after editing one only ``--force`` rebuilds the extension. The unit tests
-  and the guard checks refuse a binary older than the sources.
+- **An edited header seems to have no effect.** ``python setup.py build_ext --inplace`` rebuilds the
+  extension when a header under ``include/spatialize`` changes, the headers being declared as its
+  dependencies. A Python that imports another copy of Spatialize, the one installed in its
+  environment, does not see the rebuild: run with the repository on the path (``PYTHONPATH``) or
+  install in editable mode (``pip install -e .``). ``--force`` rebuilds everything when in doubt. The
+  unit tests and the guard checks refuse a binary older than the sources.
 - **The in-place build loads the wrong runtime.** In a conda environment with an old
   ``llvm-openmp``, an extension built in place against Homebrew's runtime loads the environment's
   one. Update the environment's runtime as in the first section, or run with

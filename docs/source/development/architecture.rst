@@ -246,8 +246,11 @@ Reproducibility under parallel execution
   ``include/spatialize/interrupt.hpp``), and inside the per-cell searches of adaptive IDW at most every
   0.1 s, every thread stopping at its next cell. An interruption is then answered within one cell,
   as a ``KeyboardInterrupt``, rather than at the end of a partition, which with a costly decoder could
-  take minutes. Measured on 3 000 data, IDW stops within half a second, adaptive IDW in 3D within two
-  seconds and kriging, whose cells each solve one system, within about eight.
+  take minutes. A decoder that solves several systems in one cell, as kriging does in leave-one-out
+  and k-fold, also asks ``CellContext::interrupted()`` between them. Measured on 3 000 data and
+  20 000 locations, IDW stops within half a second, adaptive IDW in 3D within two seconds and kriging
+  within about five. A kriging cell holding every datum costs one decomposition of its system, about
+  two seconds here, which bounds that wait.
 - **Progress of a parallel loop.** At the same checks the calling thread reports the partitions
   every thread has finished, not only its own, so a bar advances with the whole team and its time
   remaining holds from the start. Reporting only at the end of the calling thread's partitions made

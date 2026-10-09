@@ -209,6 +209,10 @@ from the generator ``fit`` receives. The loop may run in parallel over the parti
 that only the calling thread talks to Python (progress and Ctrl-C), as ``AdaptiveIDWDecoder::fit``
 does.
 
+A decoder whose work in one cell is long, for instance one system per held-out datum, asks
+``cell.interrupted()`` between the parts. Once it returns ``true`` the run is being stopped. The
+decoder then returns at once, with any value in the places left, which the engine discards.
+
 Such a decoder also overrides ``fit_cell``, which fits one region from a given list of data with a
 given seed. The policy ``empty_cells="coarsen"`` uses it for a Mondrian ancestor, a region that is
 not a cell of the partition and so has no stored parameters.

@@ -7,6 +7,7 @@
 #include <functional>
 #include <stdexcept>
 #include "spatialize/partition.hpp"
+#include "spatialize/interrupt.hpp"
 
 namespace sptlz{
 	// Where a decoder is called: the tree and the cell of the ensemble, and the run's seed. Decoders
@@ -16,6 +17,11 @@ namespace sptlz{
 		int tree;
 		int cell;
 		unsigned int seed;
+		sptlz::Interrupt *interrupt = nullptr;  // the Ctrl-C state of the loop, for decoders with long cells
+
+		// true once the loop in progress must stop; a decoder that solves many systems in one cell asks
+		// between them, so that Ctrl-C need not wait for the whole cell
+		bool interrupted() const { return(interrupt != nullptr && interrupt->requested()); }
 	};
 
 	// Local interpolator applied inside one cell (the "decoder"). It never sees the partition

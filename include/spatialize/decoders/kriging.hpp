@@ -167,9 +167,10 @@ namespace sptlz{
         Eigen::Map<Eigen::MatrixXf> v = Eigen::Map<Eigen::MatrixXf>(sl_values.data(), 1, n+1);
         Eigen::Map<Eigen::MatrixXf> b = Eigen::Map<Eigen::MatrixXf>(right_cov.data(), n+1, m);
         Eigen::Map<Eigen::MatrixXf> A = Eigen::Map<Eigen::MatrixXf>(left_cov.data(), n+1, n+1);
-        auto A_1 = A.completeOrthogonalDecomposition().pseudoInverse();
-        auto weights = A_1*b;
-        auto vals = v*weights;
+        // The values need v A^+ b only. A is symmetric, so v A^+ = (A^+ v^T)^T: one solve for the
+        // values costs n^2 + n m after the decomposition, where the weights A^+ b cost n^2 m.
+        Eigen::VectorXf u = A.completeOrthogonalDecomposition().solve(v.transpose());
+        Eigen::MatrixXf vals = u.transpose()*b;
 
         result.resize(m);
         Eigen::Map<Eigen::MatrixXf>(&result[0], 1, m) = vals;
@@ -194,17 +195,20 @@ namespace sptlz{
 
         auto left_cov = kriging_left_matrix(&sl_coords, variogram(variogram_model, nugget, range, sill));
         for(int i=0; i<n; i++){
+          if(cell.interrupted()){  // one system per datum: answer Ctrl-C between them
+            result.resize(n, NAN);
+            return(result);
+          }
           auto aux = split_cov_matrix(&left_cov, n+1, i);
           auto right_cov = aux.second;
           auto new_values = slice_drop_idx(&sl_values, i);
 
           Eigen::Map<Eigen::MatrixXf> A = Eigen::Map<Eigen::MatrixXf>(aux.first.data(), n, n);
-          auto inv = A.completeOrthogonalDecomposition().pseudoInverse();
           // the held-out datum's value must not enter its own prediction: weights apply to the other
           // n-1 values (and the 0 that cancels the Lagrange multiplier)
           Eigen::Map<Eigen::MatrixXf> v = Eigen::Map<Eigen::MatrixXf>(new_values.data(), 1, n);
           Eigen::Map<Eigen::MatrixXf> b = Eigen::Map<Eigen::MatrixXf>(right_cov.data(), n, 1);
-          auto weights = inv*b;
+          Eigen::MatrixXf weights = A.completeOrthogonalDecomposition().solve(b);
           auto est = v*weights;
 
           result.push_back(est(0));
@@ -229,6 +233,7 @@ namespace sptlz{
         auto sl_folds = slice(folds, samples_id);
 
         for(int i=0; i<k; i++){
+          if(cell.interrupted()) return(result);  // one system per fold: answer Ctrl-C between them
           auto test_train = indexes_by_predicate<int>(&sl_folds, [i](int *j){return(*j==i);});
           if(test_train.first.size()!=0){ // if is 0, then there's nothing to estimate
             if(test_train.second.size()==0){
@@ -245,11 +250,11 @@ namespace sptlz{
               auto left_cov = kriging_left_matrix(&sl_coords_train, variogram(variogram_model, nugget, range, sill));
               auto right_cov = kriging_right_matrix(&sl_coords_train, &sl_coords_test, variogram(variogram_model, nugget, range, sill));
               Eigen::Map<Eigen::MatrixXf> A = Eigen::Map<Eigen::MatrixXf>(left_cov.data(), n+1, n+1);
-              auto inv = A.completeOrthogonalDecomposition().pseudoInverse();
               Eigen::Map<Eigen::MatrixXf> v = Eigen::Map<Eigen::MatrixXf>(sl_values_train.data(), 1, n+1);
               Eigen::Map<Eigen::MatrixXf> b = Eigen::Map<Eigen::MatrixXf>(right_cov.data(), n+1, m);
-              auto weights = inv*b;
-              auto est = v*weights;
+              // A is symmetric: v A^+ b = (A^+ v^T)^T b, as in leaf_estimation
+              Eigen::VectorXf u = A.completeOrthogonalDecomposition().solve(v.transpose());
+              Eigen::MatrixXf est = u.transpose()*b;
               for(size_t j=0; j<test_train.first.size(); j++){
                 result.at(test_train.first.at(j)) = est(j);
               }

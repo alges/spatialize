@@ -1,8 +1,11 @@
 """Posterior analysis of the data: each datum read against the law the other data give it.
 
 Run from the repository with ``python examples/scripted_examples/spa_example.py``. The figures are
-written next to the script's working directory.
+written to a folder of the system's temporary directory, printed at the end.
 """
+import os
+import tempfile
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -44,12 +47,15 @@ def main():
     # co-located data with different values
     print(audit.duplicates().head(5).to_string())
 
+    out = os.path.join(tempfile.gettempdir(), "spatialize-examples", "spa_example")
+    os.makedirs(out, exist_ok=True)
     for name, fig in (("calibration", audit.plot_calibration()), ("surprise_map", audit.plot_map()),
                       ("value_vs_position", audit.plot_value_pit()),
                       ("most_surprising", audit.plot_datum(int(table.index[0]))),
                       ("declustered", audit.plot_declustered()),
                       ("proportional_effect", audit.plot_proportional_effect())):
-        fig.savefig(f"spa_{name}.png", dpi=100)
+        fig.savefig(os.path.join(out, f"spa_{name}.png"), dpi=100)
+    print(f"figures saved in {out}")
 
 
 if __name__ == '__main__':

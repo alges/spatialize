@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 import matplotlib.pyplot as plt
 
 from spatialize import logging
@@ -19,7 +22,8 @@ using_sim = 'sim10'
 # directory where the model is saved and loaded from
 # this is the model trained on 5% of the data
 # and 200 partitions
-model_dir_path = "./adaptive_idw_reduced_200_partitions"
+# the results are saved in a folder of the system's temporary directory, not next to the script
+model_dir_path = os.path.join(tempfile.gettempdir(), "spatialize-examples", "adaptive_idw_reduced_200_partitions")
 
 # input variables for non gridded estimation spatialize functions
 points = data_reduced[0][['x', 'y']].values

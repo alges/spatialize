@@ -559,12 +559,25 @@ namespace sptlz{
             {0.1f, 5.0f, 0.2f},   // anisotropy ratio 1
             {0.1f, 5.0f, 0.2f}    // anisotropy ratio 2
           };
-          for(int i=0; i<best_of; i++){
+          // six parameters: a coordinate search from coarse to fine steps, 12 evaluations per move,
+          // where the full neighbourhood of grid_search costs 728 (3^6 - 1) and 1 degree steps
+          // walk hundreds of moves; the finest steps are those of the grid above
+          // each search being cheap, more random starts than in 1D and 2D
+          int best_of_3d = 10;
+          std::vector<std::vector<float>> steps = {
+            {1.0f, 0.2f},             // exponent p
+            {15.0f, 5.0f, 1.0f},      // azimuth
+            {15.0f, 5.0f, 1.0f},      // dip
+            {15.0f, 5.0f, 1.0f},      // plunge
+            {1.0f, 0.2f},             // anisotropy ratio 1
+            {1.0f, 0.2f}              // anisotropy ratio 2
+          };
+          for(int i=0; i<best_of_3d; i++){
             starting_point = {};
             for(int j=0; j<ranges.size(); j++){
               starting_point.push_back(ranges.at(j).at(0)+uni_float(rng)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
-            candidate = sptlz::grid_search<LOO3D>(func, &ranges, starting_point);
+            candidate = sptlz::coordinate_search<LOO3D>(func, &ranges, &steps, starting_point);
             aux = func->eval(candidate);
             if(aux<min_value){
               min_coords = candidate;

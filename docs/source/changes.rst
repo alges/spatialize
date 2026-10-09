@@ -101,8 +101,14 @@ Results that change
   slightly with small coordinates and greatly with large ones. With exact weights the sharpened map
   is no better than the adaptive one on the anisotropic test field (:ref:`scenario-S03`).
 - **Adaptive IDW in three dimensions.** The per-cell fit compared candidates with one of their
-  angles instead of their error, so it chose poor parameters. On the test data of the internal checks
-  the leave-one-out error fell by about 45 %.
+  angles instead of their error, so it chose poor parameters. Once corrected, its search over the six
+  parameters (exponent, three angles, two anisotropy ratios) evaluated the 728 neighbours of every
+  point at each move, with angles moving by one degree, which made the fit impractical on cells with
+  hundreds of data. The fit now moves one parameter at a time, from coarse steps to fine ones (15,
+  5 then 1 degree for the angles), from ten random starts. On the drill holes of the Andes it is 24
+  to 49 times faster, its leave-one-out error being 2 % to 8 % lower than that of the corrected
+  full search, and the bundled 3D example runs in two and a half minutes. Results in one and two
+  dimensions are unchanged.
 - **Kernel density estimates.** Their bandwidth ignored the spread of the sample, which made the
   simulations with ``point_model_name="kde"``, the ``neg_log_likelihood`` score and the Pareto
   encoder error depend on the units of the variable (samples with a spread of 0.01 were simulated

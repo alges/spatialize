@@ -139,6 +139,49 @@ namespace sptlz{
     return(cur);
   }
 
+  // Coordinate search from coarse to fine steps: at each level, every parameter is moved alone by
+  // plus or minus its step, a move kept as soon as it lowers the function, until no move does; the
+  // next level then repeats with finer steps. `steps[i]` lists the steps of parameter i, coarse
+  // first, the last one used for the levels beyond its length. It evaluates 2n neighbours per move
+  // instead of the 3^n - 1 of grid_search, which matters with many parameters (six in 3D).
+  template <class T>
+  std::vector<float> coordinate_search(T *func, std::vector<std::vector<float>> *ranges,
+                                       std::vector<std::vector<float>> *steps, std::vector<float> cur,
+                                       float tol=1e-6){
+    int n = static_cast<int>(ranges->size());
+    for(int i=0; i<n; i++){
+      if((cur.at(i)<ranges->at(i).at(0))||(ranges->at(i).at(1)<cur.at(i))){
+        throw std::runtime_error("starting point outside the bounds");
+      }
+    }
+    size_t levels = 0;
+    for(auto &st: *steps) levels = std::max(levels, st.size());
+    float minimum = func->eval(cur);
+    for(size_t level=0; level<levels; level++){
+      bool improved = true;
+      while(improved){
+        improved = false;
+        for(int i=0; i<n; i++){
+          auto &st = steps->at(i);
+          float step = st.at(std::min(level, st.size()-1));
+          for(int dir: {1, -1}){
+            std::vector<float> cand = cur;
+            cand.at(i) += dir*step;
+            if((cand.at(i) < ranges->at(i).at(0)) || (ranges->at(i).at(1) < cand.at(i))) continue;
+            float value = func->eval(cand);
+            if(value < minimum - tol){
+              minimum = value;
+              cur = cand;
+              improved = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+    return(cur);
+  }
+
   template <class T>
   std::vector<T> as_1d_array(std::vector<std::vector<T>> *arr, std::vector<int> idxs){
     std::vector<T> result;

@@ -272,6 +272,10 @@ look the session setting ``display`` chooses.
   propagate to the root logger and is not configured on import, so the logging of the application is
   left alone. The session setting ``verbosity`` sets the lowest level shown (warnings by default),
   unless a level was set on ``log`` itself.
+- **Summaries of the results.** A result class derives from ``spatialize.result.Summarised`` and
+  builds a ``spatialize._display.Summary`` in ``_summary()``, from blocks of named values and tables
+  of statistics. The summary renders itself as text (``repr``), HTML (``_repr_html_``) and ``rich``
+  (``__rich__``), so a new result class only describes its content.
 
 Adding a decoder
 ================

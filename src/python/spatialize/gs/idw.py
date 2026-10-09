@@ -10,6 +10,8 @@ from spatialize.gs import lib_spatialize_facade
 
 
 class IDWGridSearchResult(GridSearchResult):
+    _title = "IDW hyperparameter search"
+
     """Result of a hyperparameter grid search for plain IDW interpolation.
 
     Wraps the cross-validation error obtained for every combination of
@@ -73,6 +75,8 @@ class IDWGridSearchResult(GridSearchResult):
 
 
 class IDWResult(EstimationResult):
+    _title = "IDW estimation"
+
     """Result of a plain IDW estimation.
 
     Returned by :func:`idw_griddata` and :func:`idw_nongriddata`. Adds no

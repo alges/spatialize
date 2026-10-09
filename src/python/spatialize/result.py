@@ -7,7 +7,56 @@ from spatialize.viz import plot_colormap_data, plot_histogram, PlotStyle
 from typing import Optional, Dict, Any
 
 
-class GridSearchResult:
+class Summarised:
+    """A result that shows itself as a summary, in the manner of statistical packages: as text
+    (``repr`` and ``print``), as HTML in a notebook and with colours in a terminal (``rich``).
+    Subclasses build the summary in ``_summary()``."""
+
+    def summary(self):
+        """The summary of the result, a :class:`spatialize._display.Summary`, which shows itself as
+        text, HTML or with colours."""
+        return self._summary()
+
+    def show(self):
+        """Show the summary in the look of the session's ``display`` (:mod:`spatialize.session`)."""
+        self._summary().show()
+
+    def __repr__(self):
+        return self._summary().text()
+
+    def _repr_html_(self):
+        return self._summary()._repr_html_()
+
+    def __rich__(self):
+        return self._summary().__rich__()
+
+
+def _locations_text(result):
+    """The number of locations of a result, or the shape of its grid."""
+    if getattr(result, "griddata", False) and getattr(result, "original_shape", None) is not None:
+        return " × ".join(str(int(n)) for n in result.original_shape) + " grid"
+    return int(np.size(result.estimation())) if np.ndim(result.estimation()) else 1
+
+
+def _cell(value):
+    """A parameter value as a summary cell: functions by their name."""
+    if callable(value):
+        return getattr(value, "__name__", None) or repr(value)
+    return value
+
+
+def _data_rows(result):
+    rows = []
+    if getattr(result, "values", None) is not None:
+        rows.append(("data", int(np.size(result.values))))
+    pts = getattr(result, "points", None)
+    if pts is not None:
+        rows.append(("dimension", int(np.shape(pts)[1]) if np.ndim(pts) > 1 else 1))
+    rows.append(("locations", _locations_text(result)))
+    return rows
+
+
+class GridSearchResult(Summarised):
     """Base class for the result of a hyperparameter grid search.
 
     Wraps the cross-validation error obtained for every combination of
@@ -46,6 +95,32 @@ class GridSearchResult:
         self.cv_error = data[['cv_error']]
         min_error = self.cv_error.min()['cv_error']
         self.best_params = data[data.cv_error <= min_error]
+
+    _title = "Hyperparameter search"
+    _methods = "best_result() · plot_cv_error() · search_result_data"
+
+    def _search_rows(self):
+        data = self.search_result_data
+        return [("configurations", len(data)), ("best cv error", float(data["cv_error"].min())),
+                ("median cv error", float(data["cv_error"].median()))]
+
+    def _summary(self):
+        from spatialize import _display
+        data = self.search_result_data
+        skip = {"cv_error", "left_out", "nan_members"}
+        params = [c for c in data.columns if c not in skip]
+        varying = [c for c in params if data[c].astype(str).nunique() > 1] or params[:1]
+        extra = [c for c in ("left_out", "nan_members") if c in data.columns]
+        top = data.sort_values("cv_error").head(5)
+        rows = [[f"#{i + 1}"] + [_cell(r[c]) for c in varying] + [r["cv_error"]] + [r[c] for c in extra]
+                for i, (_, r) in enumerate(top.iterrows())]
+        best = [(c, _cell(self.best_params.iloc[0][c])) for c in params]
+        return _display.Summary(
+            self._title, subtitle=getattr(self, "_subtitle", None),
+            blocks=[("kv", "Search", self._search_rows()), ("kv", "Best configuration", best),
+                    ("table", "Best configurations", [""] + varying + ["cv error"] + [c.replace("_", " ") for c in extra],
+                     rows)],
+            footer=self._methods)
 
     def plot_cv_error(self,
                       theme: Optional[str] = 'alges',
@@ -168,7 +243,7 @@ class GridSearchResult:
         raise NotImplementedError
 
 
-class EstimationResult:
+class EstimationResult(Summarised):
     """Base class for the result of a spatial estimation at a set of locations.
 
     Wraps the estimated values at the interpolation locations `xi` together
@@ -325,11 +400,13 @@ class EstimationResult:
         if not in_notebook():
             return fig
 
-    def __repr__(self):
-        min, max = np.nanmin(self.estimation()), np.nanmax(self.estimation())
-        m, s, med = np.nanmean(self.estimation()), np.nanstd(self.estimation()), np.nanmedian(self.estimation())
-        msg = (f"estimation results: \n"
-               f"  minimum: {min:.3f}, maximum: {max:.3f}\n"
-               f"  mean: {m:.2f}, std dev: {s:.2f}, median: {med:.2f}\n"
-               f"to display the result, use the method ‘quick_plot()’.\n")
-        return msg
+    _title = "Estimation"
+    _methods = "estimation() · quick_plot() · plot_estimation()"
+
+    def _summary(self):
+        from spatialize import _display
+        return _display.Summary(
+            self._title, blocks=[("kv", "Data", _data_rows(self)),
+                                 ("table", "Estimate", _display.STATS_COLUMNS,
+                                  [_display.stats_row("estimate", self.estimation())])],
+            footer=self._methods)

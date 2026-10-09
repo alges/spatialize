@@ -309,3 +309,246 @@ def settings_table(rows):
     print("spatialize | session", file=sys.stderr)
     for name, value, changed in rows:
         print(f"  {name:{width}s}  {value!r}{'   (set)' if changed else ''}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------------------------- summaries
+def fmt(value):
+    """A value as a summary shows it: integers as they are, other numbers with four significant
+    digits, None and NaN as a dash."""
+    import numbers
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, numbers.Integral):
+        return str(int(value))
+    if isinstance(value, numbers.Real):
+        v = float(value)
+        if v != v:
+            return "—"
+        return f"{v:.4g}"
+    return str(value)
+
+
+class Summary:
+    """The summary of a result, in the manner of statistical packages: a title, blocks of named
+    values set side by side, tables of statistics and a closing line. It shows itself as text
+    (``repr``, ``print``), as HTML in a notebook and with colours in a terminal (``rich``).
+
+    Parameters
+    ----------
+    title : str
+        What the result is, e.g. ``"ESI estimation"``.
+    subtitle : str, optional
+        A short qualifier shown at the right of the title, e.g. ``"mondrian · idw"``.
+    blocks : list
+        ``("kv", heading, [(label, value), ...])`` for named values, or ``("table", heading,
+        columns, rows)`` for a table, ``rows`` being lists of values.
+    footer : str, optional
+        A closing line, e.g. the methods that read the result.
+    """
+    WIDTH = 86
+
+    def __init__(self, title, subtitle=None, blocks=(), footer=None):
+        self.title, self.subtitle, self.blocks, self.footer = title, subtitle, list(blocks), footer
+
+    # ------------------------------------------------------------------ text
+    def text(self):
+        w = self.WIDTH
+        head = f"spatialize · {self.title}"
+        lines = ["=" * w, head + (self.subtitle.rjust(w - len(head)) if self.subtitle else ""), "=" * w]
+        kv = []
+
+        def flush_kv():
+            if not kv:
+                return
+            col = (w - 2) // 2
+            for i in range(0, len(kv), 2):
+                pair = kv[i:i + 2]
+                rendered = []
+                for heading, rows in pair:
+                    keyw = max([len(str(k)) for k, _ in rows] + [8])
+                    block = [heading]
+                    block += [f"  {str(k):{keyw}s}  {fmt(v):>{max(col - keyw - 4, 6)}s}" for k, v in rows]
+                    rendered.append(block)
+                height = max(len(b) for b in rendered)
+                for r in range(height):
+                    cells = [(b[r] if r < len(b) else "").ljust(col) for b in rendered]
+                    lines.append("  ".join(cells).rstrip())
+                lines.append("-" * w)
+            kv.clear()
+
+        for block in self.blocks:
+            if block[0] == "kv":
+                kv.append((block[1], block[2]))
+                continue
+            flush_kv()
+            _, heading, columns, rows = block
+            cells = [[str(c) for c in columns]] + [[fmt(v) for v in row] for row in rows]
+            widths = [max(len(r[j]) for r in cells) for j in range(len(columns))]
+            lines.append(heading)
+            for k, row in enumerate(cells):
+                first = row[0].ljust(widths[0])
+                rest = "  ".join(c.rjust(widths[j + 1]) for j, c in enumerate(row[1:]))
+                lines.append(f"  {first}  {rest}".rstrip())
+                if k == 0:
+                    lines.append("  " + "-" * (sum(widths) + 2 * (len(widths) - 1)))
+            lines.append("-" * w)
+        flush_kv()
+        if lines[-1] == "-" * w:
+            lines.pop()
+        if self.footer:
+            lines += ["-" * w, self.footer]
+        lines.append("=" * w)
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return self.text()
+
+    __str__ = __repr__
+
+    # ------------------------------------------------------------------ html
+    def _repr_html_(self):
+        e = html.escape
+        c = COLOURS
+        parts = [f'<div class="sptlz-sum"><div class="hd"><span class="brand">spatialize</span>'
+                 f'<span class="dim"> · </span><span class="ttl">{e(self.title)}</span>'
+                 + (f'<span class="sub">{e(self.subtitle)}</span>' if self.subtitle else "") + "</div>"]
+        kv = []
+
+        def flush_kv():
+            if not kv:
+                return
+            parts.append('<div class="kvs">')
+            for heading, rows in kv:
+                body = "".join(f"<tr><td class='k'>{e(str(k))}</td><td class='v'>{e(fmt(v))}</td></tr>" for k, v in rows)
+                parts.append(f'<div class="kv"><div class="h">{e(heading)}</div><table>{body}</table></div>')
+            parts.append("</div>")
+            kv.clear()
+
+        for block in self.blocks:
+            if block[0] == "kv":
+                kv.append((block[1], block[2]))
+                continue
+            flush_kv()
+            _, heading, columns, rows = block
+            head = "".join(f"<th>{e(str(col))}</th>" for col in columns)
+            body = "".join("<tr>" + "".join(f"<td>{e(fmt(v))}</td>" for v in row) + "</tr>" for row in rows)
+            parts.append(f'<div class="h">{e(heading)}</div><table class="st"><thead><tr>{head}</tr></thead>'
+                         f'<tbody>{body}</tbody></table>')
+        flush_kv()
+        if self.footer:
+            parts.append(f'<div class="ft">{e(self.footer)}</div>')
+        parts.append("</div>")
+        css = f"""<style>
+.sptlz-sum{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12.5px;
+ color:inherit;border-top:2px solid {c['brand']};border-bottom:2px solid {c['brand']};padding:6px 2px 8px;
+ max-width:760px;margin:4px 0}}
+.sptlz-sum .hd{{display:flex;align-items:baseline;gap:2px;padding-bottom:6px;margin-bottom:6px;
+ border-bottom:1px solid rgba(75,135,175,.35)}}
+.sptlz-sum .brand{{font-weight:600;color:{c['brand']}}}
+.sptlz-sum .ttl{{font-weight:600}}
+.sptlz-sum .sub{{margin-left:auto;opacity:.65}}
+.sptlz-sum .dim{{opacity:.6}}
+.sptlz-sum .kvs{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 28px;margin-bottom:8px}}
+.sptlz-sum .h{{font-weight:600;color:{c['brand_dark']};margin:6px 0 2px}}
+.sptlz-sum table{{border-collapse:collapse;width:100%;font-size:inherit;color:inherit}}
+.sptlz-sum td,.sptlz-sum th{{padding:1px 6px;background:transparent!important}}
+.sptlz-sum .k{{opacity:.7;text-align:left}}
+.sptlz-sum .v{{text-align:right;font-variant-numeric:tabular-nums}}
+.sptlz-sum table.st{{width:auto;margin-bottom:6px}}
+.sptlz-sum table.st th{{text-align:right;font-weight:600;border-bottom:1px solid rgba(75,135,175,.45)}}
+.sptlz-sum table.st th:first-child,.sptlz-sum table.st td:first-child{{text-align:left}}
+.sptlz-sum table.st td{{text-align:right;font-variant-numeric:tabular-nums}}
+.sptlz-sum .ft{{margin-top:6px;padding-top:5px;border-top:1px solid rgba(75,135,175,.35);opacity:.7;
+ font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}}
+</style>"""
+        return css + "".join(parts)
+
+    # ------------------------------------------------------------------ rich
+    def __rich__(self):
+        from rich.console import Group
+        from rich.rule import Rule
+        from rich.table import Table
+        from rich.text import Text
+        from rich import box
+        c = COLOURS
+        items = [Rule(style=c["brand"])]
+        head = Table.grid(expand=True)
+        head.add_column()
+        head.add_column(justify="right")
+        head.add_row(Text.assemble(("spatialize", f"bold {c['brand']}"), (" · ", "dim"), (self.title, "bold")),
+                     Text(self.subtitle or "", style="dim"))
+        items += [head, Rule(style=c["brand_light"] + " dim")]
+        kv = []
+
+        def flush_kv():
+            if not kv:
+                return
+            grid = Table.grid(expand=True, padding=(0, 3))
+            for _ in kv[:2]:
+                grid.add_column(ratio=1)
+            for i in range(0, len(kv), 2):
+                cells = []
+                for heading, rows in kv[i:i + 2]:
+                    t = Table.grid(expand=True, padding=(0, 1))
+                    t.add_column(style="dim")
+                    t.add_column(justify="right")
+                    for k, v in rows:
+                        t.add_row(str(k), fmt(v))
+                    cells.append(Group(Text(heading, style=f"bold {c['brand_dark']}"), t))
+                grid.add_row(*cells)
+                grid.add_row(*[Text("") for _ in cells])
+            items.append(grid)
+            kv.clear()
+
+        for block in self.blocks:
+            if block[0] == "kv":
+                kv.append((block[1], block[2]))
+                continue
+            flush_kv()
+            _, heading, columns, rows = block
+            t = Table(box=box.SIMPLE_HEAD, header_style=f"bold {c['brand_dark']}", pad_edge=False,
+                      show_edge=False)
+            for j, col in enumerate(columns):
+                t.add_column(str(col), justify="left" if j == 0 else "right")
+            for row in rows:
+                t.add_row(*[fmt(v) for v in row])
+            items += [Text(heading, style=f"bold {c['brand_dark']}"), t, Text("")]
+        flush_kv()
+        if self.footer:
+            items += [Rule(style=c["brand_light"] + " dim"), Text(self.footer, style="dim")]
+        items.append(Rule(style=c["brand"]))
+        return Group(*items)
+
+    def show(self):
+        """Show the summary in the look of the session's ``display``."""
+        m = mode()
+        if m == "silent":
+            return
+        try:
+            if m == "terminal":
+                _rich_console().print(self)
+                return
+            if m == "notebook":
+                from IPython.display import display, HTML
+                display(HTML(self._repr_html_()))
+                return
+        except Exception:
+            pass
+        print(self.text())
+
+
+def stats_row(label, values):
+    """The row of a statistics table for ``values``: count, NaN count, minimum, quartiles, mean,
+    maximum and standard deviation of the finite values."""
+    import numpy as np
+    v = np.asarray(values, dtype=float).ravel()
+    ok = v[np.isfinite(v)]
+    if not ok.size:
+        return [label, v.size, v.size] + [None] * 7
+    q25, q50, q75 = np.percentile(ok, [25, 50, 75])
+    return [label, v.size, v.size - ok.size, ok.min(), q25, q50, float(ok.mean()), q75, ok.max(), float(ok.std())]
+
+
+STATS_COLUMNS = ["", "n", "NaN", "min", "q25", "median", "mean", "q75", "max", "std"]

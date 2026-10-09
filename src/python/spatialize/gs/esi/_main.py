@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from sklearn.model_selection import ParameterGrid
 
 from spatialize import SpatializeError, logging, session, GridSearchResult, EstimationResult
+from spatialize.result import Summarised
 import spatialize.gs.esi.aggfunction as af
 import spatialize.gs.esi.lossfunction as lf
 import spatialize.gs.esi.scorefunction as sf
@@ -18,6 +19,8 @@ from spatialize.viz import plot_colormap_array, PlotStyle
 
 
 class ESIGridSearchResult(GridSearchResult):
+    _title = "ESI hyperparameter search"
+
     """Result of a hyperparameter grid search for ESI.
 
     Wraps the cross-validation error obtained for every combination of
@@ -50,6 +53,7 @@ class ESIGridSearchResult(GridSearchResult):
     """
     def __init__(self, search_result_data, p_process):
         super().__init__(search_result_data)
+        self._subtitle = p_process
         self.p_process = p_process
 
     def best_result(self, **kwargs):
@@ -89,7 +93,7 @@ class ESIGridSearchResult(GridSearchResult):
         return result
 
 
-class ESIParetoResult:
+class ESIParetoResult(Summarised):
     """Results of a Pareto hyperparameter search for ESI.
 
     Analogous to :class:`ESIGridSearchResult` but carries two objectives per
@@ -139,6 +143,24 @@ class ESIParetoResult:
         self.p_process = p_process
         self.local_interpolator = local_interpolator
         self.frontier = self._compute_frontier(all_results)
+
+    def _summary(self):
+        from spatialize import _display
+        from spatialize.result import _cell
+        front = sorted(self.frontier, key=lambda r: r["epsilon"])
+        keys = sorted({k for r in self.all_results for k in r["params"]})
+        varying = [k for k in keys if len({repr(r["params"].get(k)) for r in self.all_results}) > 1] or keys[:1]
+        rows = [[f"#{i + 1}"] + [_cell(r["params"].get(k)) for k in varying] + [r["epsilon"], r["decoder_error"]]
+                for i, r in enumerate(front[:8])]
+        best = self.best_result()
+        search = [("configurations", len(self.all_results)), ("on the frontier", len(self.frontier)),
+                  ("partition", self.p_process), ("decoder", self.local_interpolator)]
+        chosen = [(k, _cell(best.get(k))) for k in keys if k in best]
+        return _display.Summary(
+            "ESI Pareto search", subtitle=f"{self.p_process} · {self.local_interpolator}",
+            blocks=[("kv", "Search", search), ("kv", "Best (min decoder error)", chosen),
+                    ("table", "Frontier, by encoder error", [""] + varying + ["encoder ε̂", "decoder error"], rows)],
+            footer="best_result(strategy) · best_for_tau(tau) · frontier · all_results")
 
     # ------------------------------------------------------------------
     # Public retrieval methods
@@ -450,6 +472,42 @@ class ESIResult(EstimationResult):
             self._xi_flat, _ = flatten_grid_data(xi)
         else:
             self._xi_flat = xi
+
+    _title = "ESI estimation"
+    _methods = "estimation() · esi_samples() · precision() · empty_cell_fraction() · quick_plot()"
+
+    def _summary(self):
+        from spatialize import _display
+        from spatialize.result import _data_rows
+        part = self.partition or {}
+        cfg = self.effective_config or {}
+        decoder = part.get("local_interpolator")
+        params = part.get("decoder_params") or {}
+        param_text = ", ".join(f"{k} {_display.fmt(v)}" for k, v in params.items()
+                               if v is not None and not callable(v))
+        alpha = part.get("alpha")
+        model = [("decoder", decoder), ("parameters", param_text or None),
+                 ("partition", part.get("p_process")),
+                 ("alpha", None if alpha is None else abs(alpha)),
+                 ("partitions", part.get("n_partitions")), ("seed", part.get("seed")),
+                 ("aggregation", part.get("agg_function"))]
+        if part.get("p_process") == "voronoi" and alpha is not None:
+            model.insert(3, ("nuclei", "at the data" if alpha >= 0 else "uniform"))
+        members = np.asarray(self._esi_samples, dtype=float)
+        finite = np.isfinite(members)
+        with np.errstate(invalid="ignore"):
+            spread = np.nanstd(np.where(finite, members, np.nan), axis=1) if members.size else np.array([])
+        ensemble = [("members per location", members.shape[1] if members.ndim == 2 else None),
+                    ("undefined members", f"{100 * (1 - finite.mean()):.1f} %" if members.size else None),
+                    ("mean spread (std)", float(np.nanmean(spread)) if np.isfinite(spread).any() else None)]
+        session_rows = [("empty cells", cfg.get("empty_cells")), ("domain", "fixed" if cfg.get("domain") else "box of the data")]
+        return _display.Summary(
+            self._title, subtitle=" · ".join(str(x) for x in (part.get("p_process"), decoder) if x),
+            blocks=[("kv", "Model", model), ("kv", "Data", _data_rows(self)),
+                    ("kv", "Ensemble", ensemble), ("kv", "Session", session_rows),
+                    ("table", "Estimate", _display.STATS_COLUMNS,
+                     [_display.stats_row("estimate", self.estimation())])],
+            footer=self._methods)
 
     def empty_cell_fraction(self):
         """The share of partitions in which the cell of each location held no datum.
@@ -1593,7 +1651,10 @@ def _call_libspatialize(points, values, xi, **kwargs):
     # the partitions the members come from: alpha as the engine took it (negative for Voronoi with
     # uniform nuclei), so that cells() can read them again
     partition = {"p_process": kwargs["p_process"], "alpha": float(l_args[3]),
-                 "n_partitions": int(l_args[2]), "seed": int(kwargs["seed"])}
+                 "n_partitions": int(l_args[2]), "seed": int(kwargs["seed"]),
+                 "local_interpolator": kwargs["local_interpolator"],
+                 "decoder_params": {name: kwargs.get(name) for name in decoder_params(kwargs["local_interpolator"])},
+                 "agg_function": getattr(kwargs["agg_function"], "__name__", None) or repr(kwargs["agg_function"])}
     return estimation, esi_samples, partition
 
 

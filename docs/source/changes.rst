@@ -50,6 +50,13 @@ New
   in the colours of the ``alges`` palette. Each progress bar names its task and shows the count, the
   elapsed time and the time left, then a summary line. The setting ``verbosity`` sets the lowest
   level of the messages shown. ``spatialize.session.show()`` uses the same look.
+- **Summaries of the results**, in the manner of statistical packages. Every estimation, search,
+  simulation, Pareto search and posterior analysis shows what was estimated and how, the data, the
+  ensemble and the statistics of the estimate (count, undefined values, quartiles, mean, extremes,
+  standard deviation), or its best configurations, as text when printed, as HTML in notebooks and in
+  colour in terminals, with ``summary()`` and ``show()`` (:doc:`reference/result`). The summaries
+  replace the short text of version 1.2. The ESI results now record their decoder, its parameters
+  and the aggregation.
 - **Conformance tests** (:doc:`scenarios/index`), runnable with ``python -m spatialize.scenarios``,
   which prints its progress as it runs. Scenario P10 holds the empty-cell policies to what they
   declare (:ref:`scenario-P10`). Scenario P11 shows the selection bias of a cross-validation score

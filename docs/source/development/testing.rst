@@ -86,6 +86,8 @@ in ``tests/unit``.
      - the readings of the posterior analysis (:doc:`../theory/posterior`)
    * - ``test_information.py``
      - the marginal entropies of the mutual information
+   * - ``test_summaries.py``
+     - the summaries of the results report the same figures as text, HTML and ``rich``
 
 .. code-block:: bash
 

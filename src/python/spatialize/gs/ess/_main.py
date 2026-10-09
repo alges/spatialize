@@ -5,6 +5,7 @@ from sklearn.exceptions import ConvergenceWarning
 import warnings
 
 from spatialize import logging
+from spatialize.result import Summarised
 from spatialize._parallel import map_chunks
 from spatialize.empirical import (FittedModelFactory, _local_target_variance,
                                    _local_target_skewness)
@@ -15,7 +16,7 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
-class ESSResult:
+class ESSResult(Summarised):
     """
     A class to represent the result of Ensemble Spatial Simulation (ESS).
 
@@ -58,8 +59,19 @@ class ESSResult:
         self.scenarios = ess_scenarios
         self.desc = desc
 
-    def __repr__(self):
-        return str(self.desc)
+    def _summary(self):
+        from spatialize import _display
+        from spatialize.result import _data_rows
+        sc = np.asarray(self.scenarios, dtype=float)
+        n_sims = sc.shape[-1] if sc.ndim >= 2 else 1
+        rows = [_display.stats_row("estimate", self.esi_result.estimation()),
+                _display.stats_row("all scenarios", sc)]
+        if sc.ndim >= 2:
+            rows.append(_display.stats_row("scenario means", np.nanmean(sc.reshape(-1, n_sims), axis=0)))
+        sim = [("scenarios", n_sims), ("description", self.desc or None)]
+        return _display.Summary("ESS simulation", blocks=[("kv", "Simulation", sim), ("kv", "Data", _data_rows(self.esi_result)),
+                                                          ("table", "Values", _display.STATS_COLUMNS, rows)],
+                                footer="scenarios · quick_plot() · esi_result")
 
     def quick_plot(self, n_imgs=9, n_cols=3, norm_lims=False, title_prefix="scenario", title=None,
                    theme='alges', cmap=None):

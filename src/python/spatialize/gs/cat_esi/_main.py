@@ -531,17 +531,27 @@ class CatESIResult(EstimationResult):
         else:
             return fig
 
-    def __repr__(self):
-        est = self.estimation()
-        unique = sorted({str(v) for v in est.ravel() if v is not None})
-        return (f"CatESIResult\n"
-                f"  categories : {list(unique)}\n"
-                f"  n_locations: {est.shape[0] if not self.griddata else np.prod(self.original_shape)}\n"
-                f"  n_partitions: {self._esi_samples.shape[1]}\n"
-                f"Use .estimation(), .esi_samples(), .precision(), .plot_estimation()")
+    _title = "Categorical ESI estimation"
+    _methods = "estimation() · esi_samples() · precision() · quick_plot()"
+
+    def _summary(self):
+        from spatialize import _display
+        from spatialize.result import _data_rows
+        est = np.asarray(self.estimation(), dtype=object).ravel()
+        labels, counts = np.unique([str(v) for v in est if v is not None], return_counts=True)
+        rows = [[lab, int(c), f"{100 * c / max(len(est), 1):.1f} %"] for lab, c in zip(labels, counts)]
+        members = np.asarray(self._esi_samples, dtype=object)
+        ensemble = [("members per location", members.shape[1] if members.ndim == 2 else None),
+                    ("categories", len(labels)), ("ordinal", "yes" if self.ordinal_order else "no")]
+        return _display.Summary(
+            self._title, blocks=[("kv", "Data", _data_rows(self)), ("kv", "Ensemble", ensemble),
+                                 ("table", "Most frequent category per location", ["category", "locations", "share"], rows)],
+            footer=self._methods)
 
 
 class CatESIGridSearchResult(GridSearchResult):
+    _title = "Categorical ESI hyperparameter search"
+
     """Result of a hyperparameter search for categorical ESI.
 
     Wraps the per-combination cross-validation scores produced by

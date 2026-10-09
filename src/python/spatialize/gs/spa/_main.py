@@ -23,6 +23,7 @@ from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_targe
 from spatialize.gs import (lib_spatialize_facade, partitioning_process, local_interpolator as li,
                            with_more_decoders, decoder_arguments)
 from spatialize.logging import default_singleton_callback, log_message
+from spatialize.result import Summarised
 from spatialize.viz import PlotStyle
 
 
@@ -246,7 +247,7 @@ def _tail_readings(laws, values, tails, nu, q=0.9):
     return logf, ent, below, above
 
 
-class PosteriorAudit:
+class PosteriorAudit(Summarised):
     """The predictive law of each datum built from the other data, and its readings.
 
     Parameters
@@ -412,6 +413,32 @@ class PosteriorAudit:
         return out
 
     # ------------------------------------------------------------------ readings of each datum
+    def _summary(self, q=0.05):
+        from spatialize import _display
+        n, T = self.members.shape
+        cal = self.calibration()
+        cov = cal["coverage"].set_index("alpha")
+        p = self.tail_p()
+        flags = _bh(p, q)
+        audit = [("data", n), ("members per datum", T), ("median support", float(np.median(self.support))),
+                 ("data with support < 0.5", int(np.sum(self.support < 0.5))),
+                 ("tails", self.tails + (f" (ν = {self.nu:g})" if self.tails == "t" else "")),
+                 ("scale", self.scale)]
+        calib = [("spread factor", f"{cal['spread_factor']:.3f}"),
+                 ("inside 90 % interval", f"{100 * cov.loc[0.9, 'observed']:.1f} %" if 0.9 in cov.index else None),
+                 ("inside 99 % interval", f"{100 * cov.loc[0.99, 'observed']:.1f} %" if 0.99 in cov.index else None),
+                 ("tails", cal["verdict"]), ("centre", cal["centre"]),
+                 (f"flagged (FDR {q:g})", int(flags.sum()))]
+        order = np.argsort(np.where(np.isfinite(p), p, np.inf))[:8]
+        pit, shift = self.pit(), self.shift()
+        rows = [[f"#{int(i)}", float(self.values[i]), float(pit[i]), float(p[i]), "yes" if flags[i] else "",
+                 float(shift[i])] for i in order]
+        return _display.Summary(
+            "Posterior analysis of the data",
+            blocks=[("kv", "Laws", audit), ("kv", "Calibration and flags", calib),
+                    ("table", "Most surprising data", ["datum", "value", "position", "p-value", "flag", "shift"], rows)],
+            footer="table() · calibration() · flags() · weights() · declustered() · plot_map()")
+
     def _robust_targets(self):
         """Per datum, the robust variance and the skewness of its nearest other data, on the scale
         of the readings."""

@@ -49,7 +49,10 @@ New
   notebooks, live bars drawn with ``rich`` in terminals and IDEs, plain lines in logs and files, all
   in the colours of the ``alges`` palette. Each progress bar names its task and shows the count, the
   elapsed time and the time left, then a summary line. The setting ``verbosity`` sets the lowest
-  level of the messages shown. ``spatialize.session.show()`` uses the same look.
+  level of the messages shown, and ``progress`` turns the bars off while keeping the warnings.
+  ``spatialize.session.show()`` uses the same look. The ``callback`` of every function now defaults to
+  ``None``, meaning the session's look, a callable remaining the way to send the progress and the
+  messages elsewhere.
 - **Summaries of the results**, in the manner of statistical packages. Every estimation, search,
   simulation, Pareto search and posterior analysis shows what was estimated and how, the data, the
   ensemble and the statistics of the estimate (count, undefined values, quartiles, mean, extremes,
@@ -142,6 +145,12 @@ Results that change
   as the data a search leaves out of its score, were hidden. Warnings and errors are now shown by
   default (session setting ``verbosity``). Spatialize no longer configures the root logger of the
   application on import, its messages going through its own logger, ``spatialize.logging.log``.
+- **Maps at scattered locations.** The plots of an estimate at locations given as a list
+  (``esi_nongriddata``, ``quick_plot``) reshaped the values with ``w`` and ``h`` as given, so a
+  swapped pair, as in the bundled examples, scrambled the map, and locations that did not fill a
+  grid were cut to a smaller one. Locations on a regular grid now decide the shape and the order
+  themselves (``w`` the number of distinct x, ``h`` of distinct y), a disagreeing ``w``/``h`` being
+  ignored with a warning, and other locations are drawn as points.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn

@@ -16,7 +16,7 @@ logging.log.setLevel("DEBUG")
 samples, locations, krig, _ = load_drill_holes_andes_2D()
 
 # estimation data and result shape
-w, h = 300, 200
+w, h = 200, 300   # columns (distinct x) and rows (distinct y) of the location grid
 
 # input variables for non gridded estimation spatialize functions
 points = samples[['x', 'y']].values
@@ -24,7 +24,7 @@ values = samples[['cu']].values[:, 0]
 xi = locations[['x', 'y']].values
 
 # kriging estimation example result
-krig_im = krig[['est_cu_case_esipaper']].values[:, 0].reshape(300, 200)
+krig_im = krig[['est_cu_case_esipaper']].values[:, 0].reshape(h, w)
 
 # plotting original data along with the kriging estimation example
 fig = plt.figure(dpi=150, figsize=(10, 5))

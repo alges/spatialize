@@ -13,7 +13,7 @@ samples, locations, krig, _ = load_drill_holes_andes_2D()
 locations = locations.sort_values(["z", "y", "x"])
 
 # estimation data and result shape
-w, h = 300, 200
+w, h = 200, 300   # columns (distinct x) and rows (distinct y) of the location grid
 
 # input variables
 points = samples[['x', 'y']].values.astype('float32')
@@ -25,7 +25,7 @@ xi = locations[['x', 'y']].values
 xi_x, xi_y = locations[['x']].values, locations[['y']].values
 
 # load previously calculated manual expert kriging results
-krig_im = krig[['est_cu_case_esipaper']].values[:, 0].reshape(300, 200)
+krig_im = krig[['est_cu_case_esipaper']].values[:, 0].reshape(h, w)
 
 # search parameters for the best variogram model
 param_dict = {
@@ -60,7 +60,7 @@ colorbar(img1, orientation='vertical', cax=cax)
 
 ax2.set_aspect('equal')
 ax2.set_title('pykgrige automated o. kriging')
-im = estimate.reshape(w, h)
+im = estimate.reshape(h, w)
 img = ax2.imshow(im, origin='lower', cmap='coolwarm')
 divider = make_axes_locatable(ax2)
 

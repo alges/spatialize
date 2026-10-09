@@ -802,6 +802,37 @@ def plot_histogram(data, ax, color='skyblue', alpha=0.9, rwidth=0.92, hide_empty
     ax.tick_params(axis='x', rotation=30)
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.3f}'))
 
+def _as_image(values, w=None, h=None, xi_locations=None):
+    """The values at scattered locations as an image for ``imshow``, rows along y and columns along
+    x, or None when they cannot form one.
+
+    When the locations are given and fill a regular grid, they decide the shape and the order: the
+    values are sorted by y then x, whatever their order, and a ``w``/``h`` that disagrees with the
+    grid is ignored with a warning (``w`` is the number of distinct x, ``h`` of distinct y).
+    Otherwise ``w`` and ``h`` reshape the values as given, row by row. Locations that do not fill a
+    grid, without a matching ``w``/``h``, give None, for the caller to draw points instead.
+    """
+    values = np.asarray(values)
+    n = values.shape[0]
+    if xi_locations is not None and np.ndim(xi_locations) == 2 and np.shape(xi_locations)[1] == 2:
+        xi = np.asarray(xi_locations)
+        nx, ny = len(np.unique(xi[:, 0])), len(np.unique(xi[:, 1]))
+        if nx * ny == n and len(np.unique(xi, axis=0)) == n:
+            if w is not None and h is not None and (int(w), int(h)) != (nx, ny):
+                log_message(logging.logger.warning(
+                    f"w={w}, h={h} do not match the locations, which form a grid of {nx} columns (x) by "
+                    f"{ny} rows (y); the image uses the locations"))
+            order = np.lexsort((xi[:, 0], xi[:, 1]))
+            return values[order].reshape(ny, nx)
+    if w is not None and h is not None:
+        if int(w) * int(h) != n:
+            raise SpatializeError(f"w={w} by h={h} does not hold the {n} values")
+        return values.reshape(int(h), int(w))
+    if xi_locations is None:
+        raise SpatializeError("Must provide either w/h or xi_locations")
+    return None
+
+
 def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddata=False,
                        title=None, xlabel='', ylabel='', show_colorbar=True, cbar_label='Value',
                        figsize=None, dpi=120, theme=None, data_type='auto',
@@ -814,10 +845,15 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
 
     - **Grid data** (``griddata=True``): *data* is already a 2D array; it is
       transposed for display.
-    - **Explicit shape** (``w`` and ``h`` provided): flat *data* is reshaped to
-      ``(h, w)``.
-    - **Inferred shape** (``xi_locations`` provided): shape is derived from the
-      unique X/Y coordinates in *xi_locations*.
+    - **Locations on a regular grid** (``xi_locations`` provided): the shape and
+      the order come from the distinct x (columns) and y (rows) of the locations,
+      whatever the order of the values; a ``w``/``h`` that disagrees is ignored
+      with a warning.
+    - **Explicit shape** (``w`` and ``h``, the numbers of columns and rows):
+      flat *data* is reshaped to ``(h, w)`` row by row, when the locations do not
+      decide it.
+    - **Locations that do not fill a grid**, without ``w``/``h``: one point per
+      location.
 
     Parameters
     ----------
@@ -917,21 +953,8 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
 
     if griddata:
         im = data if _is_xy_indexed(xi_locations) else data.T
-    elif w is not None and h is not None:
-        im = data.reshape(h, w)
-    elif xi_locations is None:
-        raise SpatializeError("Must provide either w/h or xi_locations")
     else:
-        # Ensure data is in correct order for imshow
-        sort_indices = np.lexsort((xi_locations[:, 0], xi_locations[:, 1]))
-        sorted_data = data[sort_indices]
-        
-        w, h = len(np.unique(xi_locations[:, 0])), len(np.unique(xi_locations[:, 1]))
-        if len(data) != w * h:
-            w, h = w-1, h-1
-        log_message(logging.logger.debug(f"using h={h}, w={w}"))
-            
-        im = sorted_data.reshape(h, w)
+        im = _as_image(data, w, h, xi_locations)
 
     if ax is not None:
         plotter = ax
@@ -954,7 +977,15 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
                     imshow_args['vmin'] = -m
                     imshow_args['vmax'] = m
 
-    img = plotter.imshow(im, origin='lower', **imshow_args)
+    if im is None:
+        # locations that do not fill a grid: one point per location
+        xi = np.asarray(xi_locations)
+        point_args = {k: v for k, v in imshow_args.items() if k in ("cmap", "vmin", "vmax", "norm", "alpha")}
+        img = plotter.scatter(xi[:, 0], xi[:, 1], c=np.asarray(data, dtype=float), s=8, marker="s",
+                              linewidths=0, **point_args)
+        plotter.set_aspect("equal")
+    else:
+        img = plotter.imshow(im, origin='lower', **imshow_args)
 
     # Optional colorbar
     if show_colorbar:
@@ -1659,21 +1690,11 @@ def plot_categorical_colormap(data, categories=None, cmap='auto', data_type='cat
     if griddata:
         reshaped = encoded.reshape(data.shape)
         im = reshaped if _is_xy_indexed(xi_locations) else reshaped.T
-    elif w is not None and h is not None:
-        im = encoded.reshape(h, w)
-    elif xi_locations is not None:
-        sort_indices = np.lexsort((xi_locations[:, 0], xi_locations[:, 1]))
-        sorted_enc = encoded[sort_indices]
-        w_u = len(np.unique(xi_locations[:, 0]))
-        h_u = len(np.unique(xi_locations[:, 1]))
-        if len(encoded) != w_u * h_u:
-            w_u, h_u = w_u - 1, h_u - 1
-        log_message(logging.logger.debug(f"plot_categorical_colormap: h={h_u}, w={w_u}"))
-        im = sorted_enc.reshape(h_u, w_u)
     else:
-        raise SpatializeError(
-            "Must provide either w/h or xi_locations when griddata=False."
-        )
+        im = _as_image(encoded, w, h, xi_locations)
+        if im is None:
+            raise SpatializeError("the locations do not fill a regular grid: give w and h, or plot the "
+                                  "categories as points")
 
     # Create axes if needed
     if ax is not None:

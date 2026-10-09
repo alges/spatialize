@@ -128,7 +128,7 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
     log_message(logging.logger.info(f"{len(sim_results)}"
                                     f" instance{plural}"
                                     f" of ESSResult {tense} "
-                                    f"loaded : {sim_results}"))
+                                    f"loaded: {', '.join(r.desc for r in sim_results)}"))
 
     return sim_results
 
@@ -227,7 +227,7 @@ def save_result(result_dir_path, result):
 
     if isinstance(result, ESSResult):
         # save the simulations
-        fn = str(result) + ".csv"
+        fn = str(result.desc) + ".csv"      # the description names the file (repr is the summary)
         pn = os.path.join(result_dir_path, fn)
         columns = [f"sim{i}" for i in range(result.scenarios.shape[1])]
         pd.DataFrame(result.scenarios).to_csv(pn, index=False, header=columns)

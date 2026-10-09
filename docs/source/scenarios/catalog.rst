@@ -130,56 +130,56 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - 
    * - :ref:`S01 <scenario-S01>`
      - simulation keeps the geometry of the field
-     - ready
-     - —
+     - ready · priority 4
+     - runner method for simulated fields
    * - :ref:`S02 <scenario-S02>`
      - error stops decreasing beyond some ensemble size
-     - ready
-     - —
+     - ready · priority 1
+     - Mondrian block-mark generator
    * - :ref:`S03 <scenario-S03>`
      - anisotropic field (visual criteria V1, V4 and V5, the order of the decoders)
      - **implemented**
      - kriging baselines for V2 and the comparison with ordinary kriging
    * - :ref:`S04 <scenario-S04>`
      - zero-inflated field
-     - partly ready
-     - draw decoders (phase 2) for its main claims
+     - ready · priority 2
+     - zero-inflated mark sampler; edge-sharpness functional (V6)
    * - :ref:`S05 <scenario-S05>`
      - heavy-tailed field
-     - partly ready
-     - ordinary kriging baseline (external dependency)
+     - partly ready · priority 9
+     - ordinary-kriging baseline (V7), writable in NumPy
    * - :ref:`S06 <scenario-S06>`
      - non-stationary field, order relations of the estimated law
-     - partly ready
-     - indicator kriging baseline (external dependency)
+     - partly ready · priority 10
+     - indicator-kriging baseline (negative control), writable in NumPy
    * - :ref:`S07 <scenario-S07>`
      - exceedance areas
-     - ready
-     - derive the area-variance identity independently
+     - ready · priority 8
+     - closed form of the area variance; simulated fields (S01)
    * - :ref:`S08 <scenario-S08>`
      - support effect on tonnage curves
-     - ready
-     - —
+     - ready · priority 3
+     - tonnage functional
    * - :ref:`S09 <scenario-S09>`
      - resource categories under preferential sampling
-     - ready
-     - preferential design generator
+     - ready · priority 7
+     - preferential-design generator; classification rule
    * - :ref:`S10 <scenario-S10>`
      - optimal quantile levels
-     - ready
-     - —
+     - ready · priority 6
+     - loss-optimal quantile readings
    * - :ref:`S11 <scenario-S11>`
      - granularity and covariance
-     - ready
-     - —
+     - ready · priority 5
+     - covariance-shape reading (V11)
    * - :ref:`S12 <scenario-S12>`
      - edge cases: few data, duplicates, queries on data and outside the data box
      - **implemented**
      - —
    * - :ref:`S13 <scenario-S13>`
      - connectivity of high-value bodies
-     - ready
-     - connectivity functional
+     - ready · priority 11
+     - connectivity functional; elongated-body generator; simulated fields (S01)
    * - 
      - **V — visual criteria**
      - 
@@ -190,45 +190,45 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - V2
      - anisotropy against a fitted isotropic kriging (S03)
-     - blocked
-     - ordinary kriging baseline (external dependency)
+     - blocked · priority 8
+     - ordinary-kriging baseline with a fitted isotropic variogram, writable in NumPy
    * - V3
      - anisotropy in members and simulations (S03)
-     - ready
-     - —
+     - ready · priority 1
+     - directional range ratio; simulated fields (S01)
    * - V4
      - Mondrian blocks averaged away (S03); S11
-     - **implemented** on S03
-     - S11 for the coarse-partition case
+     - **implemented** on S03 · priority 4 on S11
+     - S11
    * - V5
      - contrast: maps not more washed out than the best linear predictor (S03); the "false cure"
        of coarse partitions (S11)
-     - **implemented** on S03
-     - S11 for the "false cure"
+     - **implemented** on S03 · priority 5 on S11
+     - S11
    * - V6
      - sharp dry-region boundaries (S04)
-     - blocked
-     - draw decoders (phase 2)
+     - ready · priority 3
+     - edge-sharpness functional (with S04)
    * - V7
      - halos around extreme values (S05)
-     - partly ready
-     - ordinary kriging baseline for the halo comparison
+     - partly ready · priority 9
+     - halo index; ordinary-kriging baseline (V2)
    * - V8
      - exceedance regions (S07)
-     - ready
-     - —
+     - ready · priority 7
+     - pre-set IoU level (with S07)
    * - V9
      - roughness against a global simple-kriging reference
-     - ready
-     - reference computed in numpy
+     - ready · priority 2
+     - roughness functional; cropped-neighbourhood kriging control
    * - V10
      - connectivity of high-value bodies (S13)
-     - ready
-     - connectivity functional
+     - ready · priority 10
+     - connectivity functional (with S13)
    * - V11
      - shape of estimated covariance level curves
-     - ready
-     - —
+     - ready · priority 6
+     - covariance-shape reading (with S11)
 
 
 Example run

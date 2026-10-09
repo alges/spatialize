@@ -16,12 +16,36 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
+S03 and S12 are implemented. The other scenarios are ordered below by priority, which weighs what a
+scenario adds to the claims already tested against what it still needs. Each scenario's section
+repeats its rank and lists what its implementation takes.
+
+#. **S02**, the error floor of the ensemble. It complements P1 and needs only a Mondrian block-mark
+   generator.
+#. **S04**, a zero-inflated field. It is the main practical case of the draw decoders, now in the
+   catalogue.
+#. **S08**, the support effect on tonnage curves. One functional on existing generators.
+#. **S01**, simulation keeps the geometry. It is the first test of simulation, needing a runner
+   method for simulated fields.
+#. **S11**, granularity and covariance. Its visual functionals exist, except the shape of the
+   estimated covariance.
+#. **S10**, loss-optimal quantiles. New readings on existing generators.
+#. **S09**, resource categories. A preferential-design generator and a classification rule fixed in
+   advance.
+#. **S07**, exceedance areas. Its coverage check is ready, its identity awaits a derivation.
+#. **S05**, a heavy-tailed field. Its main checks are ready, its comparison with kriging awaits a
+   baseline.
+#. **S06**, order relations in a non-stationary field. P4 already covers the ensemble's side, the
+   negative control awaits an indicator-kriging baseline.
+#. **S13**, connectivity. A new generator, a new functional and simulated fields.
+
 .. _scenario-S01:
 
 S01 — Simulation keeps the geometry
 ===================================
 
 :Status: ready (not yet implemented)
+:Priority: 4 of 11 among the pending scenarios
 :Source in the theory: ensemble spatial simulation
 :Claim: fields simulated from the ensemble keep the spatial structure of the truth, which independent draws from the same per-location laws lose.
 
@@ -31,12 +55,26 @@ S01 — Simulation keeps the geometry
 
 - *paired-relation*. The lag-1 correlation of a simulated field exceeds that of a field of independent draws from the same per-location laws.
 
+**To implement.**
+
+- A runner method for simulated fields, ``simulate(estimator, samples, values, queries, *,
+  n_fields, seed)``, optional like ``cells``, which Spatialize's runner gives through
+  :func:`~spatialize.gs.ess.ess_sample`. The suite has no reading of simulation yet.
+- Pinned replicate fields from the existing Voronoi block-mark generator (25 cells, centred Gaussian
+  marks), written with checksums as for S12.
+- An evaluator reading the lag-1 correlation along the rows and columns of the grid, for each
+  simulated field and for a field of independent draws from the members at each location, paired by
+  field.
+- The number of fields, fixed before the first run from
+  :func:`~spatialize.scenarios.stats.budget.min_sign_test_fields` with a margin for power.
+
 .. _scenario-S02:
 
 S02 — Where more partitions stop helping
 ========================================
 
 :Status: ready (not yet implemented)
+:Priority: 1 of 11 among the pending scenarios
 :Source in the theory: convergence of the ensemble and its error floor
 :Claim: the error against the truth stops decreasing beyond some ensemble size, while the estimate itself keeps converging (P1).
 
@@ -47,7 +85,18 @@ S02 — Where more partitions stop helping
 - *identity*. P1's :math:`T^{-1/2}` law holds on this field.
 - *identity*. Beyond the estimated threshold :math:`T_0`, the slope of the error against the truth versus :math:`T` equals 0.
 
-**Depends on.** A Mondrian block-mark truth generator.
+**To implement.**
+
+- A Mondrian block-mark generator next to the Voronoi one in ``generators/fields.py``. It draws the
+  cells of the theory's Mondrian process on the unit square, at the rate giving 35 cells on average
+  (:math:`(1 + \lambda)^2 = 35`, :math:`\lambda \approx 4.9`), with one independent mark per
+  cell. Its cells can be checked against E2's co-occurrence before use.
+- Pinned replicate fields, 250 data each, with a grid of queries.
+- An evaluator computing the RMSE of the ensemble mean against the truth for ensemble sizes on a
+  logarithmic grid up to 3 000, averaged over independent ensembles. It reuses P1's slope check
+  (evaluator ``convergence``) on this field.
+- A rule for :math:`T_0`, fixed before the first run, for instance the smallest size whose error
+  lies within one standard error of the error at 3 000 members, then the slope test beyond it.
 
 .. _scenario-S03:
 
@@ -563,7 +612,8 @@ they need become available.
 S04 — Zero-inflated field (rain)
 ================================
 
-:Status: partly ready (not yet implemented)
+:Status: ready (not yet implemented)
+:Priority: 2 of 11 among the pending scenarios
 :Source in the theory: worked example of a variable with an atom at zero
 :Claim: an averaging decoder dilutes the atom, giving dry areas small positive values. A draw decoder recovers the dry fraction, while a distance-weighted draw also keeps its placement.
 
@@ -576,7 +626,18 @@ S04 — Zero-inflated field (rain)
 - *almost-sure*. Every draw member is a data value.
 - Visual **V6**. The region :math:`p_{dry} > 1/2` overlaps the true dry region better (IoU) and has sharper edges for weighted draw than for draw.
 
-**Depends on.** The draw decoders (planned) for its main checks.
+**To implement.**
+
+- A zero-inflated mark sampler for the existing Voronoi block-mark generator (0 with probability
+  0.45, lognormal otherwise), with pinned replicate fields.
+- An evaluator with the readings :math:`p_{dry}`, the share of members below a small threshold fixed
+  before the first run, and the mean of the wet members. The dry-fraction error and the contrast are
+  then paired relations over the fields. The decoders ``idw``, ``draw`` and ``wdraw_idw`` are in the
+  catalogue.
+- The support check, which the evaluator ``draw_laws`` already decides (kind ``support``), applied
+  to these fields.
+- For V6, the overlap through the existing ``level_set_iou``. The sharpness of the edges needs a
+  functional to define, such as the mean gradient of :math:`p_{dry}` across the true dry boundary.
 
 .. _scenario-S05:
 
@@ -584,6 +645,7 @@ S05 — Heavy-tailed field
 ========================
 
 :Status: partly ready (not yet implemented)
+:Priority: 9 of 11 among the pending scenarios
 :Source in the theory: worked example of a heavy-tailed variable
 :Claim: with heavy tails the median of the members makes a better point estimate than their mean. The ensemble never estimates below the data minimum, while extremes are underestimated and kriging produces halos around them.
 
@@ -596,7 +658,18 @@ S05 — Heavy-tailed field
 - *one-sided*. The signed error in the top decile is negative.
 - Visual **V7**. Ordinary kriging shows negative halos around the top-decile cells, while the ensemble maps never go below the data minimum.
 
-**Depends on.** An ordinary-kriging baseline (external dependency) for the comparisons with kriging, and the draw decoders for weighted draw.
+**To implement.**
+
+- A Pareto mark sampler (type I, minimum 1, tail index 1.05) for the Voronoi block-mark generator,
+  with pinned replicate fields.
+- An evaluator for the MAE of the median map against that of the mean map (paired, per decoder),
+  the data minimum (almost-sure) and the signed error in the top decile (one-sided). None of these
+  needs a baseline. The decoders, weighted draw included, are in the catalogue.
+- The widened laws, read through the runner's ``law_cdf`` (P4).
+- For V7 and the comparisons with kriging, an ordinary-kriging baseline. The suite already computes
+  simple kriging in NumPy (``simple_kriging_exponential``), so ordinary kriging can be added the
+  same way, with its variogram fixed before the first run, which keeps the suite free of external
+  packages.
 
 .. _scenario-S06:
 
@@ -604,6 +677,7 @@ S06 — Order relations in a non-stationary field
 ===============================================
 
 :Status: partly ready (not yet implemented)
+:Priority: 10 of 11 among the pending scenarios
 :Source in the theory: worked example of a field whose law changes across the domain
 :Claim: the law estimated by the ensemble stays a proper distribution everywhere, with no order-relation violations, which indicator kriging cannot guarantee.
 
@@ -614,7 +688,15 @@ S06 — Order relations in a non-stationary field
 - *almost-sure*. The ensemble's estimated law shows no order-relation violation and no negative probability.
 - *negative control*. The indicator-kriging baseline does show violations.
 
-**Depends on.** An indicator-kriging baseline (external dependency).
+**To implement.**
+
+- A mark sampler that depends on the nucleus's position, Gaussian on the left half and lognormal on
+  the right, with pinned replicate fields.
+- The ensemble's check, reading the law at five thresholds through the runner's ``law_cdf``. P4
+  already decides this property on a stationary field, so S06 adds the non-stationary case.
+- For the negative control, an indicator-kriging baseline, the ordinary kriging of each threshold's
+  indicator. It can be written in NumPy as for S05, with the violations of the order relations
+  counted at each location.
 
 .. _scenario-S07:
 
@@ -622,6 +704,7 @@ S07 — Exceedance areas
 ======================
 
 :Status: ready (not yet implemented), with the area-variance identity to be derived before implementation
+:Priority: 8 of 11 among the pending scenarios
 :Source in the theory: worked example of the law of the area above a threshold
 :Claim: the law of the exceeded area read from the members covers the true area at the nominal rate. The variance of the area over simulated fields follows a closed form.
 
@@ -633,12 +716,23 @@ S07 — Exceedance areas
 - *identity*. The variance of the area over simulated fields matches its closed form, derived independently before implementation.
 - Visual **V8**. The region :math:`P(Z > \ell) > 1/2` overlaps the true exceeded region (IoU above a pre-set level), with member regions bracketing the true area.
 
+**To implement.**
+
+- Pinned replicate fields from the Voronoi block-mark generator with lognormal marks.
+- The coverage check (binomial, over the fields), which needs no new derivation. The members'
+  exceeded areas give an interval, against which the true area is read.
+- The closed form of the variance of the exceeded area over simulated fields, derived independently
+  before the identity is added. That check also needs the runner method for simulated fields of
+  S01.
+- V8 through the existing ``level_set_iou``, with its pre-set level fixed before the first run.
+
 .. _scenario-S08:
 
 S08 — Support effect on tonnage curves
 ======================================
 
 :Status: ready (not yet implemented)
+:Priority: 3 of 11 among the pending scenarios
 :Source in the theory: worked example of the support effect
 :Claim: a map of means has a smoother distribution than the truth, reporting more tonnage above a low cut-off and less above a high one.
 
@@ -648,12 +742,21 @@ S08 — Support effect on tonnage curves
 
 - *paired-relation*. The tonnage of the map of means exceeds the truth's at a low cut-off and falls below it at a high cut-off.
 
+**To implement.**
+
+- Pinned replicate fields from the Voronoi block-mark generator with lognormal marks (log-sd 0.8).
+- A tonnage functional, the share of the grid above a cut-off, for the map of means and for the
+  truth.
+- The two cut-offs, fixed before the first run (for instance the truth's 20 % and 80 % quantiles),
+  with one paired relation over the fields at each.
+
 .. _scenario-S09:
 
 S09 — Resource categories under preferential sampling
 =====================================================
 
 :Status: ready (not yet implemented)
+:Priority: 7 of 11 among the pending scenarios
 :Source in the theory: worked example of classifying estimates by confidence
 :Claim: categories assigned from the estimated law (measured, indicated, inferred) are ordered in error, measured blocks being estimated best.
 
@@ -663,7 +766,15 @@ S09 — Resource categories under preferential sampling
 
 - *paired-relation*. Over fields, the error of measured blocks is below that of indicated blocks, itself below that of inferred blocks.
 
-**Depends on.** A preferential-design generator.
+**To implement.**
+
+- A preferential-design generator in ``generators/fields.py``, generalising the design P9 draws
+  (150 uniform data plus 150 in the central quarter).
+- A classification rule from the estimated law, fixed before the first run. One choice is the
+  relative width of each 3×3 block's 90 % interval, below a first threshold for measured blocks and
+  below a second for indicated ones, the others being inferred.
+- The block aggregation of the members, each member's mean over the block's points, then the paired
+  relations of the block errors across the categories.
 
 .. _scenario-S10:
 
@@ -671,6 +782,7 @@ S10 — Choosing a quantile
 =========================
 
 :Status: ready (not yet implemented)
+:Priority: 6 of 11 among the pending scenarios
 :Source in the theory: worked example of loss-optimal quantiles
 :Claim: the empirically optimal quantile level decreases as the cost of over-estimation grows. A block's quantile differs from the mean of its points' quantiles in the predicted direction.
 
@@ -681,12 +793,23 @@ S10 — Choosing a quantile
 - *paired-relation*. The optimal level decreases with the cost ratio.
 - *paired-relation*. The block quantile minus the mean of the point quantiles has the predicted sign below and above the median.
 
+**To implement.**
+
+- Pinned replicate fields from the Voronoi block-mark generator with centred lognormal marks
+  (log-sd 0.9).
+- An asymmetric linear loss over a grid of cost ratios. The empirically optimal level is the
+  quantile level of the members that minimises the realised loss against the truth. A paired
+  relation then reads its decrease with the cost ratio.
+- The block quantile, the quantile of the members' block means, against the mean of the point
+  quantiles, with the sign predicted below and above the median.
+
 .. _scenario-S11:
 
 S11 — The estimated covariance at two granularities
 ===================================================
 
 :Status: ready (not yet implemented)
+:Priority: 5 of 11 among the pending scenarios
 :Source in the theory: the effect of partition size relative to the field's range
 :Claim: with coarse partitions (small rate × range) the members are smooth, and adding members does not improve the estimate's error, a "false cure". Fine partitions keep the contrast, while the shape of the estimated covariance changes with granularity.
 
@@ -700,7 +823,15 @@ S11 — The estimated covariance at two granularities
 - Visual **V4** on this field, the axis-locking of the median map.
 - Visual **V11**. The iso-lines of the estimated covariance are diamond-shaped (:math:`\ell_1`) with coarse partitions and closer to circular with fine ones.
 
-**Depends on.** A cell-mean decoder in the scenario runner.
+**To implement.**
+
+- Pinned fields from the existing stationary Gaussian generator (exponential covariance, range
+  0.3).
+- Two estimators with the cell mean, which is in the catalogue, at rate × range 0.5 and 10.
+- The member spread (two-sample) and the RMSE (paired relation), with functionals the suite has.
+- V5 and V4 through the existing ``axis_artifact_index``, ``contrast_ratio`` and ``axis_lock``.
+  V11 reads the shape of the estimated covariance's iso-lines, for which ``axis_diagonal_log_ratio``
+  can serve, applied to the covariance of the members.
 
 .. _scenario-S12:
 
@@ -764,6 +895,7 @@ S13 — Connectivity of high-value bodies
 =======================================
 
 :Status: ready (not yet implemented)
+:Priority: 11 of 11 among the pending scenarios
 :Source in the theory: connectivity as a property of fields, not of point estimates
 :Claim: single members and simulated fields keep the connectivity of elongated high-value bodies, which the map of means merges or loses.
 
@@ -773,5 +905,13 @@ S13 — Connectivity of high-value bodies
 
 - Visual **V10**. The Euler-characteristic curve over thresholds of members and simulated fields is equivalent to the truth's (*equivalence*), while the map of means departs from it (*paired-relation*).
 
-**Depends on.** A connectivity functional (Euler characteristic over thresholds).
+**To implement.**
+
+- A generator of elongated connected high-value bodies, for instance a Voronoi block-mark field on
+  stretched coordinates or a thresholded anisotropic Gaussian field.
+- An Euler-characteristic functional over thresholds, computed on the grid in NumPy by counting the
+  vertices, edges and faces of the excursion set.
+- The runner method for simulated fields of S01.
+- The equivalence of the curves of the members and of the simulated fields to the truth's (TOST),
+  with its margin fixed before the first run, and the paired relation for the map of means.
 

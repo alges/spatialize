@@ -10,6 +10,66 @@ import sys
 from . import VERSION, catalog, run
 from .stats.budget import ALPHA_SUITE
 
+_STATUS_STYLE = {"PASS": "success", "FAIL": "error", "KNOWN": "warning", "XPASS": "critical", "SKIPPED": "debug"}
+
+
+def _styled():
+    """The rich console and colours when the output is a terminal (Spatialize's ``display``), else
+    None: the plain text of the report then goes to logs and files unchanged."""
+    try:
+        from spatialize import _display
+        if _display.mode() != "terminal":
+            return None
+        return _display._rich_console(), _display.COLOURS
+    except Exception:
+        return None
+
+
+def _progress_printer(styled):
+    if styled is None:
+        return lambda msg: print(msg, file=sys.stderr, flush=True)
+    console, c = styled
+    from rich.markup import escape
+
+    def show(msg):
+        text = escape(msg)
+        if msg.startswith("["):                              # a scenario starts
+            console.print(f"[bold {c['brand']}]{text}[/]")
+        elif msg.strip().endswith(" s") and " done in " in msg:
+            console.print(f"[{c['success']}]✔[/] [dim]{text.strip()}[/]")
+        elif ": p = " in msg or "skipped" in msg:
+            console.print(f"[dim]{text}[/]")
+        else:
+            console.print(f"[dim]{text}[/]")
+    return show
+
+
+def _print_report(report, styled):
+    if styled is None:
+        print(report.table())
+        return
+    console, c = styled
+    from rich.table import Table
+    from rich import box
+    from rich.markup import escape
+    table = Table(title=f"[bold {c['brand']}]spatialize[/] [dim]· conformance · runner {report.runner} · mode "
+                        f"{report.mode} · seed {report.seed} · α_suite {report.alpha:g} (Holm)[/]",
+                  title_justify="left", title_style="", box=box.SIMPLE_HEAD,
+                  header_style=f"bold {c['brand_dark']}", pad_edge=False)
+    for name, kw in (("scenario/check", {}), ("family", {}), ("p-value", {"justify": "right"}),
+                     ("level", {"justify": "right"}), ("expect", {}), ("result", {}), ("detail", {"overflow": "fold"})):
+        table.add_column(name, **kw)
+    for o in report.outcomes:
+        style = c[_STATUS_STYLE[o.status]]
+        if o.skipped:
+            table.add_row(escape(f"{o.scenario}/{o.check}"), "", "", "", "", f"[{style}]SKIPPED[/]",
+                          f"[dim]{escape(o.skipped)}[/]")
+            continue
+        level = "exact" if o.result.family == "almost-sure" else f"{o.level:.2g}"
+        table.add_row(escape(f"{o.scenario}/{o.check}"), o.result.family, f"{o.result.p_value:.3g}", level,
+                      o.expect, f"[bold {style}]{o.status}[/]", f"[dim]{escape(o.result.detail)}[/]")
+    console.print(table)
+
 
 def main(argv=None):
     """Command line entry point (``python -m spatialize.scenarios``).
@@ -63,18 +123,28 @@ def main(argv=None):
         parser.error("no scenario selected")
 
     from .runners.spatialize import SpatializeRunner  # loads the compiled library
+    styled = _styled()
     if not args.quiet:
-        print(f"seed {args.seed if args.seed is not None else '(fresh, in the report)'}, mode {args.mode}; "
-              "progress on stderr, report at the end", file=sys.stderr, flush=True)
+        start = (f"seed {args.seed if args.seed is not None else '(fresh, in the report)'}, mode {args.mode}; "
+                 "progress on stderr, report at the end")
+        if styled is None:
+            print(start, file=sys.stderr, flush=True)
+        else:
+            styled[0].print(f"[bold {styled[1]['brand']}]spatialize[/] [dim]· conformance · {start}[/]")
     report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha,
-                 save_maps=args.save_maps,
-                 progress=None if args.quiet else lambda msg: print(msg, file=sys.stderr, flush=True))
-    print(report.table())
+                 save_maps=args.save_maps, progress=None if args.quiet else _progress_printer(styled))
+    _print_report(report, styled)
     count = {k: sum(1 for o in report.outcomes if o.status == k) for k in ("PASS", "FAIL", "KNOWN", "XPASS", "SKIPPED")}
     known = f", {count['KNOWN']} known failures" if count["KNOWN"] else ""
     xpass = f", {count['XPASS']} unexpectedly passed (update their known_failure)" if count["XPASS"] else ""
-    print(f"\n{count['PASS']} passed, {count['FAIL']} failed{known}{xpass}, {count['SKIPPED']} skipped "
-          f"(reproduce with --mode {report.mode} --seed {report.seed})")
+    summary = (f"{count['PASS']} passed, {count['FAIL']} failed{known}{xpass}, {count['SKIPPED']} skipped "
+               f"(reproduce with --mode {report.mode} --seed {report.seed})")
+    if styled is None:
+        print("\n" + summary)
+    else:
+        console, c = styled
+        mark, colour = ("✔", c["success"]) if report.passed else ("✖", c["error"])
+        console.print(f"\n[bold {colour}]{mark}[/] [bold {c['brand']}]spatialize[/] [dim]·[/] {summary}")
     if args.save_maps:
         print(f"maps saved under {args.save_maps}")
     return 0 if report.passed else 1

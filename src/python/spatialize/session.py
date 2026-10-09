@@ -94,6 +94,22 @@ The settings are the following.
     than this share, listing all of them and marking the best. The default is 0.05. Under
     ``empty_cells="mark"`` or ``"coarsen"`` no datum is left out.
 
+``display`` (``"auto"``, ``"terminal"``, ``"notebook"``, ``"plain"`` or ``"silent"``)
+    How the progress bars and the messages look. ``"auto"``, the default, detects where Spatialize
+    writes: a Jupyter kernel (JupyterLab, the classic notebook, the notebooks of VS Code and PyCharm,
+    Colab) gets HTML bars and messages; a terminal, including the terminals of the IDEs and
+    PyCharm's run console, gets live bars drawn with ``rich``; any other output (a file, a pipe, the
+    log of a continuous integration) gets plain lines, a progress line at every quarter. The other
+    values force one of these looks, ``"silent"`` showing nothing. All of them share the colours of
+    the ``alges`` palette. The setting changes no result.
+
+``verbosity`` (``"debug"``, ``"info"``, ``"warning"`` or ``"error"``)
+    The lowest level of the messages shown. The default, ``"warning"``, shows the warnings and the
+    errors, such as the data a search leaves out of its score or the calibration of the laws of the
+    posterior analysis. ``"info"`` adds what the functions do, ``"debug"`` the details. Setting a
+    level on ``spatialize.logging.log`` (``log.setLevel("DEBUG")``) takes precedence. The setting
+    changes no result.
+
 Examples
 --------
 >>> import spatialize
@@ -101,7 +117,7 @@ Examples
 >>> with spatialize.session.override(domain=None):     # restored on exit
 ...     pass
 >>> spatialize.session.effective_config()
-{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder', 'max_left_out': 0.05}
+{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder', 'max_left_out': 0.05, 'display': 'auto', 'verbosity': 'warning'}
 >>> spatialize.session.reset()
 """
 import contextlib
@@ -112,7 +128,8 @@ import numpy as np
 from spatialize import SpatializeError
 
 _DEFAULTS = {"domain": None, "parallel": True, "num_threads": None, "empty_cells": "nan",
-             "mark_source": "local", "mark_knn": 8, "mark_value": "decoder", "max_left_out": 0.05}
+             "mark_source": "local", "mark_knn": 8, "mark_value": "decoder", "max_left_out": 0.05,
+             "display": "auto", "verbosity": "warning"}
 
 _global = {}
 _overrides = contextvars.ContextVar("spatialize_session_overrides", default={})
@@ -174,7 +191,9 @@ _VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_
                "mark_source": _choice("mark_source", ("local", "cells", "data")),
                "mark_knn": _validate_num_threads_like("mark_knn"),
                "mark_value": _choice("mark_value", ("decoder", "datum")),
-               "max_left_out": _validate_share}
+               "max_left_out": _validate_share,
+               "display": _choice("display", ("auto", "terminal", "notebook", "plain", "silent")),
+               "verbosity": _choice("verbosity", ("debug", "info", "warning", "error"))}
 
 
 def _validated(settings):
@@ -223,8 +242,8 @@ def effective_config():
 
 
 def show():
-    """Print the settings in effect, marking those different from the default."""
-    for name, value in effective_config().items():
-        mark = "" if value == _DEFAULTS[name] else "   (set)"
-        print(f"{name} = {value!r}{mark}")
+    """Show the settings in effect, marking those different from the default, in the look of
+    ``display``."""
+    from spatialize import _display
+    _display.settings_table([(name, value, value != _DEFAULTS[name]) for name, value in effective_config().items()])
 

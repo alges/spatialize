@@ -1061,7 +1061,7 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
 
     results = {}
     n_combos = len(param_grid)
-    kwargs["callback"](logging.progress.init(n_combos, 1))
+    kwargs["callback"](logging.progress.init(n_combos, 1, desc="categorical hyperparameter search"))
     for i, param_set in enumerate(param_grid):
         results[i] = run_cv(param_set)
         kwargs["callback"](logging.progress.inform())

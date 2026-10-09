@@ -3,7 +3,6 @@ pandas
 scikit-learn
 scipy
 rich
-tqdm
 matplotlib
 opencv-python
 numba

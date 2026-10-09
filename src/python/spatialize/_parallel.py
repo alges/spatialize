@@ -39,7 +39,7 @@ def _chunks(items, n_workers):
     return [items[a:a + size] for a in range(0, len(items), size)]
 
 
-def map_chunks(work, n_items, data_for=None, callback=None, repeated=False):
+def map_chunks(work, n_items, data_for=None, callback=None, repeated=False, desc=None):
     """Results of ``work`` for items ``0 .. n_items - 1``, in order.
 
     Parameters
@@ -55,13 +55,15 @@ def map_chunks(work, n_items, data_for=None, callback=None, repeated=False):
         ``None``. It keeps what each worker receives small.
     callback : callable, optional
         Progress callback (``logging.progress`` protocol), informed once per item.
+    desc : str, optional
+        The name of the progress run.
     repeated : bool, optional
         Whether the caller runs several such loops in a row (a search over configurations), whose
         workers then start once for all of them; the low threshold applies from the first loop.
     """
     data_for = data_for or (lambda rows: None)
     if callback is not None:
-        callback(logging.progress.init(n_items, 1))
+        callback(logging.progress.init(n_items, 1, desc=desc))
 
     def serial(rows):
         out = []

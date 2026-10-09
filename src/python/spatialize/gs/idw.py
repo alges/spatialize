@@ -186,7 +186,7 @@ def idw_hparams_search(points, values, xi,
         results[i] = np.nanmean(np.abs(values - cv))
         callback(logging.progress.inform())
 
-    callback(logging.progress.init(len(param_grid), 1))
+    callback(logging.progress.init(len(param_grid), 1, desc="IDW hyperparameter search"))
     it = range(len(param_grid))
     for i in it:
         run_scenario(i)

@@ -247,7 +247,31 @@ Reproducibility under parallel execution
   about four per worker, each chunk receiving only the data it needs. A few items run serially first,
   the rest going to the workers only when the time those items took, extrapolated to all of them,
   exceeds the cost of starting the workers. Each item carries its own seed, so the result does not
-  depend on where it runs. New Python loops should use the same function.
+  depend on where it runs. New Python loops should use the same function. The ranking of SPA
+  became a direct reading in version 1.3 and no longer uses it.
+
+Progress and messages
+=====================
+
+The compiled code and the Python functions report through one protocol of JSON messages,
+``spatialize.logging`` (``{"message": {...}}`` for a log line, ``{"progress": {"init": n, "step": s,
+"desc": ...}}``, ``{"progress": {"token": ...}}`` and ``{"progress": "done"}`` for a run), sent to the
+``callback`` of each function. The default callback shows them through ``spatialize._display``, in the
+look the session setting ``display`` chooses.
+
+- **Where the output goes.** With ``display="auto"``, :func:`spatialize._display.environment`
+  detects a Jupyter kernel (HTML through ``IPython.display``, a progress bar updated in place), a
+  terminal, including the terminals of the IDEs and PyCharm's run console (``rich``, with a live bar
+  replaced by a summary line when the run ends), or any other output (plain lines on standard error,
+  one at every quarter of a run). All three use the colours of the ``alges`` palette.
+- **Names of the runs.** A run takes its name from the ``desc`` of its ``init`` message, otherwise
+  from the engine's announcement just before it, ``"[C++|mondrian/idw] computing estimates"`` giving
+  "computing estimates · mondrian/idw". New progress loops in Python pass a ``desc``. Runs may nest,
+  each shown on its own.
+- **Messages.** They go through Spatialize's own logger, ``spatialize.logging.log``, which does not
+  propagate to the root logger and is not configured on import, so the logging of the application is
+  left alone. The session setting ``verbosity`` sets the lowest level shown (warnings by default),
+  unless a level was set on ``log`` itself.
 
 Adding a decoder
 ================

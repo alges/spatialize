@@ -45,6 +45,11 @@ New
 - **Parallel computation.** The trees of the ensemble run in parallel, as do the Python loops of the
   Pareto search, the simulations and the ranking of the data, with results the same bit for bit for
   any number of threads or processes.
+- **Progress and messages** in one look, chosen by the session setting ``display``: HTML in Jupyter
+  notebooks, live bars drawn with ``rich`` in terminals and IDEs, plain lines in logs and files, all
+  in the colours of the ``alges`` palette. Each progress bar names its task and shows the count, the
+  elapsed time and the time left, then a summary line. The setting ``verbosity`` sets the lowest
+  level of the messages shown. ``spatialize.session.show()`` uses the same look.
 - **Conformance tests** (:doc:`scenarios/index`), runnable with ``python -m spatialize.scenarios``,
   which prints its progress as it runs. Scenario P10 holds the empty-cell policies to what they
   declare (:ref:`scenario-P10`). Scenario P11 shows the selection bias of a cross-validation score
@@ -121,6 +126,10 @@ Results that change
 - **Laws outside their range.** The cumulative distribution function of an
   :class:`~spatialize.empirical.EmpiricalModel` is 0 below its grid and 1 above, and its density 0
   outside, where both were undefined (NaN). A datum far above its law now reads 1.
+- **Warnings are shown.** The messages of Spatialize stood at the error level, so its warnings, such
+  as the data a search leaves out of its score, were hidden. Warnings and errors are now shown by
+  default (session setting ``verbosity``). Spatialize no longer configures the root logger of the
+  application on import, its messages going through its own logger, ``spatialize.logging.log``.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn
@@ -133,6 +142,9 @@ Results that change
 
 Removed
 -------
+
+- The dependency on ``tqdm``, the progress bars being drawn with ``rich`` and, in notebooks, with
+  HTML.
 
 - The ``parallelize`` argument of the ESI functions, and ``n_jobs`` of
   :func:`~spatialize.gs.ess.ess_sample` and

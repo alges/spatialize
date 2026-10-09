@@ -336,7 +336,7 @@ class SpatialEntropy:
 
         log_message(logging.logger.info("computing entropy"))
         # Calculate entropy for each target location with progress tracking
-        self.callback(logging.progress.init(len(xi), 1))
+        self.callback(logging.progress.init(len(xi), 1, desc="spatial entropy"))
 
         for i in range(len(xi)):
             # members of empty cells (NaN) carry no value: the law is that of the valid members,
@@ -702,7 +702,7 @@ class SpatialMutualInformation:
 
         log_message(logging.logger.info("computing mutual information"))
         # Calculate MI for each target location with progress tracking
-        self.callback(logging.progress.init(len(xi), 1))
+        self.callback(logging.progress.init(len(xi), 1, desc="mutual information"))
 
         for i in range(len(xi)):
             # Get estimates for this location: the pairs whose two members are valid (a NaN member

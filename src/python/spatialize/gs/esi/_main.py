@@ -992,7 +992,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
         kwargs["callback"](logging.progress.inform())
 
     it = range(len(param_grid))
-    kwargs["callback"](logging.progress.init(len(param_grid), 1))
+    kwargs["callback"](logging.progress.init(len(param_grid), 1, desc="hyperparameter search"))
     for i in it:
         run_scenario(i)
     kwargs["callback"](logging.progress.stop())

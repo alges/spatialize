@@ -1,23 +1,40 @@
 import json
 import logging
 import os
+import re
 import time
 
 import numpy as np
-from rich.logging import RichHandler
-from tqdm.auto import tqdm
 
 from spatialize._util import SingletonType
 
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="ERROR",
-    format=FORMAT,
-    datefmt="[%X]",
-    handlers=[RichHandler(show_time=False, show_path=False)]
-)
+# Spatialize's own logger: it leaves the logging of the application alone (no handler on the root
+# logger) and shows its messages through spatialize._display, in the look of the session's
+# ``display``. Its level is the session's ``verbosity`` unless set with ``log.setLevel``.
+log = logging.getLogger("spatialize")
+log.propagate = False
 
-log = logging.getLogger("rich")
+_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warning": logging.WARNING, "error": logging.ERROR}
+
+
+class _DisplayHandler(logging.Handler):
+    def emit(self, record):
+        from spatialize import _display
+        name = record.levelname.lower()
+        _display.message(name if name in _display.SYMBOLS else "info", record.getMessage())
+
+
+if not any(isinstance(h, _DisplayHandler) for h in log.handlers):
+    log.addHandler(_DisplayHandler())
+
+
+def _threshold():
+    """The lowest level shown: the one set on ``log`` by the user, otherwise the session's
+    ``verbosity``."""
+    if log.level != logging.NOTSET:
+        return log.level
+    from spatialize import session
+    return _LEVELS[session.get("verbosity")]
 
 
 # ************************************ PROTOCOL ************************************
@@ -27,8 +44,8 @@ log = logging.getLogger("rich")
 #
 # Messages for showing progress:
 #
-#  1. To start a new progress counting:
-#   {"progress": {"init": <total expected count>, "step": <increment step>}}
+#  1. To start a new progress counting (``desc``, optional, names the task):
+#   {"progress": {"init": <total expected count>, "step": <increment step>, "desc": <name>}}
 #
 #  2. To inform during a progress counting
 #   {"progress": {"token": <value>}}
@@ -79,8 +96,11 @@ class progress:
     prog = "progress"
 
     @classmethod
-    def init(cls, total, increment_step=1):
-        return {cls.prog: {cls.init_: total, cls.step: increment_step}}
+    def init(cls, total, increment_step=1, desc=None):
+        msg = {cls.prog: {cls.init_: total, cls.step: increment_step}}
+        if desc:
+            msg[cls.prog]["desc"] = desc
+        return msg
 
     @classmethod
     def stop(cls):
@@ -103,9 +123,12 @@ class MessageHandler:
 
 
 class LogMessage:  # callback function
+    """Shows the logging protocol's messages above the session's ``verbosity``. With
+    ``engine_as_progress``, the compiled engine's announcements of its runs (``"[C++|...]
+    computing ..."``) are left to the progress display, which names its runs after them."""
 
-    def __init__(self):
-        pass
+    def __init__(self, engine_as_progress=False):
+        self.engine_as_progress = engine_as_progress
 
     def __call__(self, msg):
         global log
@@ -117,21 +140,12 @@ class LogMessage:  # callback function
 
         lev = m[logger.message][logger.level]
         text = m[logger.message][logger.text]
-
-        if lev == level.debug:
-            log.debug(text)
-
-        if lev == level.info:
-            log.info(text)
-
-        if lev == level.warn:
-            log.warning(text)
-
-        if lev == level.error:
-            log.error(text)
-
-        if lev == level.critical:
-            log.critical(text)
+        if lev == level.info and str(text).startswith("[C++|") and self.engine_as_progress:
+            return      # the progress display shows it as the name of its run
+        number = logging.getLevelName(lev)
+        if not isinstance(number, int) or number < _threshold():
+            return
+        log.handle(log.makeRecord(log.name, number, "spatialize", 0, text, None, None))
 
     @staticmethod
     def _pass_protocol(msg):
@@ -203,28 +217,54 @@ class AsyncProgressHandler:  # callback function
             pass
 
 
-class AsyncProgressCounter(AsyncProgressHandler):  # callback function
-    def _done(self):
-        super()._done()
-        tqdm.write(os.linesep)
+class DisplayProgress:  # callback function
+    """Shows the progress protocol with spatialize._display, in the look of the session's
+    ``display``. Progress runs may nest, a run started inside another being shown on its own. A run
+    takes its name from the ``desc`` of its ``init`` message, otherwise from the last message of the
+    compiled engine (``"[C++|mondrian/idw] computing estimates"`` gives "computing estimates ·
+    mondrian/idw")."""
 
-        h, m, s = map(lambda x: int(x), [self.elapsed_time / 3600, self.elapsed_time % 3600 / 60, self.elapsed_time % 60])
-        if h == 0 and m == 0:
-            etime = f'{s:2d}s'
-        elif h == 0:
-            etime = f'{m:2d}m {s:2d}s'
-        else:
-            etime = f'{h}h {m:2d}m {s:2d}s'
-        tqdm.write(f"done (elapsed time: {etime})")
+    def __init__(self):
+        self.stack = []
+        self.pending = None
 
-    def _update(self):
-        super()._update()
-        if self.ready_to_update:
-            tqdm.write(f'finished {int(self.p)}% of {self.total} iterations ... \r', end="")
+    def __call__(self, msg):
+        try:
+            m = json.loads(msg) if isinstance(msg, str) else msg
+        except (TypeError, ValueError):
+            return
+        if not isinstance(m, dict):
+            return
+        if logger.message in m:
+            text = m[logger.message].get(logger.text, "") if isinstance(m[logger.message], dict) else ""
+            if str(text).startswith("[C++|"):
+                from spatialize import _display
+                self.pending = _display.tidy(text)
+            return
+        if progress.prog not in m:
+            return
+        body = m[progress.prog]
+        from spatialize import _display
+        if isinstance(body, dict) and progress.init_ in body:
+            desc = body.get("desc") or self.pending or "working"
+            self.pending = None
+            self.stack.append([_display.progress(int(body[progress.init_]), desc), int(body.get(progress.step, 1))])
+        elif isinstance(body, dict) and progress.token in body:
+            if self.stack:
+                bar, step = self.stack[-1]
+                bar.advance(step)
+        elif body == progress.done and self.stack:
+            self.stack.pop()[0].finish()
 
 
-class SingletonAsyncProgressCounter(AsyncProgressCounter, metaclass=SingletonType):
+class SingletonDisplayProgress(DisplayProgress, metaclass=SingletonType):
     pass
+
+
+# the names of earlier versions, now shown in the session's look
+AsyncProgressCounter = DisplayProgress
+AsyncProgressBar = DisplayProgress
+SingletonAsyncProgressCounter = SingletonDisplayProgress
 
 
 class SingletonNullMsgHandler(metaclass=SingletonType):
@@ -237,26 +277,15 @@ class SingletonMessageHandler(MessageHandler, metaclass=SingletonType):
 
 
 class SingletonLogMessage(LogMessage, metaclass=SingletonType):
-    pass
-
-
-class AsyncProgressBar(AsyncProgressHandler):
-
-    def _init(self, total, step):
-        super()._init(total, step)
-        self.pbar = tqdm(total=total, desc="finished", bar_format='{l_bar}{bar:20}{r_bar}{bar:-20b}')
-
-    def _done(self):
-        self.pbar.close()
-
-    def _update(self):
-        super()._update()
-        self.pbar.update()
+    def __init__(self):
+        super().__init__(engine_as_progress=True)
 
 
 # **************************++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 def default_singleton_callback(msg):
-    return SingletonMessageHandler([SingletonLogMessage(), SingletonAsyncProgressCounter()])(msg)
+    """The default callback: messages and progress shown in the look of the session's ``display``
+    (:mod:`spatialize.session`)."""
+    return SingletonMessageHandler([SingletonLogMessage(), SingletonDisplayProgress()])(msg)
 
 
 def singleton_null_callback(msg):

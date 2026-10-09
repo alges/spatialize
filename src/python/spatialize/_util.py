@@ -1,27 +1,14 @@
 import functools
 
 import numpy as np
-from rich.progress import track
 
 from spatialize import SpatializeError
 
 
 def in_notebook():
-    try:
-        from IPython import get_ipython
-        if 'IPKernelApp' not in get_ipython().config:  # pragma: no cover
-            return False
-    except ImportError:
-        return False
-    except AttributeError:
-        return False
-    return True
-
-
-if in_notebook():
-    from tqdm.notebook import tqdm
-else:
-    from tqdm import tqdm
+    """Whether Spatialize runs inside a Jupyter kernel (see :func:`spatialize._display.environment`)."""
+    from spatialize import _display
+    return _display.environment() == "notebook"
 
 
 class per_call:
@@ -81,14 +68,6 @@ def signature_overload(pivot_arg, common_args, specific_args):
         return inner_function
 
     return outer_function
-
-
-def get_progress_bar(list_like_obj, desc):
-    if in_notebook():
-        it = tqdm(range(len(list_like_obj)), desc=desc)
-    else:
-        it = track(range(len(list_like_obj)), description=desc)
-    return it
 
 
 class SingletonType(type):

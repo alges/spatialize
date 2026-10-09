@@ -250,7 +250,8 @@ def ess_sample(esi_result,
                 out.append((None, f"{type(e).__name__}: {e}"))
         return out
 
-    results = map_chunks(sample_rows, esi_samples.shape[0], data_for=rows_data, callback=callback)
+    results = map_chunks(sample_rows, esi_samples.shape[0], data_for=rows_data, callback=callback,
+                         desc="simulating the local laws")
     failed = [(i, r[1]) for i, r in enumerate(results) if r[0] is None]
     if failed:
         log_message(logging.logger.warning(

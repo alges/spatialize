@@ -339,7 +339,7 @@ class ParetoOptimizer:
 
         configs   = list(_iter_param_grid(self.param_grid))
         n_configs = len(configs)
-        self.callback(logging.progress.init(n_configs, 1))
+        self.callback(logging.progress.init(n_configs, 1, desc="Pareto search · encoder and decoder errors"))
 
         all_results: list[dict] = []
         for cfg in configs:

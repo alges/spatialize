@@ -340,3 +340,35 @@ def test_posterior_audit_readings_are_consistent():
             assert abs(np.mean((pit >= 0.05) & (pit <= 0.95)) - 0.9) <= 2.0 / len(z)
     old = cv_sample_pred_posterior(s, v, s, fitted_model_factory=FittedModelFactory(), **kw)
     assert list(old.rank_samples().category) == list(old.levels())
+
+
+def test_posterior_audit_declustering_and_neighbours():
+    """The declustering weights sum to 1, come from the partitions of the cross-validation (the cells
+    of the data read by cells() are those of the members' partitions: a datum alone in its cell has
+    no member there) and weigh a duplicated datum half of its single copy; the plain summaries are
+    those of numpy; the coherence lies in [0, 1]; the duplicates are the co-located pairs; an audit
+    built without partitions refuses the weights."""
+    from spatialize import SpatializeError
+    from spatialize.gs.spa import posterior_audit, PosteriorAudit
+    s, v, _ = DATA["2d"]
+    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED, callback=lambda *a, **k: None)
+    audit = posterior_audit(s, v, **kw)
+    w = audit.weights(n_probes=5000)
+    assert np.isclose(w.sum(), 1.0) and np.all(w > 0)
+    data_cells, _ = audit._cells(10, audit.seed)
+    alone = np.array([[np.sum(data_cells[:, t] == data_cells[i, t]) == 1 for t in range(data_cells.shape[1])]
+                      for i in range(len(v))])
+    assert np.array_equal(alone, np.isnan(audit.members))
+    d = audit.declustered()
+    assert np.isclose(d.loc["mean", "naive"], np.mean(audit.values))
+    c = audit.coherence()
+    assert np.all((c[np.isfinite(c)] >= 0) & (c[np.isfinite(c)] <= 1))
+    s2, v2 = np.vstack([s, s[:1]]), np.append(v, v[0])
+    dup = posterior_audit(s2, v2, **kw)
+    w2 = dup.weights(n_probes=5000)
+    assert np.isclose(w2[0], w2[-1])
+    pairs = dup.duplicates()
+    assert len(pairs) >= 1 and (pairs.i.iloc[0], pairs.j.iloc[0]) == (0, len(v)) and pairs.difference.iloc[0] == 0
+    bare = PosteriorAudit(audit.members, s, v)
+    with pytest.raises(SpatializeError):
+        bare.weights()

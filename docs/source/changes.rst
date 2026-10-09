@@ -58,7 +58,9 @@ New
   (Benjamini–Hochberg), after the laws are widened, spread by one fitted factor and given tails
   (Student-t kernels by default, or generalized Pareto). ``calibration()`` reports how well the laws
   are calibrated, with plots of the calibration, of the surprise on the map and of each datum's law
-  (:doc:`theory/posterior`). The functions of version 1.2 work on top of it.
+  (:doc:`theory/posterior`). The partitions also give each datum a declustering weight, the share of
+  the domain it represents, for declustered summaries of the values, while the coherence of the
+  neighbours, the proportional effect and the co-located data complete the review. The functions of version 1.2 work on top of it.
 
 Under study
 -----------

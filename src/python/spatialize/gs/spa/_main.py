@@ -61,6 +61,27 @@ def _with_best_params(kwargs):
     return out
 
 
+def _cells_reader(points, kwargs):
+    """A function giving the cells of the data and of uniform probe locations in the partitions of
+    the cross-validation: ``(n_probes, seed) -> (data cells (n, T), probe cells (n_probes, T))``."""
+    from spatialize import session
+    points = np.asarray(points, dtype=np.float32)
+    alpha = kwargs["alpha"]
+    if kwargs["p_process"] == partitioning_process.VORONOI and not kwargs["data_cond"]:
+        alpha = -alpha
+
+    def read(n_probes, seed):
+        domain = session.get("domain")
+        box = (np.asarray(domain, dtype=float) if domain is not None
+               else np.stack([points.min(axis=0), points.max(axis=0)], axis=1).astype(float))
+        rng = np.random.default_rng(seed)
+        probes = (box[:, 0] + rng.random((n_probes, len(box))) * (box[:, 1] - box[:, 0])).astype(np.float32)
+        labels = np.asarray(lib_spatialize_facade.cells(points, np.vstack([points, probes]), kwargs["p_process"],
+                                                        alpha, kwargs["n_partitions"], kwargs["seed"]))
+        return labels[: len(points)], labels[len(points):]
+    return read
+
+
 def _cv_members(points, values, queries, kwargs):
     """The cross-validation members at the data, (n, n_partitions), computed through ``run``.
 
@@ -326,6 +347,8 @@ class PosteriorAudit:
         self._laws = None
         self._factor = None
         self._readings = None
+        self._cells = None          # set by posterior_audit: the cells of locations in its partitions
+        self._weights = None
 
     def _widening_targets(self):
         f = self.fitted_model_factory
@@ -549,11 +572,13 @@ class PosteriorAudit:
         pandas.DataFrame
             ``value``; ``pit`` (:meth:`pit`); ``tail_p`` (:meth:`tail_p`); ``flag`` (:meth:`flags`);
             ``level`` (:meth:`levels`); ``surprisal``, the log score :math:`-\log \hat f_{-i}(z_i)`
-            of the datum under a Gaussian kernel density of its members; ``entropy``, the entropy of
-            that density read on the members, so that ``excess`` = ``surprisal`` − ``entropy`` is
-            near 0 for a datum typical of its law; ``width90``, the width of the central 90 %
-            interval of the law, in the units of the values; ``support`` (:attr:`support`). The log
-            scores and the entropy are on the scale of the readings (``scale``).
+            of the datum under its law (with the kernels of ``tails``); ``entropy``, the entropy of
+            that law read on its sample, so that ``excess`` = ``surprisal`` − ``entropy`` is near 0
+            for a datum typical of its law; ``width90``, the width of the central 90 % interval of
+            the law, in the units of the values; ``support`` (:attr:`support`); ``coherence``
+            (:meth:`coherence`); ``weight`` (:meth:`weights`, NaN when the audit does not hold its
+            partitions). The log scores and the entropy are on the scale of the readings
+            (``scale``).
         """
         logf, ent, below, above = self._kde()
         tail = np.minimum(1.0, 2.0 * np.minimum(below, above))
@@ -563,7 +588,163 @@ class PosteriorAudit:
         return pd.DataFrame({"value": self.values, "pit": self.pit(), "tail_p": tail,
                              "flag": _bh(tail, q), "level": self.levels(alphas), "surprisal": -logf,
                              "entropy": ent, "excess": -logf - ent, "width90": hi - lo,
-                             "support": self.support})
+                             "support": self.support, "coherence": self.coherence(),
+                             "weight": self.weights() if self._cells is not None else np.nan})
+
+    def coherence(self, k=8):
+        """For each datum, the share of its ``k`` nearest other data that lie on the same side of
+        their laws (above or below the median).
+
+        A datum alone in its surprise, among neighbours on either side, has a coherence near 0.5,
+        which suits an isolated error. A datum whose neighbours are surprised the same way has a
+        coherence near 1, which suits a part of the domain the laws do not represent, a
+        sub-population or a change of domain. The provenance decides (:doc:`/theory/posterior`).
+
+        Parameters
+        ----------
+        k : int, optional
+            The number of nearest other data. Default: 8.
+
+        Returns
+        -------
+        ndarray of shape (n,)
+            NaN for a datum without a law.
+        """
+        from scipy.spatial import cKDTree
+        pts = np.asarray(self.points, float)
+        n = len(pts)
+        k = min(int(k), n - 1)
+        if k < 1:
+            return np.full(n, np.nan)
+        side = np.sign(self.pit() - 0.5)
+        _, idx = cKDTree(pts).query(pts, k=min(k + 1, n))
+        idx = np.reshape(idx, (n, -1))
+        out = np.full(n, np.nan)
+        for i in range(n):
+            nb = idx[i][idx[i] != i][:k]
+            nb = nb[np.isfinite(side[nb])]
+            if np.isfinite(side[i]) and nb.size:
+                out[i] = float(np.mean(side[nb] == side[i]))
+        return out
+
+    def weights(self, n_probes=20000):
+        """The declustering weight of each datum, read from the partitions.
+
+        Each partition shares the domain among the data, every cell giving its area equally to the
+        data it holds and the area of the cells without data being shared out in proportion. The
+        weight of a datum is its share averaged over the partitions, so the weights sum to 1. A
+        datum in a dense cluster shares small cells with many others and weighs little, an isolated
+        datum in a large cell weighs much. The areas are estimated with ``n_probes`` locations drawn
+        uniformly in the box of the partitions.
+
+        Parameters
+        ----------
+        n_probes : int, optional
+            The number of locations that estimate the areas of the cells. Default: 20000.
+
+        Returns
+        -------
+        ndarray of shape (n,)
+
+        Raises
+        ------
+        SpatializeError
+            When the audit was not built by :func:`posterior_audit`, which holds its partitions.
+        """
+        if self._cells is None:
+            raise SpatializeError("the declustering weights need the partitions: build the audit with posterior_audit")
+        if self._weights is None:
+            data_cells, probe_cells = self._cells(int(n_probes), self.seed)
+            n, T = data_cells.shape
+            w = np.zeros(n)
+            for t in range(T):
+                labels, occupancy = np.unique(data_cells[:, t], return_counts=True)
+                probe_labels, probe_counts = np.unique(probe_cells[:, t], return_counts=True)
+                hits = dict(zip(probe_labels, probe_counts))
+                area = np.array([hits.get(c, 0) for c in labels], dtype=float)
+                if area.sum() <= 0:
+                    continue
+                share = dict(zip(labels, area / area.sum() / occupancy))
+                w += np.array([share[c] for c in data_cells[:, t]])
+            self._weights = w / w.sum() if w.sum() > 0 else np.full(n, 1.0 / n)
+        return self._weights
+
+    def declustered(self, quantiles=(0.05, 0.25, 0.5, 0.75, 0.95)):
+        """The summaries of the values with and without the declustering weights (:meth:`weights`).
+
+        Preferential sampling, where more data were taken where the values are high or of interest,
+        biases the plain summaries towards those values. The weighted ones correct for it, the
+        partitions telling how much of the domain each datum represents.
+
+        Parameters
+        ----------
+        quantiles : sequence of float, optional
+            The quantiles reported. Default: ``(0.05, 0.25, 0.5, 0.75, 0.95)``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per statistic (``mean``, ``std`` and the quantiles), columns ``naive`` and
+            ``declustered``.
+        """
+        z, w = self.values, self.weights()
+        order = np.argsort(z)
+        cw = np.cumsum(w[order]) - 0.5 * w[order]
+        mean = float(np.sum(w * z))
+        rows = {"mean": (float(np.mean(z)), mean),
+                "std": (float(np.std(z)), float(np.sqrt(np.sum(w * (z - mean) ** 2))))}
+        for q in quantiles:
+            rows[f"q{q:g}"] = (float(np.quantile(z, q)), float(np.interp(q, cw, z[order])))
+        return pd.DataFrame(rows, index=["naive", "declustered"]).T
+
+    def proportional_effect(self):
+        """How the spread of the laws follows their centre.
+
+        Returns
+        -------
+        dict
+            ``centre`` and ``spread``, the median and the width of the central 90 % interval of each
+            datum's law in the units of the values, and ``spearman``, their rank correlation. A
+            strong positive correlation is the proportional effect of skewed variables, where the
+            laws widen with the values; reading the laws on a transformed scale (``scale``) may then
+            suit them better.
+        """
+        from scipy.stats import spearmanr
+        n = len(self.values)
+        centre = np.array([float(self._inv(np.median(self.law(i)))) if self.law(i).size else np.nan for i in range(n)])
+        q5 = np.array([np.percentile(self.law(i), 5) if self.law(i).size else np.nan for i in range(n)])
+        q95 = np.array([np.percentile(self.law(i), 95) if self.law(i).size else np.nan for i in range(n)])
+        spread = self._inv(q95) - self._inv(q5)
+        ok = np.isfinite(centre) & np.isfinite(spread)
+        rho = float(spearmanr(centre[ok], spread[ok]).statistic) if ok.sum() > 2 else np.nan
+        return {"centre": centre, "spread": spread, "spearman": rho}
+
+    def duplicates(self, tol=0.0):
+        """The pairs of data closer than ``tol`` (co-located when ``tol`` is 0), with their values.
+
+        Co-located data with different values, a duplicated hole, a re-assay or a coordinate error,
+        cannot both be right at one location; their laws say little about it, since each sees the
+        other as a neighbour.
+
+        Parameters
+        ----------
+        tol : float, optional
+            The distance below which two data count as co-located. Default: 0.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``i``, ``j``, ``distance``, ``value_i``, ``value_j`` and ``difference`` (absolute), sorted
+            by decreasing difference.
+        """
+        from scipy.spatial import cKDTree
+        pts = np.asarray(self.points, float)
+        pairs = np.array(sorted(cKDTree(pts).query_pairs(r=max(float(tol), 0.0) + 1e-12)), dtype=int).reshape(-1, 2)
+        i, j = pairs[:, 0], pairs[:, 1]
+        d = np.sqrt(((pts[i] - pts[j]) ** 2).sum(axis=1))
+        out = pd.DataFrame({"i": i, "j": j, "distance": d, "value_i": self.values[i], "value_j": self.values[j],
+                            "difference": np.abs(self.values[i] - self.values[j])})
+        return out.sort_values("difference", ascending=False, ignore_index=True)
 
     # ------------------------------------------------------------------ global readings
     def calibration(self, alphas=(0.5, 0.8, 0.9, 0.95, 0.99)):
@@ -740,6 +921,66 @@ class PosteriorAudit:
             ax.set_xlabel("value")
             ax.set_ylabel("position in its law (PIT)")
             ax.set_ylim(-0.02, 1.02)
+            fig.tight_layout()
+        return fig
+
+    def plot_declustered(self, bins=30, theme='alges', color=None, **figargs):
+        """The histogram of the values with and without the declustering weights (:meth:`weights`).
+
+        Parameters
+        ----------
+        bins : int, optional
+            Number of bins. Default: 30.
+        theme : str, optional
+            Plot theme. Default: ``'alges'``.
+        color : str, optional
+            Colour of the declustered histogram. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        w = self.weights()
+        figargs.setdefault("figsize", (6, 4))
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 1, **figargs)
+            edges = np.histogram_bin_edges(self.values, bins=bins)
+            ax.hist(self.values, bins=edges, density=True, histtype='step', lw=1.5, color='grey', label="naive",
+                    zorder=3)
+            ax.hist(self.values, bins=edges, weights=w, density=True, histtype='stepfilled', alpha=0.7,
+                    color=style.color, label="declustered", zorder=2)
+            ax.set_xlabel("value")
+            ax.set_ylabel("density")
+            ax.legend(fontsize=8)
+            fig.tight_layout()
+        return fig
+
+    def plot_proportional_effect(self, theme='alges', color=None, **figargs):
+        """The width of each datum's law against its centre (:meth:`proportional_effect`).
+
+        Parameters
+        ----------
+        theme : str, optional
+            Plot theme. Default: ``'alges'``.
+        color : str, optional
+            Point colour. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        pe = self.proportional_effect()
+        figargs.setdefault("figsize", (6, 4))
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 1, **figargs)
+            ax.scatter(pe["centre"], pe["spread"], s=15, color=style.color, zorder=3)
+            ax.set_xlabel("centre of the law (median)")
+            ax.set_ylabel("width of the central 90 % interval")
+            ax.set_title(f"Spearman {pe['spearman']:.2f}")
             fig.tight_layout()
         return fig
 
@@ -1055,6 +1296,7 @@ def posterior_audit(points, values, **kwargs):
                            widening=kwargs["widening"], widening_knn=kwargs["widening_knn"], seed=kwargs["seed"],
                            scale=kwargs["scale"], calibrate=kwargs["calibrate"], tails=kwargs["tails"],
                            nu=kwargs["nu"])
+    audit._cells = _cells_reader(points, kwargs)
     weak = int(np.sum(audit.support < 0.5))
     if weak:
         log_message(logging.logger.warning(

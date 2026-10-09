@@ -167,8 +167,38 @@ An error or an unrepresented place
 A value its neighbours do not support may be an error, a sample switched in the laboratory or a
 decimal point misplaced, or it may record a part of the domain the other data do not represent, a
 thin seam or a stream that only runs in flood. Nothing in the number tells the two apart, since the
-difference lies in the provenance of the datum. Posterior analysis gives the evidence and an order,
+difference lies in the provenance of the datum.
+
+The neighbours of a surprising datum give some evidence. Its *coherence* is the share of its
+nearest other data that lie on the same side of their own laws, above or below the median. Around an
+isolated error the neighbours fall on either side, a coherence near one half. Data of a part of the
+domain the laws do not represent are surprised together, a coherence near 1. On a field with a
+planted patch of 15 data raised above their surroundings, the patch had a mean coherence of 0.74
+against 0.56 for the other data, and an isolated error 0.50. Posterior analysis gives the evidence and an order,
 from the most to the least surprising datum. The analyst, who knows the provenance, decides.
+
+How much of the domain each datum represents
+============================================
+
+Data are often taken where the values are high or of interest, so the plain summaries of the values
+lean towards those values. Classical declustering weighs each datum by the area it represents, with
+a grid of cells whose size the analyst chooses. The partitions give that weight without a choice.
+Each partition shares the domain among the data, every cell giving its area equally to the data it
+holds and the area of the cells without data being shared out in proportion. The *declustering
+weight* of a datum is its share averaged over the partitions, the weights summing to 1. A datum in
+a dense cluster shares small cells with many others and weighs little, an isolated datum in a large
+cell weighs much.
+
+On a field with half of its 300 data taken where the values exceed 0.8, the plain mean of the
+values was 0.60 and the declustered one 0.20, for a field whose mean over the domain is close to 0
+apart from a raised patch of the example. The data of the preferential half weighed on average half
+as much as the others.
+
+Two further readings complete the picture. The *proportional effect* compares the width of each
+datum's law with its centre. A strong rank correlation shows laws that widen with the values, as
+for skewed variables, which a transformed scale may then suit. Co-located data, closer than a
+tolerance, are listed with their values, since two different values at one location cannot both be
+right while each sees the other as a neighbour.
 
 In Spatialize
 =============

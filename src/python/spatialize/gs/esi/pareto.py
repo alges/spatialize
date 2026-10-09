@@ -265,7 +265,11 @@ class ParetoOptimizer:
     support_sample_size : int
         Grid resolution for the shared KL evaluation grid (default 500).
     callback : callable, optional
-        Progress callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     """
 
     def __init__(

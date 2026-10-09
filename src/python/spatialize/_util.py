@@ -63,6 +63,9 @@ def signature_overload(pivot_arg, common_args, specific_args):
                 if arg != pivot_key and arg not in spec_args and arg not in common_args:
                     raise SpatializeError(f"Argument '{arg}' not recognized for '{pk}' {pivot_desc.lower()}")
 
+            if "callback" in kwargs and kwargs["callback"] is None:
+                from spatialize.logging import default_singleton_callback
+                kwargs["callback"] = default_singleton_callback
             return func(*args, **kwargs)
 
         return inner_function

@@ -254,6 +254,9 @@ _MESSAGE = {"terminal": _terminal_message, "notebook": _notebook_message, "plain
 def progress(total, desc):
     """A progress display of ``total`` steps, with ``advance(n)`` and ``finish()``. A renderer that
     fails (a notebook without IPython's display, say) falls back to plain lines."""
+    from spatialize import session
+    if not session.get("progress"):
+        return _Silent(total, desc)
     m = mode()
     try:
         return _PROGRESS[m](total, desc)

@@ -103,6 +103,14 @@ The settings are the following.
     values force one of these looks, ``"silent"`` showing nothing. All of them share the colours of
     the ``alges`` palette. The setting changes no result.
 
+``progress`` (bool)
+    Whether progress bars are drawn, for the compiled engine and for the Python loops alike (the
+    searches, the simulations, the Pareto search, the posterior analysis). The default is ``True``.
+    With ``False`` no bar is drawn while the messages keep following ``verbosity``, so a script that
+    times its calls, a loop over many estimations or a log stays free of bars without losing the
+    warnings. ``with spatialize.session.override(progress=False):`` does it for a block. The setting
+    changes no result.
+
 ``verbosity`` (``"debug"``, ``"info"``, ``"warning"`` or ``"error"``)
     The lowest level of the messages shown. The default, ``"warning"``, shows the warnings and the
     errors, such as the data a search leaves out of its score or the calibration of the laws of the
@@ -117,7 +125,7 @@ Examples
 >>> with spatialize.session.override(domain=None):     # restored on exit
 ...     pass
 >>> spatialize.session.effective_config()
-{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder', 'max_left_out': 0.05, 'display': 'auto', 'verbosity': 'warning'}
+{'domain': ((0.0, 100.0), (0.0, 50.0)), 'parallel': True, 'num_threads': None, 'empty_cells': 'nan', 'mark_source': 'local', 'mark_knn': 8, 'mark_value': 'decoder', 'max_left_out': 0.05, 'display': 'auto', 'verbosity': 'warning', 'progress': True}
 >>> spatialize.session.reset()
 """
 import contextlib
@@ -129,7 +137,7 @@ from spatialize import SpatializeError
 
 _DEFAULTS = {"domain": None, "parallel": True, "num_threads": None, "empty_cells": "nan",
              "mark_source": "local", "mark_knn": 8, "mark_value": "decoder", "max_left_out": 0.05,
-             "display": "auto", "verbosity": "warning"}
+             "display": "auto", "verbosity": "warning", "progress": True}
 
 _global = {}
 _overrides = contextvars.ContextVar("spatialize_session_overrides", default={})
@@ -153,6 +161,14 @@ def _validate_parallel(value):
     if not isinstance(value, (bool, np.bool_)):
         raise SpatializeError(f"parallel must be True or False; got {value!r}")
     return bool(value)
+
+
+def _validate_flag(name):
+    def validate(value):
+        if not isinstance(value, (bool, np.bool_)):
+            raise SpatializeError(f"{name} must be True or False; got {value!r}")
+        return bool(value)
+    return validate
 
 
 def _validate_num_threads(value):
@@ -193,7 +209,8 @@ _VALIDATORS = {"domain": _validate_domain, "parallel": _validate_parallel, "num_
                "mark_value": _choice("mark_value", ("decoder", "datum")),
                "max_left_out": _validate_share,
                "display": _choice("display", ("auto", "terminal", "notebook", "plain", "silent")),
-               "verbosity": _choice("verbosity", ("debug", "info", "warning", "error"))}
+               "verbosity": _choice("verbosity", ("debug", "info", "warning", "error")),
+               "progress": _validate_flag("progress")}
 
 
 def _validated(settings):

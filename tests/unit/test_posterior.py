@@ -21,8 +21,7 @@ def test_posterior_audit_builds_each_law_from_the_other_data():
     s, v, _ = DATA["2d"]
     v = v.copy()
     v[3] = v.max() + 10 * (v.max() - v.min())          # far above every other value
-    kw = dict(local_interpolator="idw", exponent=2.0, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED,
-              callback=lambda *a, **k: None)
+    kw = dict(local_interpolator="idw", exponent=2.0, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED)
     audit = posterior_audit(s, v, fitted_model_factory=FittedModelFactory(), **kw)
     old = cv_sample_pred_posterior(s, v, s, fitted_model_factory=FittedModelFactory(), **kw)
     assert np.array_equal(audit.members, old.members, equal_nan=True)
@@ -44,7 +43,7 @@ def test_posterior_audit_readings_are_consistent():
     from spatialize.empirical import FittedModelFactory
     s, v, _ = DATA["2d"]
     v = np.exp(v - v.mean()).astype(np.float32)
-    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED, callback=lambda *a, **k: None)
+    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED)
     for options in ({}, {"tails": "gpd"}, {"tails": "normal", "calibrate": False}, {"scale": "yeojohnson"},
                     {"scale": "normal_scores"}):
         audit = posterior_audit(s, v, **kw, **options)
@@ -81,7 +80,7 @@ def test_posterior_audit_declustering_and_neighbours():
     from spatialize import SpatializeError
     from spatialize.gs.spa import posterior_audit, PosteriorAudit
     s, v, _ = DATA["2d"]
-    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED, callback=lambda *a, **k: None)
+    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED)
     audit = posterior_audit(s, v, **kw)
     w = audit.weights(n_probes=5000)
     assert np.isclose(w.sum(), 1.0) and np.all(w > 0)
@@ -109,8 +108,7 @@ def test_posterior_audit_shift_is_the_neighbours_mean_signed_position():
     from scipy.spatial import cKDTree
     from spatialize.gs.spa import posterior_audit
     s, v, _ = DATA["2d"]
-    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED,
-                            callback=lambda *a, **k: None)
+    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED)
     u = audit.pit()
     _, idx = cKDTree(np.asarray(s, float)).query(np.asarray(s, float), k=4)
     expected = np.array([np.mean(2 * u[[j for j in row if j != i][:3]] - 1) for i, row in enumerate(idx)])

@@ -85,7 +85,11 @@ def coesi_nongriddata(points, values, xi, co_estimation, estimation, aggregation
     n_aux : int, optional
         The number of auxiliary locations of the joint stage. Default: 100.
     callback : callable, optional
-        Progress and logging callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Returns
     -------
@@ -126,7 +130,11 @@ def coesi_marginal_cv(points, values, method="loo", loo=None, kfold=None, post_c
     k, folding_seed : int, optional
         The number of folds and the seed of their assignment, for ``"kfold"``.
     callback : callable, optional
-        Progress and logging callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Returns
     -------

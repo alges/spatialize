@@ -9,7 +9,7 @@ from spatialize.result import Summarised
 from spatialize._parallel import map_chunks
 from spatialize.empirical import (FittedModelFactory, _local_target_variance,
                                    _local_target_skewness)
-from spatialize.logging import log_message, default_singleton_callback
+from spatialize.logging import log_message, resolve_callback
 from spatialize.viz import plot_colormap_array, PlotStyle
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -125,7 +125,7 @@ def ess_sample(esi_result,
                n_sims=100,
                fitted_model_factory=None,
                desc=None,
-               callback=default_singleton_callback):
+               callback=None):
     """
     Generate simulated scenarios from Ensemble Spatial Interpolation (ESI) samples using probabilistic models.
 
@@ -153,8 +153,11 @@ def ess_sample(esi_result,
         Textual description for the result. If not provided, it is generated
         based on the model type and simulation parameters.
     callback : callable, optional
-        A callback function for progress reporting. Expected to support
-        ``logging.progress.init``, ``inform``, and ``stop`` methods.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Returns
     -------
@@ -199,6 +202,7 @@ def ess_sample(esi_result,
     (n_xi, 100)
     >>> ess_result.quick_plot()
     """
+    callback = resolve_callback(callback)
     if fitted_model_factory is None:
         fitted_model_factory = FittedModelFactory()
     if fitted_model_factory.point_model_name not in {"vim", "emm", "kde"}:

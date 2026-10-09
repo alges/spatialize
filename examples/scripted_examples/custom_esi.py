@@ -10,7 +10,6 @@ from numba import njit
 
 from spatialize.data import load_drill_holes_andes_2D
 from spatialize.gs.esi import esi_nongriddata
-from spatialize.logging import singleton_null_callback
 
 
 def idw_python(points, values, queries, params):
@@ -62,7 +61,7 @@ if __name__ == "__main__":
     points = samples[["x", "y"]].values
     values = samples[["cu"]].values[:, 0]
     xi = locations[["x", "y"]].values
-    common = dict(n_partitions=100, alpha=0.9, seed=206936, callback=singleton_null_callback)
+    common = dict(n_partitions=100, alpha=0.9, seed=206936)
 
     runs = {
         "built-in idw (C++)": dict(local_interpolator="idw", exponent=2.0),

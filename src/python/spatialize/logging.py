@@ -279,6 +279,13 @@ class SingletonLogMessage(LogMessage, metaclass=SingletonType):
 
 
 # **************************++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+def resolve_callback(callback):
+    """The callback a function uses: the one given, or with ``None`` the default, which shows the
+    progress and the messages as the session settings ``display``, ``progress`` and ``verbosity``
+    say."""
+    return default_singleton_callback if callback is None else callback
+
+
 def default_singleton_callback(msg):
     """The default callback: messages and progress shown in the look of the session's ``display``
     (:mod:`spatialize.session`)."""

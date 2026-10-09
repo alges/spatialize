@@ -43,8 +43,24 @@ def test_summary_of_the_posterior_analysis():
     number of flags."""
     from spatialize.gs.spa import posterior_audit
     s, v, _ = DATA["2d"]
-    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED,
-                            callback=lambda *a, **k: None)
+    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED)
     verdict = audit.calibration()["verdict"]
     for out in _renders(audit):
         assert str(len(v)) in out and verdict in out and "flagged" in out
+
+
+def test_progress_setting_hides_the_bars_but_not_the_warnings(capsys):
+    """With the session setting progress=False no bar is drawn, while warnings are still shown; with
+    progress=True the bars of the plain display appear."""
+    from spatialize import session
+    from spatialize.gs.esi import esi_nongriddata
+    from spatialize.logging import log_message, logger
+    s, v, q = DATA["2d"]
+    with session.override(display="plain", progress=False):
+        esi_nongriddata(s, v, q, local_interpolator="idw", exponent=2.0, n_partitions=cases.T, seed=cases.SEED)
+        log_message(logger.warning("a warning that must show"))
+    err = capsys.readouterr().err
+    assert "computing estimates" not in err and "a warning that must show" in err
+    with session.override(display="plain", progress=True):
+        esi_nongriddata(s, v, q, local_interpolator="idw", exponent=2.0, n_partitions=cases.T, seed=cases.SEED)
+    assert "computing estimates" in capsys.readouterr().err

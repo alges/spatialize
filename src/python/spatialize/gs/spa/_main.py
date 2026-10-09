@@ -22,7 +22,7 @@ from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_targe
                                   _loo_target_skewness)
 from spatialize.gs import (lib_spatialize_facade, partitioning_process, local_interpolator as li,
                            with_more_decoders, decoder_arguments)
-from spatialize.logging import default_singleton_callback, log_message
+from spatialize.logging import resolve_callback, log_message
 from spatialize.result import Summarised
 from spatialize.viz import PlotStyle
 
@@ -40,7 +40,7 @@ _COMMON = {"k": -1,
            "seed": random_seed,
            "folding_seed": random_seed,
            "fitted_model_factory": per_call(_default_factory),
-           "callback": default_singleton_callback,
+           "callback": None,
            "best_params_found": None}
 
 _SPECIFIC = with_more_decoders({
@@ -263,7 +263,11 @@ class PosteriorAudit(Summarised):
         The density model of :meth:`model`, for plots (:mod:`spatialize.empirical`). Default: a
         variational Gaussian mixture of three components.
     callback : callable, optional
-        Progress and logging callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     widening : {"auto", "gamma", "skew_normal", False}, optional
         How each datum's members are widened before they are read (:meth:`law`). Each member is the
         prediction of a partition-average, so the members spread less than the data do around it,
@@ -327,7 +331,7 @@ class PosteriorAudit(Summarised):
     a guarantee: :meth:`calibration` tells how well the laws are calibrated for the data at hand.
     """
 
-    def __init__(self, members, points, values, fitted_model_factory=None, callback=default_singleton_callback,
+    def __init__(self, members, points, values, fitted_model_factory=None, callback=None,
                  widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0,
                  cells=None):
         self.members = np.asarray(members, dtype=np.float64)
@@ -336,7 +340,7 @@ class PosteriorAudit(Summarised):
         if self.members.shape[0] != len(self.values):
             raise SpatializeError(f"members has {self.members.shape[0]} rows for {len(self.values)} data")
         self.fitted_model_factory = fitted_model_factory if fitted_model_factory is not None else _default_factory()
-        self.callback = callback
+        self.callback = resolve_callback(callback)
         self.support = np.isfinite(self.members).mean(axis=1)
         self._models = {}
         self._targets = None
@@ -1109,7 +1113,11 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
     fitted_model_factory : FittedModelFactory
         The density model fitted to each datum's members.
     callback : callable, optional
-        Progress and logging callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Attributes
     ----------
@@ -1131,7 +1139,7 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
     """
 
     def __init__(self, cv_post_result, points, sample_values, fitted_model_factory,
-                 callback=default_singleton_callback):
+                 callback=None):
         super().__init__(cv_post_result, points, sample_values, fitted_model_factory, callback,
                          widening=False)
         self.post_result = cv_post_result
@@ -1352,7 +1360,11 @@ def posterior_audit(points, values, **kwargs):
         The output of a search's ``best_result()``; its keys override the arguments, except
         ``n_partitions``. The dict is not modified. Default: None.
     callback : callable, optional
-        Progress and logging callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Returns
     -------

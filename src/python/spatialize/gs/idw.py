@@ -5,7 +5,7 @@ from sklearn.model_selection import ParameterGrid
 import spatialize.gs
 from spatialize import SpatializeError, logging, GridSearchResult, EstimationResult
 from spatialize._math_util import flatten_grid_data
-from spatialize.logging import default_singleton_callback, singleton_null_callback, log_message
+from spatialize.logging import resolve_callback, singleton_null_callback, log_message
 from spatialize.gs import lib_spatialize_facade
 
 
@@ -92,7 +92,7 @@ def idw_hparams_search(points, values, xi,
                        radius=(0.1, 0.2, 0.5),
                        exponent=tuple(np.arange(0.8, 1.0, 0.1)),
                        folding_seed=None,
-                       callback=default_singleton_callback
+                       callback=None
                        ):
     """Perform a k-fold (or leave-one-out) cross-validation hyperparameter search for plain IDW.
 
@@ -136,8 +136,11 @@ def idw_hparams_search(points, values, xi,
         performed). Default: a random integer in ``[1000, 10000)``, drawn
         at every call.
     callback : callable, optional
-        Callback used to report search progress. Default:
-        :func:`~spatialize.logging.default_singleton_callback`.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
 
     Returns
     -------
@@ -145,6 +148,7 @@ def idw_hparams_search(points, values, xi,
         The grid search results, one row per evaluated ``(radius,
         exponent)`` combination.
     """
+    callback = resolve_callback(callback)
     log_message(logging.logger.debug("searching best params ..."))
 
     if folding_seed is None:
@@ -338,7 +342,7 @@ def idw_nongriddata(points, values, xi, **kwargs):
 
 
 def _call_libspatialize(points, values, xi, radius=np.inf, exponent=1.0,
-                        callback=default_singleton_callback,
+                        callback=None,
                         best_params_found=None):
     """
     Call the libspatialize C++ library to perform IDW estimation.
@@ -352,6 +356,7 @@ def _call_libspatialize(points, values, xi, radius=np.inf, exponent=1.0,
     :param best_params_found: Dictionary containing best parameters found from previous searches (optional).
     :return: Estimation results from libspatialize library.
     """
+    callback = resolve_callback(callback)
     log_message(logging.logger.debug("running idw"))
 
     if best_params_found is None:

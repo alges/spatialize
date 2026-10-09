@@ -89,10 +89,14 @@ Messages and progress bars
 - **Warnings do not appear, or too many messages do.** The session setting ``verbosity`` sets the
   lowest level shown, warnings by default. ``spatialize.session.set(verbosity="info")`` adds what
   the functions do, ``"error"`` keeps only the errors.
+- **Turning the progress bars off.** ``spatialize.session.set(progress=False)``, or
+  ``with spatialize.session.override(progress=False):`` for a block, draws no bar while the warnings
+  still show. ``display="silent"`` hides the messages as well. Passing
+  ``callback=singleton_null_callback`` to a function also silences it, messages included, so the
+  session setting serves better.
 - **Progress bars garble a log file or the output of a continuous integration.** Spatialize draws
   live bars only on a terminal and writes plain lines elsewhere. A terminal whose output is captured
-  can be forced to plain lines with ``spatialize.session.set(display="plain")``, or to nothing with
-  ``display="silent"``.
+  can be forced to plain lines with ``spatialize.session.set(display="plain")``.
 - **No progress bar in a notebook.** The bars of a notebook are HTML, which needs IPython's display
   machinery. A front end that shows no HTML can use ``display="plain"``.
 

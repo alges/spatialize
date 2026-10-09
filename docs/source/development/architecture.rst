@@ -256,8 +256,12 @@ Progress and messages
 The compiled code and the Python functions report through one protocol of JSON messages,
 ``spatialize.logging`` (``{"message": {...}}`` for a log line, ``{"progress": {"init": n, "step": s,
 "desc": ...}}``, ``{"progress": {"token": ...}}`` and ``{"progress": "done"}`` for a run), sent to the
-``callback`` of each function. The default callback shows them through ``spatialize._display``, in the
-look the session setting ``display`` chooses.
+``callback`` of each function. With ``callback=None``, the default, they are shown through
+``spatialize._display``, in the look the session setting ``display`` chooses, the bars only when the
+setting ``progress`` is true and the messages from the level ``verbosity`` up. A callable passed as
+``callback`` receives the messages instead, to show them in an application's own interface, for
+instance. Inner computations, such as the estimations of a search, are given
+``singleton_null_callback``, so a search shows one bar rather than one per configuration.
 
 - **Where the output goes.** With ``display="auto"``, :func:`spatialize._display.environment`
   detects a Jupyter kernel (HTML through ``IPython.display``, a progress bar updated in place), a

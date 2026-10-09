@@ -14,7 +14,7 @@ from spatialize.futures import _experimental
                     common_args={"seed": 0,
                                  "p_process": "mondrian",
                                  "data_cond": True,
-                                 "callback": default_singleton_callback},
+                                 "callback": None},
                     specific_args=with_more_decoders({
                         li.IDW: {"exponent": 3.0},
                         li.KRIGING: {"model": "spherical", "nugget": 0.1, "range": 5000.0, "sill": 1.0},
@@ -45,8 +45,12 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
         For "voronoi", whether the nuclei are drawn among the data or uniformly.
     seed : int, default=0
         Random seed for reproducibility.
-    callback : callable
-        Callback function for progress reporting.
+    callback : callable, optional
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     exponent : float, default=3.0
         IDW exponent (IDW only).
     model : str, default="spherical"
@@ -239,7 +243,11 @@ class SpatialEntropy:
         seed : int, default=0
             Random seed for reproducibility.
         callback : callable, optional
-            Callback function for progress reporting. If None, uses default progress callback.
+            Where the progress and the messages go. Default: ``None``, shown as the session settings
+            ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+            receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+            application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+            drops them.
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
         p_process : str, default="mondrian"
@@ -471,7 +479,11 @@ class SpatialMutualInformation:
         seed : int, default=0
             Random seed for reproducibility.
         callback : callable, optional
-            Callback function for progress reporting. If None, uses default progress callback.
+            Where the progress and the messages go. Default: ``None``, shown as the session settings
+            ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+            receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+            application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+            drops them.
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
         p_process : str, default="mondrian"

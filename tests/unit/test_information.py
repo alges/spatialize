@@ -18,7 +18,7 @@ def test_mutual_information_marginals_integrate_the_joint_density():
     rng = np.random.default_rng(cases.GENERATOR_SEED)
     u = rng.normal(size=300)
     v = 0.5 * u + rng.normal(size=300)
-    smi = SpatialMutualInformation(T=300, M=5, alpha_m=0.8, callback=lambda *a, **k: None)
+    smi = SpatialMutualInformation(T=300, M=5, alpha_m=0.8)
     _, parts, leaves = smi._calculate_joint_entropy(u, v, 1)
     for marginal, (lo, hi) in (("u", (1, 2)), ("v", (3, 4))):
         h = []

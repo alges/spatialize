@@ -8,7 +8,7 @@ from spatialize import EstimationResult, GridSearchResult, SpatializeError, sess
 from spatialize.gs import lib_spatialize_facade
 from spatialize._util import signature_overload
 from spatialize._math_util import flatten_grid_data
-from spatialize.logging import default_singleton_callback, singleton_null_callback
+from spatialize.logging import singleton_null_callback
 from spatialize import logging
 from spatialize.logging import log_message
 from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotStyle
@@ -675,7 +675,7 @@ def _engine_alpha(kwargs):
         "seed": None,
         "agg_function": 'mv',
         "ordinal_order": None,
-        "callback": default_singleton_callback,
+        "callback": None,
         "best_params_found": None,
     },
     specific_args={
@@ -761,7 +761,12 @@ def cat_esi_griddata(points, values, xi, **kwargs) -> CatESIResult:
         For ``"voronoi"``, whether the nuclei are drawn among the data or
         uniformly in the box.
     seed : int
-    callback : progress callback
+    callback : callable, optional
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     n_neighbors : int (knn_pca only) – fix k neighbours
     max_points : int (knn_pca only) – subsampling cap per cell
     n_cv_splits : int (knn_pca only) – CV splits for parameter search
@@ -830,7 +835,12 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
         For ``"voronoi"``, whether the nuclei are drawn among the data or
         uniformly in the box.
     seed : int
-    callback : progress callback
+    callback : callable, optional
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     n_neighbors : int (knn_pca only)
     max_points : int (knn_pca only)
     n_cv_splits : int (knn_pca only)
@@ -892,7 +902,7 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
         "folding_seed": None,
         "agg_function": 'mv',
         "ordinal_order": None,
-        "callback": default_singleton_callback,
+        "callback": None,
         "griddata": False,
     },
     specific_args={

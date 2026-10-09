@@ -9,3 +9,14 @@ _REPO = os.path.dirname(_TESTS)
 for path in (os.path.join(_TESTS, "guard"), os.path.join(_REPO, "src", "python"), _REPO):
     if path not in sys.path:
         sys.path.insert(0, path)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _quiet_progress():
+    """No progress bars in the unit tests (session setting ``progress``); warnings still show."""
+    from spatialize import session
+    with session.override(progress=False):
+        yield

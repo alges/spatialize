@@ -20,7 +20,7 @@ def test_empty_cell_fraction_is_the_share_of_nan_members(p_process, alpha, data_
     from spatialize.gs.esi import esi_griddata, esi_nongriddata
     s, v, q = DATA["2d"]
     kw = dict(local_interpolator="idw", exponent=2.0, p_process=p_process, data_cond=data_cond, alpha=alpha,
-              n_partitions=cases.T, seed=cases.SEED, callback=lambda *a, **k: None)
+              n_partitions=cases.T, seed=cases.SEED)
     if griddata:
         grid = np.mgrid[0:1:15j, 0:1:15j]
         r = esi_griddata(s, v, (grid[0], grid[1]), **kw)

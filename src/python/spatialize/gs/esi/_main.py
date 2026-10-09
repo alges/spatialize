@@ -14,7 +14,7 @@ from spatialize._util import signature_overload, random_seed
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, \
     with_more_decoders, decoder_params, decoder_callables, decoder_arguments, _LEGACY_ARGUMENTS
-from spatialize.logging import log_message, default_singleton_callback, singleton_null_callback
+from spatialize.logging import log_message, singleton_null_callback
 from spatialize.viz import plot_colormap_array, PlotStyle
 
 
@@ -837,7 +837,7 @@ class ESIResult(EstimationResult):
                                  "scoring": sf.mae,
                                  "seed": random_seed,
                                  "folding_seed": random_seed,
-                                 "callback": default_singleton_callback,
+                                 "callback": None,
                                  },
                     specific_args=with_more_decoders({
                         li.IDW: {"exponent": list(np.arange(1.0, 15.0, 1.0))},
@@ -922,8 +922,11 @@ def esi_hparams_search(points, values, xi, **kwargs):
         cross-validation is used. Default: a random integer in ``[1000,
         10000)``.
     callback : callable, optional
-        Progress-reporting callback invoked as the search runs. Default:
-        :func:`~spatialize.logging.default_singleton_callback`.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     exponent : list of float, optional
         *(IDW only)* Candidate IDW distance-decay exponents to search.
         Default: ``[1.0, 2.0, ..., 14.0]``.
@@ -1144,8 +1147,11 @@ def esi_griddata(points, values, xi, **kwargs):
          Random seed for the partitioning process. Default: a random
          integer in ``[1000, 10000)``.
     callback : callable, optional
-         Callback used to report estimation progress. Default:
-         :func:`~spatialize.logging.default_singleton_callback`.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     best_params_found : dict or None, optional
          Parameter dict typically obtained from
          :meth:`ESIGridSearchResult.best_result` or
@@ -1322,8 +1328,11 @@ def esi_nongriddata(points, values, xi, **kwargs):
          Random seed for the partitioning process. Default: a random
          integer in ``[1000, 10000)``.
     callback : callable, optional
-         Callback used to report estimation progress. Default:
-         :func:`~spatialize.logging.default_singleton_callback`.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     best_params_found : dict or None, optional
          Parameter dict typically obtained from
          :meth:`ESIGridSearchResult.best_result` or
@@ -1431,7 +1440,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
         "point_model_name":     "kde",
         "nan_model_name":       "ignore",
         "support_sample_size":  500,
-        "callback":             default_singleton_callback,
+        "callback":             None,
     },
     specific_args=with_more_decoders({
         li.IDW:          {"exponent":  list(np.arange(1.0, 5.0, 1.0))},
@@ -1496,7 +1505,11 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     support_sample_size : int, optional
         KL evaluation grid resolution (default 500).
     callback : callable, optional
-        Progress callback.
+        Where the progress and the messages go. Default: ``None``, shown as the session settings
+        ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
+        receiving the messages of :mod:`spatialize.logging` sends them elsewhere, such as an
+        application's own interface, while :func:`~spatialize.logging.singleton_null_callback`
+        drops them.
     exponent : list of float, optional *(IDW only)*
         IDW exponents to search.
     model, nugget, range, sill : list *(Kriging only)*
@@ -1597,7 +1610,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
                                  "alpha": 0.8,
                                  "agg_function": af.mean,
                                  "seed": random_seed,
-                                 "callback": default_singleton_callback,
+                                 "callback": None,
                                  "best_params_found": None
                                  },
                     specific_args=with_more_decoders({

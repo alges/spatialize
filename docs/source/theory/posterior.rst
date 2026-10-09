@@ -13,25 +13,48 @@ quality control of a set of data, pointing to the values their surroundings do n
 The law of a datum
 ==================
 
-Cross-validation predicts each datum :math:`z_i` from the other data, one member per partition, so
-that every datum receives a predictive law :math:`\hat F_{-i}` built without it (:doc:`error`). The
-datum itself takes no part in its law, so a value its neighbours do not support keeps all of its
+Write :math:`z_1, \dots, z_n` for the data at the locations :math:`x_1, \dots, x_n`, and
+:math:`\Pi_1, \dots, \Pi_T` for the partitions of the ensemble, :math:`C_t(x)` being the cell of
+:math:`\Pi_t` that holds :math:`x`. Cross-validation predicts each datum from the other data of its
+cell, with the decoder :math:`g`,
+
+.. math::
+
+   m_i^{(t)} = g\big(x_i;\ \{(x_j, z_j) : j \ne i,\ x_j \in C_t(x_i)\}\big),
+   \qquad t \in \mathcal T_i,
+
+over the partitions :math:`\mathcal T_i` in which the cell of :math:`x_i` holds another datum
+(:doc:`error`). The members give the law of the datum built without it,
+
+.. math::
+
+   \hat F_{-i}(z) = \frac{1}{|\mathcal T_i|} \sum_{t \in \mathcal T_i} \mathbf 1\{m_i^{(t)} \le z\}.
+
+The datum takes no part in its law, so a value its neighbours do not support keeps all of its
 surprise.
 
-An isolated datum often sits alone in its cell. Under ``empty_cells="nan"`` those partitions give it
-no member, its law resting on the others. The share of partitions that give a member, the
-*support* of the datum, is the complement of the residual weight of the block-mark model
-(:doc:`blockmark`). A low support marks a law resting on few partitions. The policies ``"mark"``
-and ``"coarsen"`` give every datum a member in every partition.
+An isolated datum often sits alone in its cell, and under ``empty_cells="nan"`` such a partition
+gives it no member. The *support* of the datum,
+
+.. math::
+
+   s_i = \frac{|\mathcal T_i|}{T},
+
+estimates the probability that its cell holds another datum. Its complement :math:`1 - s_i` is the
+residual weight of the block-mark model (:doc:`blockmark`), the share of the law the data cannot
+reach. The policies ``"mark"`` and ``"coarsen"`` give every datum a member in every partition,
+:math:`s_i = 1`.
 
 Reading one datum
 =================
 
-The position of the datum in its law,
+Write :math:`\tilde F_i` for the law the readings use, :math:`\hat F_{-i}` corrected as the section
+on calibration describes, and :math:`\tilde f_i` for its density. The position of the datum in its
+law,
 
 .. math::
 
-   u_i = \hat F_{-i}(z_i),
+   u_i = \tilde F_i(z_i),
 
 tells how far into its tails the datum falls. Its two-sided tail probability,
 
@@ -39,64 +62,171 @@ tells how far into its tails the datum falls. Its two-sided tail probability,
 
    p_i = \min\{1,\ 2\min(u_i,\ 1 - u_i)\},
 
-is the p-value of the hypothesis that the datum was drawn from its law. The level of a datum is the
-widest central interval :math:`[\hat q_{(1-\alpha)/2},\ \hat q_{(1+\alpha)/2}]` of its law that leaves
-it out, for a few probabilities :math:`\alpha`. A datum drawn from its law falls outside the interval
-of probability :math:`\alpha` with probability :math:`1 - \alpha`.
+is the p-value of the hypothesis that the datum was drawn from its law. When it was, :math:`u_i` is
+uniform on :math:`[0, 1]` and :math:`\Pr(p_i \le a) = a`. The level of a datum is the widest
+central interval
 
-The log score of the datum, :math:`-\log \hat f_{-i}(z_i)`, measures its surprise in the units of
-the scoring rule the hyperparameter searches use (:doc:`error`). Its expectation under the law is
-the entropy of the law, so the excess of the score over the entropy is near 0 for a datum typical of
-its law and large for one its law does not expect.
+.. math::
+
+   I_\alpha = \big[\tilde F_i^{-1}\big(\tfrac{1-\alpha}{2}\big),\ \tilde F_i^{-1}\big(\tfrac{1+\alpha}{2}\big)\big]
+
+that leaves it out, for a few probabilities :math:`\alpha`. Since :math:`z_i \notin I_\alpha` exactly
+when :math:`u_i < (1 - \alpha)/2` or :math:`u_i > (1 + \alpha)/2`, a datum drawn from its law falls
+outside :math:`I_\alpha` with probability :math:`1 - \alpha`.
+
+The log score of the datum,
+
+.. math::
+
+   \ell_i = -\log \tilde f_i(z_i),
+
+measures its surprise with the strictly proper scoring rule the hyperparameter searches use
+(:doc:`error`). Its expectation under the law is the entropy of the law,
+
+.. math::
+
+   \mathbb E_{Z \sim \tilde F_i}\big[-\log \tilde f_i(Z)\big] = H(\tilde F_i),
+
+estimated on the sample :math:`y_{i1}, \dots, y_{iN}` of the law by
+:math:`\hat H_i = -\frac1N \sum_j \log \tilde f_i(y_{ij})`. The *excess surprise*
+:math:`\ell_i - \hat H_i` is near 0 for a datum typical of its law and large for one its law does
+not expect, in nats.
 
 Many data at once
 =================
 
-With :math:`n` data, a share :math:`1 - \alpha` of them falls outside the interval of probability
-:math:`\alpha` by chance alone, even when every law is right. Listing the data of the outer level
-would therefore list about :math:`(1 - \alpha)\,n` clean data. Spatialize flags the data with the
-Benjamini–Hochberg procedure, which sorts the p-values :math:`p_{(1)} \le \dots \le p_{(n)}` and
-flags the :math:`k` smallest, :math:`k` being the largest index with
+With :math:`n` data, a share :math:`1 - \alpha` of them falls outside :math:`I_\alpha` by chance
+alone, even when every law is right. Listing the data of the outer level would therefore list about
+:math:`(1 - \alpha)\,n` clean data. Spatialize flags the data with the Benjamini–Hochberg procedure,
+which sorts the p-values :math:`p_{(1)} \le \dots \le p_{(n)}` and flags the :math:`k` smallest,
 
 .. math::
 
-   p_{(k)} \le \frac{k}{n}\, q.
+   k = \max\Big\{j : p_{(j)} \le \frac{j}{n}\, q\Big\},
 
-When the p-values are right, the expected share of clean data among the flagged ones, the *false
-discovery rate*, is at most :math:`q`.
+none when no index qualifies. When the p-values of the :math:`n_0` clean data are uniform and
+independent, or positively dependent, the false discovery rate, the expected share of clean data
+among the flagged ones, satisfies
+
+.. math::
+
+   \mathbb E\Big[\frac{V}{\max(R, 1)}\Big] \le \frac{n_0}{n}\, q \le q,
+
+with :math:`R` the number of flags and :math:`V` the clean data among them. When every datum is clean, :math:`V = R`, so the bound says that some flag appears with probability at most :math:`q`.
 
 Calibration comes first
 =======================
 
-The guarantee rests on laws whose probabilities are right, which the laws read by
-cross-validation are not. Each member averages the data of a cell, so the members spread less than the data do
+The guarantee rests on laws whose probabilities are right, which the laws read by cross-validation
+are not. Each member averages the data of a cell, so the members spread less than the data do
 around them. Read as they are, the laws put many more data in their tails than their probabilities
 say. The tails of the laws are also too light, since a few hundred members say little about values
-beyond them.
+beyond them. Counting the members cannot give a tail probability below
+:math:`2/(|\mathcal T_i| + 1)`, while the smallest p-value must fall below :math:`q/n` for a single
+flag, :math:`1.7 \cdot 10^{-4}` with :math:`n = 300` and :math:`q = 0.05`. Spatialize corrects the
+laws in four steps before reading them.
 
-Spatialize corrects the laws in three steps before reading them.
+**Scale.** The values may be read through a monotone map :math:`\phi` fitted to the data,
+:math:`\phi(z) = z` by default. The Yeo–Johnson map,
 
-1. **Widening.** The members of each datum are widened to the spread of its nearest other data, the
-   ensemble widening of simulation (:doc:`ess`). The spread is measured robustly, by the median
-   absolute deviation, so an erroneous neighbour does not widen a law enough to hide another error.
-2. **One factor.** Every law's spread around its median is multiplied by one factor, fitted so that
-   90 % of the data fall inside the central 90 % interval of their law. A factor above 1 tells that
-   the widened laws were still too narrow.
-3. **Tails.** The law is carried past its sample by a model of its tails, so that a value far
-   beyond every member gets a p-value as small as its distance warrants. Counting the members could
-   not give less than one over their number, which no flag can pass among hundreds of data. The
-   model is a kernel density with Student-t kernels of 3 degrees of freedom, by default, or
-   generalized Pareto tails beyond the 10 % and 90 % quantiles, with one shape per side pooled over
-   all the laws. Gaussian kernels give the lightest tails.
+.. math::
 
-The laws can also be read on a transformed scale, which makes a skewed variable more symmetric. A
-Yeo–Johnson transform fitted to the data keeps how far an extreme value lies. Normal scores make the
-data normal, while bringing every extreme value to the largest score, so a gross error stands out
-less.
+   \phi_\lambda(z) =
+   \begin{cases}
+   \big((1 + z)^\lambda - 1\big)/\lambda, & z \ge 0,\ \lambda \ne 0, \\
+   \log(1 + z), & z \ge 0,\ \lambda = 0, \\
+   -\big((1 - z)^{2-\lambda} - 1\big)/(2 - \lambda), & z < 0,\ \lambda \ne 2, \\
+   -\log(1 - z), & z < 0,\ \lambda = 2,
+   \end{cases}
+
+with :math:`\lambda` fitted by maximum likelihood, makes a skewed variable more symmetric while
+keeping how far an extreme value lies. Normal scores map the datum of rank :math:`r` to
+:math:`\Phi^{-1}\big((r - \tfrac12)/n\big)`, linearly between the data and past them, which makes the
+data normal but brings every extreme value close to the largest score, so a gross error stands out
+less. The positions :math:`u_i` do not depend on a monotone map by themselves, only through the
+corrections below, which act on its scale.
+
+**Widening.** The members of each datum are widened to the spread of its :math:`k` nearest other
+data :math:`N_k(i)` (12 by default), the ensemble widening of simulation (:doc:`ess`), with a robust
+target variance,
+
+.. math::
+
+   \tau_i^2 = \Big(1.4826\ \operatorname{med}_{j \in N_k(i)} \big|z_j - \operatorname{med}_{l \in N_k(i)} z_l\big|\Big)^2,
+
+the squared scaled median absolute deviation, so an erroneous neighbour does not widen a law enough
+to hide another error. Each member becomes the mean of a component, a Gamma law for non-negative
+values or a skew-normal law otherwise, whose shape follows the skewness of the neighbours, with
+the variance
+
+.. math::
+
+   \nu_i = \tau_i^2 - \operatorname{Var}\big(m_i^{(t)}\big)
+
+that the members lack, so that the mixture has mean and variance those of the members plus
+:math:`\nu_i`, its variance being :math:`\tau_i^2`. A law already as wide as its target is left as it
+is.
+
+**One factor.** Every law's sample is spread around its median by one factor :math:`c`,
+
+.. math::
+
+   y_{ij} \mapsto \operatorname{med}_l y_{il} + c\,\big(y_{ij} - \operatorname{med}_l y_{il}\big),
+
+with :math:`c` the solution of
+
+.. math::
+
+   \frac1n \sum_{i=1}^n \mathbf 1\big\{u_i(c) \in [0.05,\ 0.95]\big\} = 0.9,
+
+found by bisection, so that 90 % of the data fall inside the central 90 % interval of their law. A
+factor above 1 tells that the widened laws were still too narrow.
+
+**Tails.** The law is carried past its sample :math:`y_{i1}, \dots, y_{iN}` by a kernel density,
+
+.. math::
+
+   \tilde f_i(z) = \frac{1}{N h_i} \sum_{j=1}^N K\Big(\frac{z - y_{ij}}{h_i}\Big),
+   \qquad
+   \tilde F_i(z) = \frac1N \sum_{j=1}^N \mathcal K\Big(\frac{z - y_{ij}}{h_i}\Big),
+
+with :math:`\mathcal K` the distribution function of the kernel :math:`K` and Silverman's
+bandwidth from the sample's own spread,
+:math:`h_i = 0.9 \min\big(\hat\sigma_i,\ \mathrm{IQR}_i/1.34\big)\, N^{-1/5}`. The kernel is
+Student's :math:`t` with :math:`\nu = 3` degrees of freedom by default, whose tails decay as
+:math:`|u|^{-(\nu + 1)}`, so a value far beyond every member gets a p-value as small as its distance
+warrants. Gaussian kernels give the lightest tails. The alternative ``tails="gpd"`` standardises each
+law by its median and interquartile range, :math:`w_{ij} = (y_{ij} - \operatorname{med}_i)/\mathrm{IQR}_i`,
+pools the excesses over the 90 % quantile of every law, :math:`w_{ij} - \omega_i^{+}`, and fits to them
+one generalized Pareto law of shape :math:`\xi` and scale :math:`\beta` by maximum likelihood, the
+lower tail likewise. Above the threshold the tail is
+
+.. math::
+
+   \Pr(W_i > w) = 0.1\,\Big(1 + \xi\, \frac{w - \omega_i^{+}}{\beta}\Big)^{-1/\xi},
+   \qquad w > \omega_i^{+},
+
+the share of the sample being used below it.
 
 Version 1.2 controlled the tails another way, adding the datum to its own sample. The law then
 always reached the datum, which kept its tail probability away from 0, at the price of the surprise
 the analysis looks for. The tail model replaces that device.
+
+Reading the calibration
+-----------------------
+
+The calibration is read on the data themselves, through the coverage of the central intervals,
+
+.. math::
+
+   \hat C(\alpha) = \frac1n \sum_{i=1}^n \mathbf 1\big\{u_i \in \big[\tfrac{1-\alpha}{2},\ \tfrac{1+\alpha}{2}\big]\big\},
+   \qquad
+   z(\alpha) = \frac{\hat C(\alpha) - \alpha}{\sqrt{\alpha(1 - \alpha)/n}},
+
+compared with the probability :math:`\alpha` through its binomial standard error, and through the
+Kolmogorov–Smirnov distance of the positions :math:`u_i` from the uniform law. Spatialize reports
+:math:`\hat C(\alpha)` before and after the factor, and calls the laws too narrow when some
+:math:`z(\alpha) < -3`, too wide when some :math:`z(\alpha) > 3`.
 
 What the corrections achieve
 ----------------------------
@@ -154,12 +284,11 @@ out of 24. Without correction the laws flag between 140 and 1 041 clean data ove
 with planted errors, and the coverage of their central 99 % interval falls to between 0.63 and 0.91.
 With the corrections that coverage lies between 0.97 and 0.99.
 
-On a clean field every flag is a false discovery. The procedure promises that some flag appears on
-at most 5 % of clean fields. No setting keeps that promise on every kind of field, the tails of the
-laws remaining too light at the 99 % level. Heavier tails trade false flags for power. Clustered
+On a clean field every flag is a false discovery, so the procedure promises that some flag appears
+on at most 5 % of clean fields. No setting keeps that promise on every kind of field, the tails of
+the laws remaining too light at the 99 % level. Heavier tails trade false flags for power. Clustered
 data and skewed values are the hardest cases. The calibration of the laws is therefore part of the
-result. Spatialize reports it, the coverage of the central intervals before and after the factor,
-with a verdict, in whose light the flags are to be read.
+result. Spatialize reports it, with a verdict, in whose light the flags are to be read.
 
 An error or an unrepresented place
 ==================================
@@ -170,12 +299,20 @@ thin seam or a stream that only runs in flood. Nothing in the number tells the t
 difference lies in the provenance of the datum.
 
 The neighbours of a surprising datum give some evidence. Its *coherence* is the share of its
-nearest other data that lie on the same side of their own laws, above or below the median. Around an
-isolated error the neighbours fall on either side, a coherence near one half. Data of a part of the
-domain the laws do not represent are surprised together, a coherence near 1. On a field with a
-planted patch of 15 data raised above their surroundings, the patch had a mean coherence of 0.74
-against 0.56 for the other data, and an isolated error 0.50. Posterior analysis gives the evidence and an order,
-from the most to the least surprising datum. The analyst, who knows the provenance, decides.
+:math:`k` nearest other data (8 by default) that lie on the same side of their own laws,
+
+.. math::
+
+   \kappa_i = \frac1k \sum_{j \in N_k(i)} \mathbf 1\big\{\operatorname{sign}(u_j - \tfrac12) = \operatorname{sign}(u_i - \tfrac12)\big\}.
+
+When the neighbours are drawn from their laws, independently of the datum, each lies on either side
+with probability one half, so :math:`k\kappa_i` follows a binomial law of :math:`k` trials of
+probability :math:`\tfrac12`, of mean :math:`k/2`. Around an isolated error the coherence stays near
+one half. Data of a part of the domain the laws do not represent are surprised together, a coherence
+near 1. On a field with a planted patch of 15 data raised above their surroundings, the patch had a
+mean coherence of 0.74 against 0.56 for the other data, and an isolated error 0.50. Posterior
+analysis gives the evidence and an order, from the most to the least surprising datum. The analyst,
+who knows the provenance, decides.
 
 How much of the domain each datum represents
 ============================================
@@ -184,10 +321,28 @@ Data are often taken where the values are high or of interest, so the plain summ
 lean towards those values. Classical declustering weighs each datum by the area it represents, with
 a grid of cells whose size the analyst chooses. The partitions give that weight without a choice.
 Each partition shares the domain among the data, every cell giving its area equally to the data it
-holds and the area of the cells without data being shared out in proportion. The *declustering
-weight* of a datum is its share averaged over the partitions, the weights summing to 1. A datum in
-a dense cluster shares small cells with many others and weighs little, an isolated datum in a large
-cell weighs much.
+holds, the area of the cells without data being shared out in proportion. With :math:`n_t(C)` the
+number of data in the cell :math:`C` of :math:`\Pi_t` and :math:`|C|` its area, the *declustering
+weight* of datum :math:`i` is
+
+.. math::
+
+   w_i = \frac1T \sum_{t=1}^T \frac{|C_t(x_i)|}{n_t\big(C_t(x_i)\big)\ \sum_{C \in \Pi_t,\ n_t(C) > 0} |C|},
+   \qquad \sum_{i=1}^n w_i = 1.
+
+The areas are estimated by the share of :math:`M` locations drawn uniformly in the box of the
+partitions (20 000 by default) that each cell holds. A datum in a dense cluster shares small cells
+with many others and weighs little, an isolated datum in a large cell weighs much. The declustered
+summaries weigh the values by :math:`w`,
+
+.. math::
+
+   \bar z_w = \sum_i w_i z_i,
+   \qquad
+   s_w^2 = \sum_i w_i (z_i - \bar z_w)^2,
+
+the quantiles interpolating the cumulative weights at the midpoints of the sorted values,
+:math:`\sum_{j \le r} w_{(j)} - \tfrac12 w_{(r)}`.
 
 On a field with half of its 300 data taken where the values exceed 0.8, the plain mean of the
 values was 0.60 and the declustered one 0.20, for a field whose mean over the domain is close to 0
@@ -195,10 +350,12 @@ apart from a raised patch of the example. The data of the preferential half weig
 as much as the others.
 
 Two further readings complete the picture. The *proportional effect* compares the width of each
-datum's law with its centre. A strong rank correlation shows laws that widen with the values, as
-for skewed variables, which a transformed scale may then suit. Co-located data, closer than a
-tolerance, are listed with their values, since two different values at one location cannot both be
-right while each sees the other as a neighbour.
+datum's law with its centre through the rank correlation of Spearman between the medians and the
+widths of the central 90 % intervals, both in the units of the values. A strong positive correlation
+shows laws that widen with the values, as for skewed variables, which a transformed scale may then
+suit. Co-located data, the pairs with :math:`\lVert x_i - x_j \rVert \le \varepsilon` for a tolerance
+:math:`\varepsilon`, are listed with their values, since two different values at one location cannot
+both be right while each sees the other as a neighbour.
 
 In Spatialize
 =============

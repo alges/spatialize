@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.interpolate import Akima1DInterpolator
+from scipy.interpolate import Akima1DInterpolator, PchipInterpolator
 from scipy.spatial import cKDTree
 from scipy.stats import skew as _scipy_skew, skewnorm
 
@@ -1137,7 +1137,7 @@ class EmpiricalModel(BaseEmpiricalModel):
 
     class F:
         """
-        A wrapper for an Akima interpolation function.
+        A wrapper for an Akima interpolation function, or a monotone (PCHIP) one.
 
         Parameters
         ----------
@@ -1146,7 +1146,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         y : array_like
             Values to interpolate.
         """
-        def __init__(self, x, y, outside=None):
+        def __init__(self, x, y, outside=None, monotone=False):
             """
             Build the Akima interpolant from a grid `x` and values `y`.
 
@@ -1159,6 +1159,10 @@ class EmpiricalModel(BaseEmpiricalModel):
             outside : tuple of float, optional
                 The values below and above the grid (0 and 1 for a cumulative distribution
                 function, 0 and 0 for a density). Default: NaN outside the grid.
+            monotone : bool, optional
+                Interpolate with PCHIP, which keeps monotone values monotone and within their
+                range, as a cumulative distribution function and its inverse must be; Akima can
+                overshoot next to a sharp step. Default: False (Akima).
             """
             self.__outside = outside
             # Ensure x is sorted for interpolation
@@ -1171,7 +1175,7 @@ class EmpiricalModel(BaseEmpiricalModel):
             unique_x, unique_indices = np.unique(x_sorted, return_index=True)
             unique_y = y_sorted[unique_indices]
             
-            self.__f = Akima1DInterpolator(unique_x, unique_y)
+            self.__f = (PchipInterpolator if monotone else Akima1DInterpolator)(unique_x, unique_y)
 
         def __call__(self, x):
             """
@@ -1202,7 +1206,7 @@ class EmpiricalModel(BaseEmpiricalModel):
 
             Returns
             -------
-            Akima1DInterpolator
+            Akima1DInterpolator or PPoly
                 The derivative interpolant.
             """
             return self.__f.derivative()
@@ -1251,7 +1255,9 @@ class EmpiricalModel(BaseEmpiricalModel):
             self.model = skl_model
             self.data_ = None
             # Sample from the model to determine min/max range for grid
-            s = self.model.sample(support_sample_size * 10)[0] # Use a larger sample for range
+            # a larger sample for the range; mixtures return (X, labels), KernelDensity X alone
+            s = self.model.sample(support_sample_size * 10)
+            s = np.ravel(s[0] if isinstance(s, tuple) else s)
             self.d_min, self.d_max = s.min(), s.max()
         else:
             if sample is None:
@@ -1296,8 +1302,12 @@ class EmpiricalModel(BaseEmpiricalModel):
         # Create interpolators
         # outside the grid the law has no mass: density 0, cumulative probability 0 below and 1 above
         self.pdf = self.F(self.x_, self.pdf_, outside=(0.0, 0.0))
-        self.cdf = self.F(self.x_, self.cdf_, outside=(0.0, 1.0))
-        self.inv_cdf = self.F(self.cdf_, self.x_)
+        self.cdf = self.F(self.x_, self.cdf_, outside=(0.0, 1.0), monotone=True)
+        # the inverse needs a strictly increasing cumulative probability: steps below 1e-12 (flat
+        # tails, or the plateaus around a near-degenerate mixture component) would give it
+        # infinite slopes, so those points are left out
+        rises = np.concatenate([[True], np.diff(self.cdf_) > 1e-12])
+        self.inv_cdf = self.F(self.cdf_[rises], self.x_[rises], monotone=True)
 
     def entropy(self, a=None, b=None, base=np.e, epsilon=1e-10):
         """

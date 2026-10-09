@@ -1,0 +1,34 @@
+id: P1-ensemble-convergence
+version: 1
+tier: T2
+evaluator: convergence
+book:
+  topic: "the ensemble estimate converges as the number of partitions grows: its members are iid given the data"
+  draft_2026_10: "ch 3, the estimator as the mean over partitions"   # the book is a draft
+purpose: >
+  The members of an ensemble are independent draws given the data, so the spread of the ensemble
+  mean across independent ensembles falls as one over the square root of the number of members. On
+  log scales the spread against the ensemble size has slope -1/2. A dependence between members
+  (a shared stream of random numbers, partitions reused across members) would flatten the slope.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 250
+  queries: 5
+  generator_seed: 20261009
+estimators:
+  # coarsen: every member is defined, so the mean of T members averages exactly T iid draws
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+  - {id: kriging, encoder: mondrian, rate: 5.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.1, range: 0.3, sill: 1.0}, empty_cells: coarsen}
+checks:
+  - id: slope
+    title: "the spread of the ensemble mean falls as T^(-1/2)"
+    kind: slope
+    family: identity
+    sizes: [8, 32, 128, 512]
+    replicates: {ci: 200, full: 800}
+    bootstrap: 500
+    estimators: [idw, kriging]
+provenance:
+  v1: "2026-10-09: first version; the field is the smooth field of P10 rather than a block-mark field, the claim holding for any field; sizes fixed before the first run."

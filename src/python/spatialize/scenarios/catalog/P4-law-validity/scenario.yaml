@@ -1,0 +1,38 @@
+id: P4-law-validity
+version: 1
+tier: T2
+evaluator: law_validity
+book:
+  topic: "the estimated law at a location is a probability law"
+  draft_2026_10: "ch 3, the ensemble's law at a location"   # the book is a draft
+purpose: >
+  Every reading of the law that Spatialize offers must be a cumulative distribution function: at
+  every location and threshold it lies within [0, 1] and does not decrease with the threshold. The
+  readings are the empirical law of the members and the laws fitted to them (kernel density, Gaussian
+  mixtures by EM and by variational inference), the last ones also widened against the local spread
+  of the data (Gamma and skew-normal widening). A single violation is a defect.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise_exp}
+data:
+  n: 100
+  queries: 30
+  generator_seed: 20261009
+estimators_T: {ci: 300, full: 1000}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: draw, encoder: mondrian, rate: 5.0, decoder: draw, params: {}, empty_cells: nan}
+checks:
+  - {id: empirical, title: "the empirical law of the members is a law", kind: cdf, family: almost-sure,
+     reading: empirical, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+  - {id: kde, title: "the kernel density law is a law", kind: cdf, family: almost-sure,
+     reading: kde, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+  - {id: emm, title: "the Gaussian mixture law (EM) is a law", kind: cdf, family: almost-sure,
+     reading: emm, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+  - {id: vim, title: "the Gaussian mixture law (variational) is a law", kind: cdf, family: almost-sure,
+     reading: vim, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+  - {id: kde-gamma, title: "the kernel density law widened with Gamma components is a law", kind: cdf,
+     family: almost-sure, reading: kde-gamma, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+  - {id: kde-skew-normal, title: "the kernel density law widened with skew-normal components is a law", kind: cdf,
+     family: almost-sure, reading: kde-skew_normal, thresholds: 400, tolerance: 0.0, estimators: [idw, draw]}
+provenance:
+  v1: "2026-10-09: first version; sizes and tolerances fixed before the first run."

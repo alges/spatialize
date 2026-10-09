@@ -78,7 +78,7 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - 
    * - :ref:`P1 <scenario-P1>`
      - spread across ensembles decreases as :math:`T^{-1/2}`
-     - ready
+     - **implemented**
      - —
    * - :ref:`P2 <scenario-P2>`
      - weighted-draw decoder: draws are data values; their mean is the IDW estimate
@@ -90,7 +90,7 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - :ref:`P4 <scenario-P4>`
      - estimated CDFs are monotone and within [0, 1]
-     - ready
+     - **implemented**
      - —
    * - :ref:`P5 <scenario-P5>`
      - weights on the data plus residual weight sum to 1
@@ -102,8 +102,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - :ref:`P7 <scenario-P7>`
      - covariance of an uncorrelated field against its closed form
-     - ready
-     - derive the closed form independently
+     - **implemented**
+     - —
    * - :ref:`P8 <scenario-P8>`
      - empty cells share one mark
      - **implemented**

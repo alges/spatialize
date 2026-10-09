@@ -81,6 +81,11 @@ class Runner(Protocol):
     It may also provide ``loo(estimator, samples, values, *, n_members, seed)``, returning an array of
     shape ``(n, n_members)``: each datum predicted from the other data, one member per partition, as
     the hyperparameter searches cross-validate. Scenario P11 needs it.
+
+    It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
+    n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function
+    that the implementation's reading ``reading`` of the law gives at each query and threshold.
+    Scenario P4 needs it and names the readings to test.
     """
 
     name: str

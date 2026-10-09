@@ -186,6 +186,13 @@ Results that change
   against about 9 s for 3 000 data and 20 000 locations, which brings the answer to Ctrl-C from about
   nine seconds to about five. Leave-one-out and k-fold also solve their systems directly. The
   estimates change only by float32 rounding, at most :math:`10^{-6}` relative.
+- **Fitted laws.** The cumulative distribution function of
+  :class:`~spatialize.empirical.EmpiricalModel` and its inverse are interpolated with PCHIP, which
+  keeps them monotone and within :math:`[0, 1]`. Akima's interpolation could fall below 0 next to
+  a sharp step. A Gaussian mixture with a near-degenerate component no longer makes the inverse
+  fail, and a model built from a fitted kernel density (``skl_model``) spans its range, where its
+  grid had collapsed to one point. Building scenario P4 brought out the first two. Between the
+  points of the model's grid the values change slightly.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn

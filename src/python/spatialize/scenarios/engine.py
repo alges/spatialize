@@ -1419,10 +1419,198 @@ def eval_mark_law(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _uniform_data(s, positive=False):
+    """``data.n`` data and ``data.queries`` queries uniform in the domain, with a smooth field plus
+    noise (its exponential with ``positive``), drawn from ``data.generator_seed`` (not pinned)."""
+    rng = np.random.default_rng(int(s["data"]["generator_seed"]))
+    box = np.asarray(s["domain"]["box"], float)
+    n, m = int(s["data"]["n"]), int(s["data"]["queries"])
+    pts = box[:, 0] + rng.random((n, len(box))) * (box[:, 1] - box[:, 0])
+    qry = box[:, 0] + rng.random((m, len(box))) * (box[:, 1] - box[:, 0])
+    u = (pts - box[:, 0]) / (box[:, 1] - box[:, 0])
+    vals = np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1]) + 0.3 * rng.standard_normal(n)
+    if positive:
+        vals = np.exp(vals)
+    return pts.astype(np.float32), vals.astype(np.float32), qry.astype(np.float32)
+
+
+def _sub_seed(seed, *keys):
+    """A seed for one replicate, derived from the run's seed and the replicate's keys."""
+    return int(np.random.default_rng([int(seed), *map(int, keys)]).integers(2 ** 31 - 1))
+
+
+def eval_convergence(sc: Scenario, runner: Runner, mode: str, seed: int,
+                     save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``convergence``: the spread of the ensemble mean falls as :math:`T^{-1/2}` (P1).
+
+    For each ensemble size of ``sizes``, ``replicates`` independent ensembles (seeds derived from
+    the run's seed) are computed on the same data. At each query the spread is the standard
+    deviation of the ensemble mean across the replicates. The slope of the mean over the queries of
+    :math:`\log(\text{spread})` against :math:`\log T` must be :math:`-1/2`. Its standard error comes
+    from ``bootstrap`` resamples of the replicates, drawn independently for each size; the
+    identity's z is (slope + 1/2) / standard error.
+
+    Reads ``data.n``, ``data.queries``, ``data.generator_seed``.
+    """
+    s = sc.spec
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    pts, vals, qry = _uniform_data(s)
+    out = []
+    for check in s["checks"]:
+        sizes = [int(t) for t in check["sizes"]]
+        R = int(_mode_value(check["replicates"], mode))
+        for eid in check["estimators"]:
+            est = ests[eid]
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            if not runner.supports(est):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+                continue
+            means = np.array([[np.asarray(runner.members(est, pts, vals, qry, n_members=T,
+                                                         seed=_sub_seed(seed, j, r)), float).mean(axis=1)
+                               for r in range(R)] for j, T in enumerate(sizes)])     # (sizes, R, q)
+            x = np.log(sizes)
+
+            def slope(m):
+                y = np.log(m.std(axis=1, ddof=1)).mean(axis=1)
+                return float(np.polyfit(x, y, 1)[0])
+
+            b = slope(means)
+            rng = np.random.default_rng(_sub_seed(seed, 7, 7))
+            boot = [slope(np.stack([means[j, rng.integers(0, R, R)] for j in range(len(sizes))]))
+                    for _ in range(int(check["bootstrap"]))]
+            r = families.identity([(b + 0.5) / np.std(boot, ddof=1)], f"(slope + 1/2)/se, slope={b:.3f}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
+def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
+                      save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
+
+    For the reading ``reading`` of the check, read through the runner's optional method ``law_cdf``,
+    the values at every query and at ``thresholds`` thresholds evenly spaced over the data range
+    widened by its length on each side must lie in :math:`[0, 1]` and be non-decreasing in the
+    threshold. A violation is a value outside :math:`[0, 1]`, a NaN, or a decrease larger than
+    ``tolerance``; a reading that cannot be built fails at every value. The check is almost sure.
+
+    Reads ``data.n``, ``data.queries``, ``data.generator_seed`` and ``estimators_T``; the values are
+    positive (the exponential of a smooth field plus noise), so that every widening applies.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    pts, vals, qry = _uniform_data(s, positive=True)
+    lo, hi = float(vals.min()), float(vals.max())
+    out = []
+    for check in s["checks"]:
+        x = np.linspace(lo - (hi - lo), hi + (hi - lo), int(check["thresholds"]))
+        for eid in check["estimators"]:
+            est = ests[eid]
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            reason = ""
+            if not runner.supports(est):
+                reason = f"{runner.name} does not support {est.encoder}/{est.decoder}"
+            elif not hasattr(runner, "law_cdf"):
+                reason = f"{runner.name} does not give the readings of its law"
+            if reason:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=reason))
+                continue
+            try:
+                F = np.asarray(runner.law_cdf(est, pts, vals, qry, x, reading=check["reading"], n_members=T,
+                                              seed=seed), float)
+                bad = int((~((F >= 0) & (F <= 1))).sum() + (np.diff(F, axis=1) < -float(check["tolerance"])).sum())
+                r = families.almost_sure(bad, F.size)
+            except Exception as e:   # a reading that cannot be built is no law: every value fails
+                r = families.almost_sure(len(qry) * len(x), len(qry) * len(x))
+                r = families.TestResult(r.family, r.statistic, r.p_value, r.pass_if,
+                                        f"{r.detail}; the reading failed: {type(e).__name__}: {e}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
+def _line_cooccurrence_target(grid, i, j, rate):
+    r"""The covariance of the cell means at grid points ``i`` ≤ ``j`` of a 1D Mondrian partition of
+    rate ``rate`` (Poisson cuts), for values iid with variance one at the points of ``grid``.
+
+    The two members are the means of their cells. Distinct cells share no value, so the covariance
+    is :math:`P(\text{no cut in } (x_i, x_j))\, E[1/N]`, with :math:`N` the number of points of the
+    common cell. Given that event the cell extends left and right of :math:`[x_i, x_j]` by
+    independent Exp(rate) lengths; including exactly :math:`a` more points on the left has
+    probability :math:`e^{-\lambda d_a} - e^{-\lambda d_{a+1}}`, with :math:`d_a` the distance to the
+    a-th point (:math:`d_0 = 0`, :math:`d_{a+1} = \infty` past the last one), and likewise on the
+    right.
+    """
+    g = np.asarray(grid, float)
+
+    def side(dist):
+        d = np.concatenate([[0.0], np.sort(dist), [np.inf]])
+        return np.exp(-rate * d[:-1]) - np.exp(-rate * d[1:])      # P(exactly a more points)
+
+    left, right = side(g[i] - g[:i]), side(g[j + 1:] - g[j])
+    inner = j - i + 1
+    n = inner + np.arange(len(left))[:, None] + np.arange(len(right))[None, :]
+    return float(np.exp(-rate * (g[j] - g[i])) * np.sum(np.outer(left, right) / n))
+
+
+def eval_uncorrelated_covariance(sc: Scenario, runner: Runner, mode: str, seed: int,
+                                 save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``uncorrelated_covariance``: the covariance the partitions induce between cell
+    means of an uncorrelated field, against its closed form in the rate and the distance (P7).
+
+    One dimension, ``data.n`` data on the regular grid :math:`(k + 1/2)/n` of the domain
+    :math:`[0, 1]`, with values iid standard normal, drawn anew for each of ``fields`` fields with
+    their own seed. The queries are the grid point ``data.origin`` and the points ``offsets`` grid
+    steps to its right. Each field gives ``estimators_T`` members per query; the mean over its
+    members of the product of the members at the origin and at a query estimates their covariance,
+    the values having mean zero. Over the fields, these means against the closed form
+    (:func:`_line_cooccurrence_target`) give one standardised difference per offset, combined by
+    the identity family.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    d = s["data"]
+    n, o = int(d["n"]), int(d["origin"])
+    grid = (np.arange(n) + 0.5) / n
+    pts = grid[:, None].astype(np.float32)
+    out = []
+    for check in s["checks"]:
+        K = int(_mode_value(check["fields"], mode))
+        offsets = [int(h) for h in check["offsets"]]
+        qry = grid[[o] + [o + h for h in offsets]][:, None].astype(np.float32)
+        for eid in check["estimators"]:
+            est = ests[eid]
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            if not runner.supports(est):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+                continue
+            prod = np.empty((K, len(offsets)))
+            for k in range(K):
+                v = np.random.default_rng([int(d["generator_seed"]), k]).standard_normal(n).astype(np.float32)
+                m = np.asarray(runner.members(est, pts, v, qry, n_members=T, seed=_sub_seed(seed, k)), float)
+                prod[k] = (m[0] * m[1:]).mean(axis=1)
+            target = np.array([_line_cooccurrence_target(grid, o, o + h, float(est.rate)) for h in offsets])
+            z = (prod.mean(axis=0) - target) / (prod.std(axis=0, ddof=1) / np.sqrt(K))
+            r = families.identity(z, "(covariance − closed form)/se")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
-              "posterior_audit": eval_posterior_audit, "mark_law": eval_mark_law}
+              "posterior_audit": eval_posterior_audit, "mark_law": eval_mark_law,
+              "convergence": eval_convergence, "law_validity": eval_law_validity,
+              "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 
 # ----------------------------------------------------------------------------- run

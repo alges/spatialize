@@ -188,6 +188,47 @@ class SpatializeRunner:
             raise ValueError(f"{est.id}: {e}") from None
         return np.asarray(out)
 
+    def law_cdf(self, est, samples, values, queries, thresholds, *, reading, n_members, seed):
+        """The cumulative distribution function a reading of the law gives at each query.
+
+        Parameters
+        ----------
+        reading : str
+            ``"empirical"``, the share of finite members at or below each threshold, or
+            ``"<model>"`` / ``"<model>-<widening>"`` with ``<model>`` one of ``kde``, ``emm``,
+            ``vim`` and ``<widening>`` one of ``gamma``, ``skew_normal``: the
+            :class:`~spatialize.empirical.EmpiricalModel` fitted to the finite members by a
+            :class:`~spatialize.empirical.FittedModelFactory`, widened against the local variance
+            (and skewness) of the 12 nearest data.
+        thresholds : ndarray of shape (k,)
+
+        Returns
+        -------
+        ndarray of shape (q, k)
+        """
+        import warnings
+        m = self.members(est, samples, values, queries, n_members=n_members, seed=seed)
+        x = np.asarray(thresholds, float)
+        if reading == "empirical":
+            n = np.sum(np.isfinite(m), axis=1)
+            return np.sum(m[:, :, None] <= x, axis=1) / n[:, None]
+        from spatialize.empirical import (FittedModelFactory, EmpiricalModel, _local_target_variance,
+                                          _local_target_skewness)
+        model, _, widening = reading.partition("-")
+        factory = FittedModelFactory(point_model_name=model, widening=widening or False, seed=int(seed))
+        tv = ts = [None] * len(queries)
+        if widening:
+            tv = _local_target_variance(samples, values, queries)
+            ts = _local_target_skewness(samples, values, queries)
+        out = np.empty((len(queries), len(x)))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for i, row in enumerate(m):
+                em = EmpiricalModel(sample=row[np.isfinite(row)].astype(float), fitted_model_factory=factory,
+                                    target_var=tv[i], target_skew=ts[i], seed=int(seed) + i)
+                out[i] = em.cdf(x)
+        return out
+
     def cells(self, est, samples, queries, *, n_members, seed):
         """The cell of each query in each partition :meth:`members` draws with the same arguments.
 

@@ -9,28 +9,42 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2, P3, P5, P6, P8, P9, P10, P11 and P12 are implemented. P1, P4 and P7 can be implemented now. P5, P8
-and P9 read the law of the marks of empty cells, with targets derived for the mark strategies
-Spatialize implements (:doc:`../theory/blockmark`).
+All the scenarios of this tier are implemented. P5, P8 and P9 read the law of the marks of empty
+cells, with targets derived for the mark strategies Spatialize implements
+(:doc:`../theory/blockmark`).
 
 .. _scenario-P1:
 
 P1 — Convergence of the ensemble
 ================================
 
-:Status: ready (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``convergence``
 :Source in the theory: convergence of the ensemble estimate as the number of partitions grows
 :Claim: the spread of the estimate across independent ensembles decreases as :math:`T^{-1/2}` with
   the number of members :math:`T`.
 
-**Setup.** A Mondrian block-mark field with 35 cells, 250 uniformly placed data and the IDW decoder.
-For each of several ensemble sizes :math:`T`, many independent ensembles (different seeds) are run on
-the same data.
+**Setup.** 250 data uniform in the unit square carry the field of P10, with 5 queries. The estimators
+use IDW and kriging on the Mondrian partition of rate 5, under ``empty_cells="coarsen"`` so that
+every member is defined. For each ensemble size :math:`T \in \{8, 32, 128, 512\}`, 200 independent
+ensembles in ``ci`` (800 in ``full``) are run on the same data, each with its own seed.
+
+**Target.** Given the data the members are independent draws, so the ensemble mean of :math:`T`
+members has variance :math:`\sigma^2/T`. On log scales its spread against :math:`T` has slope
+:math:`-1/2`, whatever the field and the decoder.
 
 **Check.**
 
-- *identity* on the slope of :math:`\log(\text{spread})` against :math:`\log T`, which must equal
-  :math:`-1/2`, with the standard error of the fitted slope.
+- *identity* on the slope of the mean over the queries of :math:`\log(\text{spread})` against
+  :math:`\log T`. Its standard error comes from 500 bootstrap resamples of the ensembles, drawn
+  independently for each size, and :math:`(\text{slope} + 1/2)/\text{se}` is referred to
+  :math:`N(0, 1)`.
+
+A dependence between the members, such as a stream of random numbers shared by two partitions,
+would flatten the slope. The field is the smooth one of P10, not a block-mark field, the claim
+holding for any field.
+
+**Results.** Not run yet.
 
 .. _scenario-P2:
 
@@ -113,15 +127,34 @@ query. Summing it over the same partitions gives the expected number of times da
 P4 — The estimated law is a law
 ===============================
 
-:Status: ready (not yet implemented)
+:Status: **implemented**
+:Evaluator: ``law_validity``
 :Source in the theory: validity of the distribution estimated from the ensemble members
 :Claim: at every location and threshold the estimated cumulative distribution function is
   non-decreasing in the threshold and lies within :math:`[0, 1]`.
 
-**Check.**
+**Setup.** 100 data uniform in the unit square carry the exponential of the field of P10, so that
+every widening applies, with 30 queries. The estimators use IDW and the uniform draw on the
+Mondrian partition of rate 5, with :math:`T = 300` members in ``ci`` and :math:`1\,000` in
+``full``. The thresholds are 400 points evenly spaced over the data range widened by its length on
+each side.
 
-- *almost-sure*, over all locations and a grid of thresholds, for every reading of the law
-  Spatialize offers (empirical, fitted models, widened laws).
+**Checks.**
+
+- *almost-sure*, one check per reading Spatialize offers, through the runner's method ``law_cdf``.
+  They cover the empirical law of the members and the laws of
+  :class:`~spatialize.empirical.EmpiricalModel` fitted to them by kernel density (``kde``) and by
+  Gaussian mixtures (``emm``, ``vim``). The kernel density law also enters widened with Gamma
+  (``kde-gamma``) and skew-normal (``kde-skew_normal``) components. A value outside :math:`[0, 1]`,
+  a NaN or any decrease is a violation, and so is a reading that cannot be built.
+
+Writing the scenario found two defects of the fitted laws. A Gaussian mixture fitted to ten
+members put a component of variance :math:`10^{-6}` on an isolated value. The inverse of its
+cumulative distribution function then failed to build. Next to that sharp step Akima's
+interpolation also took values near :math:`-10^{-248}`, below 0. Both are corrected, the
+cumulative distribution function and its inverse being now interpolated monotonically (PCHIP).
+
+**Results.** Not run yet.
 
 .. _scenario-P5:
 
@@ -217,15 +250,48 @@ not been run yet.
 P7 — Covariance of an uncorrelated field
 ========================================
 
-:Status: ready (not yet implemented), target to be derived before implementation
+:Status: **implemented**
+:Evaluator: ``uncorrelated_covariance``
 :Source in the theory: the covariance the ensemble induces between estimates of an uncorrelated field
-:Claim: for an uncorrelated field and partitions much coarser than the data spacing, the covariance
-  of the estimates at two locations follows a closed form in the partition rate and their distance.
+:Claim: for an uncorrelated field the covariance of the cell means at two locations follows a
+  closed form in the partition rate and their distance.
 
-**Check.**
+**Setup.** One dimension, the domain :math:`[0, 1]`, with 40 data on the regular grid
+:math:`x_k = (k + 1/2)/40`. The values are iid standard normal, drawn anew on each of 2 000 fields
+in ``ci`` (8 000 in ``full``). The queries are the grid point :math:`x_{18}` and the points 0, 1, 3, 8
+and 15 grid steps to its right. The estimator is the cell mean on the Mondrian partition of rate
+:math:`\lambda = 8`, with 20 members per field.
 
-- *gof-closed* per distance class. The closed form is derived independently, then computed by the
-  evaluator, before the scenario is added.
+**Target.** Two cell means share a value only when their locations share a cell, so for
+:math:`x_i \le x_j`
+
+.. math::
+
+   \operatorname{Cov}(Y(x_i), Y(x_j)) = e^{-\lambda (x_j - x_i)}\, E\!\left[\frac{1}{N}\right],
+
+with :math:`N` the number of data in the common cell. Given no cut in :math:`(x_i, x_j)` the cell
+extends left and right by independent :math:`\operatorname{Exp}(\lambda)` lengths. It includes
+exactly :math:`a` more points on the left with probability
+:math:`e^{-\lambda d_a} - e^{-\lambda d_{a+1}}`, with :math:`d_a` the distance to the :math:`a`-th
+point (:math:`d_0 = 0`, :math:`d_{a+1} = \infty` past the last one), and likewise on the right. With
+:math:`m = j - i + 1` the points of :math:`[x_i, x_j]`,
+
+.. math::
+
+   E\!\left[\frac{1}{N}\right] = \sum_{a} \sum_{b} \frac{P_L(a)\, P_R(b)}{m + a + b}.
+
+The closed form was checked against a direct simulation of Poisson cuts, 400 000 draws per
+distance, within two standard errors, before the scenario was added.
+
+**Checks.**
+
+- *identity* (``covariance``). For each distance, the mean over the fields of the mean over the
+  members of the product of the two members, minus the closed form, divided by its standard error
+  across the fields. The five values are combined as :math:`\sum z^2 \sim \chi^2_5`.
+- *negative control* (``control-legacy``). The Mondrian partition of version 1.2 always cuts the
+  root, so its cells are smaller, and the test must reject.
+
+**Results.** Not run yet.
 
 .. _scenario-P8:
 

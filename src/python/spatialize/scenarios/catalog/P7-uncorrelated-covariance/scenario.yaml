@@ -1,0 +1,43 @@
+id: P7-uncorrelated-covariance
+version: 1
+tier: T2
+evaluator: uncorrelated_covariance
+book:
+  topic: "the covariance the partitions induce between estimates of an uncorrelated field"
+  draft_2026_10: "ch 3, co-occurrence and the covariance of the estimator"   # the book is a draft
+purpose: >
+  For an uncorrelated field, two cell means share a value only when the two locations share a cell,
+  so their covariance is the probability of sharing a cell times the expected reciprocal of the
+  number of data of that cell. On a line cut by a Mondrian process (Poisson cuts) with data on a
+  regular grid, both factors have closed forms in the rate and the distance. The covariance of the
+  members at a fixed location and at locations 0 to 15 grid steps away must match them. The
+  Mondrian partition of version 1.2, whose root is always cut, makes cells smaller, hence the
+  covariances, and serves as a negative control.
+domain: {box: [[0.0, 1.0]]}
+truth: {generator: iid_normal}
+data:
+  n: 40                                  # data on the grid (k + 1/2)/40
+  origin: 18                             # the grid point of the fixed location
+  generator_seed: 20261009
+estimators_T: 20                         # members per field
+estimators:
+  - {id: cellmean, encoder: mondrian, rate: 8.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cellmean-legacy, encoder: mondrian-legacy, rate: 8.0, decoder: cellmean, params: {}, empty_cells: nan}
+checks:
+  - id: covariance
+    title: "the covariance of cell means of an uncorrelated field matches its closed form"
+    kind: covariance
+    family: identity
+    offsets: [0, 1, 3, 8, 15]
+    fields: {ci: 2000, full: 8000}
+    estimators: [cellmean]
+  - id: control-legacy
+    title: "negative control: the partition of version 1.2 does not give the closed form"
+    kind: covariance
+    family: identity
+    offsets: [0, 1, 3, 8, 15]
+    fields: {ci: 2000, full: 8000}
+    estimators: [cellmean-legacy]
+    expect: {default: reject}
+provenance:
+  v1: "2026-10-09: first version; the closed form checked against a direct simulation of Poisson cuts (400 000 draws, within two standard errors) before the first run; sizes fixed before the first run."

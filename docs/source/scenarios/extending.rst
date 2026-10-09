@@ -58,6 +58,14 @@ A runner may also give leave-one-out ensembles, through a method
 ``loo(est, samples, values, *, n_members, seed)`` returning an array of shape
 ``(n_samples, n_members)``, each datum predicted from the other data. Scenarios P11 and P12 need it, P12 together with ``cells``.
 
+A runner may also give the readings of its law, through a method
+``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an
+array of shape ``(n_queries, n_thresholds)``. It holds the cumulative distribution function that
+the reading ``reading`` gives at each query, the scenario naming the readings to test. Scenario P4
+needs it. Spatialize's runner offers ``"empirical"``, the share of members at or below each
+threshold, and the laws of :class:`~spatialize.empirical.EmpiricalModel` fitted to the members
+(``"kde"``, ``"emm"``, ``"vim"``), optionally widened (``"kde-gamma"``, ``"kde-skew_normal"``).
+
 Testing a new spatialize decoder
 ================================
 

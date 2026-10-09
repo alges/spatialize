@@ -36,7 +36,8 @@ Top-level keys
      - string
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
-       ``cv_selection``, ``posterior_audit`` or ``mark_law`` (below).
+       ``cv_selection``, ``posterior_audit``, ``mark_law``, ``convergence``, ``law_validity`` or
+       ``uncorrelated_covariance`` (below).
    * - ``book``
      - mapping
      - Source in the theory: ``topic`` (by content) and the draft's section, equation and figure
@@ -370,6 +371,43 @@ Otherwise it is the mark law, one cell with data drawn uniformly then one of its
          ``noise``), ``fields``. Over the fields, the marks of ``estimator_b`` lie farther from the
          field's spatial mean than those of the estimator, read at ``far`` in the partitions where
          its cell is empty (paired-relation).
+
+Evaluator ``convergence``
+-------------------------
+
+This evaluator decides that the spread of the ensemble mean falls as :math:`T^{-1/2}` (scenario
+P1).
+
+- ``data``: ``n`` data and ``queries`` queries, uniform in the domain, and ``generator_seed``.
+- per check, ``sizes`` (the ensemble sizes), ``replicates`` (independent ensembles per size, per
+  mode) and ``bootstrap`` (resamples for the standard error of the slope). The slope of the mean
+  log spread against :math:`\log T` must be :math:`-1/2` (identity).
+
+Evaluator ``law_validity``
+--------------------------
+
+This evaluator decides that each reading of the law is a cumulative distribution function
+(scenario P4), through the runner's optional method ``law_cdf``.
+
+- ``data``: ``n`` data and ``queries`` queries, uniform in the domain, with positive values, and
+  ``generator_seed``.
+- per check, ``reading`` (named by the runner), ``thresholds`` (their number, over the data range
+  widened by its length on each side) and ``tolerance`` (the decrease allowed). A value outside
+  :math:`[0, 1]`, a NaN, a decrease or a reading that cannot be built is a violation
+  (almost-sure).
+
+Evaluator ``uncorrelated_covariance``
+-------------------------------------
+
+This evaluator decides the covariance of cell means of an uncorrelated field against its closed
+form on a line (scenario P7).
+
+- ``domain``: ``[0, 1]``, one dimension.
+- ``data``: ``n`` data on the grid :math:`(k + 1/2)/n`, the grid point ``origin`` and
+  ``generator_seed``. The values are iid standard normal, drawn anew for each field.
+- per check, ``offsets`` (grid steps from the origin) and ``fields`` (per mode). The estimator's
+  ``rate`` enters the closed form. The mean product of the members at the origin and at each offset
+  is tested against it (identity).
 
 Data files
 ==========

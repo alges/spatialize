@@ -21,6 +21,40 @@ libsptlzheaders = sorted(
 extra_compile_args = ['-std=c++17']
 extra_link_args = []
 
+def _check_conda_openmp():
+    """Inside a conda environment, the linker picks the environment's libomp.dylib (llvm-openmp)
+    before Homebrew's. A recent clang (Apple clang 17 or LLVM 19 and later) emits calls to
+    __kmpc_dispatch_deinit, which an older llvm-openmp lacks, so the extension would build but fail
+    to load ("symbol not found in flat namespace '___kmpc_dispatch_deinit'"). Stop the build with
+    the fix instead. See the documentation, Troubleshooting."""
+    import re
+    import subprocess
+    prefix = os.environ.get("CONDA_PREFIX")
+    runtime = os.path.join(prefix, "lib", "libomp.dylib") if prefix else None
+    if not runtime or not os.path.exists(runtime):
+        return
+    try:
+        version = subprocess.check_output([os.environ.get("CC", "clang"), "--version"],
+                                          stderr=subprocess.DEVNULL).decode()
+        symbols = subprocess.check_output(["nm", "-gU", runtime], stderr=subprocess.DEVNULL).decode()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return
+    m = re.search(r"(Apple )?clang version (\d+)", version)
+    if not m:
+        return
+    major = int(m.group(2))
+    emits = major >= 17 if m.group(1) else major >= 19
+    if emits and "__kmpc_dispatch_deinit" not in symbols:
+        sys.exit(f"""
+Spatialize cannot be built against this conda environment's OpenMP runtime:
+  {runtime} lacks __kmpc_dispatch_deinit, which {m.group(0)} needs,
+  so the extension would install but fail to load. Update the runtime first:
+
+      conda install "llvm-openmp>=19"
+
+  then build again. See the documentation, Troubleshooting.""")
+
+
 # the '-Wno-error=c++11-narrowing' argument is needed for
 # compiling with CLang (OS X)
 if sys.platform == 'darwin':
@@ -35,6 +69,7 @@ if sys.platform == 'darwin':
         ).decode().strip()
         extra_compile_args += ['-Xpreprocessor', '-fopenmp', f'-I{brew_prefix}/include']
         extra_link_args += [f'-L{brew_prefix}/lib', '-lomp']
+        _check_conda_openmp()
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Fallback: Homebrew not available or libomp not installed
         # OpenMP pragmas will be ignored at compile time

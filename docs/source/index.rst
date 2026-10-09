@@ -50,7 +50,8 @@ Installation
 Python 3.10+ is required. Spatialize is tested on Linux, macOS, and Windows. Two optional extras
 add the dependencies of the baselines and plots in :mod:`spatialize.evaluation`
 (``pip install spatialize[evaluation]``) and of the conformance tests
-(``pip install spatialize[scenarios]``).
+(``pip install spatialize[scenarios]``). When the installation or the first import fails, see
+:doc:`troubleshooting`.
 
 .. _getting-started:
 
@@ -106,4 +107,5 @@ If you use Spatialize in your research, please cite:
    scenarios/index
    reference/index
    development/index
+   troubleshooting
    changes

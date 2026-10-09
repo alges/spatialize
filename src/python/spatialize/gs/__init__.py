@@ -12,11 +12,27 @@ list and runs ``libspatialize.run``, within the session settings (:mod:`spatiali
 """
 import warnings
 
-import libspatialize as lsp
-
 import numpy as np
 
 from spatialize import SpatializeError, logging, session
+
+OPENMP_MISMATCH_HELP = """The compiled extension libspatialize could not load: {error}
+
+It was compiled by a compiler newer than the OpenMP runtime it found when loading, an older
+libomp.dylib (typically a conda environment's llvm-openmp, older than the compiler). Install a
+runtime at least as recent as the compiler in the same environment, for instance
+
+    conda install "llvm-openmp>=19"
+
+then run Python again; no reinstallation of Spatialize is needed. See the documentation,
+Troubleshooting, "Symbol not found: ___kmpc_..." ."""
+
+try:
+    import libspatialize as lsp
+except ImportError as e:
+    if "kmpc" in str(e) or "libomp" in str(e):
+        raise SpatializeError(OPENMP_MISMATCH_HELP.format(error=e)) from e
+    raise
 from spatialize.logging import log_message
 
 

@@ -126,6 +126,11 @@ Results that change
 - **Laws outside their range.** The cumulative distribution function of an
   :class:`~spatialize.empirical.EmpiricalModel` is 0 below its grid and 1 above, and its density 0
   outside, where both were undefined (NaN). A datum far above its law now reads 1.
+- **OpenMP runtime too old for the compiler.** On macOS inside a conda environment whose
+  ``llvm-openmp`` is older than the compiler, the extension built but failed to load
+  (``symbol not found ... ___kmpc_dispatch_deinit``). The installation now stops before building
+  with the fix, ``conda install "llvm-openmp>=19"``, and the import explains it when the runtime is
+  replaced afterwards (:doc:`troubleshooting`).
 - **Warnings are shown.** The messages of Spatialize stood at the error level, so its warnings, such
   as the data a search leaves out of its score, were hidden. Warnings and errors are now shown by
   default (session setting ``verbosity``). Spatialize no longer configures the root logger of the

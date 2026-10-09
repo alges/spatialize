@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <atomic>
 #include <thread>
+#include <chrono>
 #include <cmath>
 #include <random>
 #ifdef _OPENMP
@@ -391,6 +392,20 @@ namespace sptlz{
         const std::thread::id caller = std::this_thread::get_id();
         std::atomic<bool> interrupted(false);
         std::atomic<int> n_done(0);
+        // asked inside the per-cell searches by every thread: the calling thread checks the signals
+        // at most every 0.1 s, the others read the flag
+        auto last_check = std::chrono::steady_clock::now();
+        const std::function<bool()> stop = [&]() -> bool {
+          if(!interrupted.load() && std::this_thread::get_id() == caller){
+            auto now = std::chrono::steady_clock::now();
+            if(now - last_check > std::chrono::milliseconds(100)){
+              last_check = now;
+              if(PyErr_CheckSignals() != 0) interrupted = true;
+            }
+          }
+          return(interrupted.load());
+        };
+        this->stop_check = &stop;
 
         // Pre-draw one seed per tree sequentially from the shared engine
         // *before* entering the parallel region. Concurrent threads must
@@ -414,6 +429,7 @@ namespace sptlz{
 
           auto mt = mondrian_forest.at(i);
           for(int j=0; j<mt->samples_by_leaf.size(); j++){
+            if(stop()) break;  // Ctrl-C between cells, and inside each cell's search
             std::vector<std::vector<float>> leaf_coords;
             std::vector<float> leaf_values;
             for(int k=0; k<mt->samples_by_leaf.at(j).size(); k++){
@@ -425,7 +441,7 @@ namespace sptlz{
           }
 
           int done = ++n_done;
-          if(std::this_thread::get_id() == caller){
+          if(std::this_thread::get_id() == caller && !interrupted.load()){
             if (PyErr_CheckSignals() != 0) {  // to allow ctrl-c from user
               interrupted = true;
             }
@@ -433,10 +449,11 @@ namespace sptlz{
           }
         }
 
+        this->stop_check = nullptr;
         if(interrupted.load()){
           delete logger;
           delete progress;
-          throw std::runtime_error("Computation interrupted by user");
+          throw pybind11::error_already_set();  // the KeyboardInterrupt PyErr_CheckSignals raised
         }
 
         progress->stop();
@@ -490,6 +507,9 @@ namespace sptlz{
         return(centroid);
       }
 
+      // set during fit(): true once the fit must stop (Ctrl-C), asked inside the searches
+      const std::function<bool()> *stop_check = nullptr;
+
       std::vector<float> get_params2(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::mt19937 &rng){
         std::uniform_real_distribution<float> uni_float(0, 1);
         int best_of = 3;
@@ -517,7 +537,7 @@ namespace sptlz{
           };
           for(int i=0; i<best_of; i++){
             starting_point = {ranges.at(0).at(0)+uni_float(rng)*(ranges.at(0).at(1)-ranges.at(0).at(0))};
-            candidate = sptlz::grid_search<LOO1D>(func, &ranges, starting_point);
+            candidate = sptlz::grid_search<LOO1D>(func, &ranges, starting_point, 1e-5f, stop_check);
             aux = func->eval(candidate);
             if(aux<min_value){
               min_coords = candidate;
@@ -539,7 +559,7 @@ namespace sptlz{
             for(int j=0; j<ranges.size(); j++){
               starting_point.push_back(ranges.at(j).at(0)+uni_float(rng)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
-            candidate = sptlz::grid_search<LOO2D>(func, &ranges, starting_point);
+            candidate = sptlz::grid_search<LOO2D>(func, &ranges, starting_point, 1e-5f, stop_check);
             aux = func->eval(candidate);
             if(aux<min_value){
               min_coords = candidate;
@@ -577,7 +597,7 @@ namespace sptlz{
             for(int j=0; j<ranges.size(); j++){
               starting_point.push_back(ranges.at(j).at(0)+uni_float(rng)*(ranges.at(j).at(1)-ranges.at(j).at(0)));
             }
-            candidate = sptlz::coordinate_search<LOO3D>(func, &ranges, &steps, starting_point);
+            candidate = sptlz::coordinate_search<LOO3D>(func, &ranges, &steps, starting_point, 1e-6f, stop_check);
             aux = func->eval(candidate);
             if(aux<min_value){
               min_coords = candidate;

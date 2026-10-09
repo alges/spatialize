@@ -157,6 +157,9 @@ Results that change
   grid were cut to a smaller one. Locations on a regular grid now decide the shape and the order
   themselves (``w`` the number of distinct x, ``h`` of distinct y), a disagreeing ``w``/``h`` being
   ignored with a warning, and other locations are drawn as points.
+- **Ctrl-C** stopped a run only at the end of a partition, which with adaptive IDW in 3D could take
+  many minutes, and an interrupted fit raised a ``RuntimeError``. A run now stops within one cell,
+  inside the fit of adaptive IDW within a fraction of a second, with a ``KeyboardInterrupt``.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn

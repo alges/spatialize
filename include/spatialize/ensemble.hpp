@@ -20,6 +20,7 @@
 #include "spatialize/partition.hpp"
 #include "spatialize/decoder.hpp"
 #include "spatialize/empty_cells.hpp"
+#include "spatialize/interrupt.hpp"
 
 namespace sptlz{
 	// Ensemble of random partitions (encoder) with a local interpolator (decoder): one loop for
@@ -38,6 +39,10 @@ namespace sptlz{
 			sptlz::Decoder *decoder;
 			bool estimate_log_debug;  // log "computing estimates" at debug level (Voronoi) instead of info
 			sptlz::EmptyCellPolicy empty_cells;  // what a member is when its cell holds no datum
+			sptlz::Interrupt *interrupt = nullptr;  // the Ctrl-C state of the loop in progress (for_each_tree)
+
+			// true once the loop in progress must stop (Ctrl-C or an error), asked between cells
+			bool interrupted(){ return(this->interrupt != nullptr && this->interrupt->requested()); }
 
 			// the cells of a tree holding at least one datum `usable` accepts
 			template <typename Usable>
@@ -236,8 +241,9 @@ namespace sptlz{
 			void for_each_tree(int n, sptlz::CallbackProgressSender *progress, Body body){
 				const bool parallel = (this->decoder == NULL) || this->decoder->thread_safe();
 				const std::thread::id caller = std::this_thread::get_id();
+				sptlz::Interrupt ctrl_c;
+				this->interrupt = &ctrl_c;
 				std::atomic<int> done(0);
-				std::atomic<bool> stop(false);
 				std::exception_ptr error = nullptr;
 				int sent = 0;  // progress tokens sent, touched by the calling thread only
 
@@ -245,7 +251,7 @@ namespace sptlz{
 				#pragma omp parallel for schedule(dynamic, 1) if(parallel)
 				#endif
 				for(int i=0; i<n; i++){
-					if(stop.load()){
+					if(ctrl_c.stop.load()){
 						continue;
 					}
 					try{
@@ -259,27 +265,19 @@ namespace sptlz{
 								error = std::current_exception();
 							}
 						}
-						stop.store(true);
+						ctrl_c.stop.store(true);
 					}
 					done++;
-					if(std::this_thread::get_id() == caller && !stop.load()){
-						if(PyErr_CheckSignals() != 0){  // to allow ctrl-c from user
-							#ifdef _OPENMP
-							#pragma omp critical(sptlz_ensemble_error)
-							#endif
-							{
-								if(!error){
-									error = std::make_exception_ptr(pybind11::error_already_set());
-								}
-							}
-							stop.store(true);
-						}else{
-							for(int d=done.load(); sent<d; ){
-								sent++;
-								progress->inform(static_cast<int>(100.0*sent/n));
-							}
+					if(std::this_thread::get_id() == caller && !ctrl_c.requested()){
+						for(int d=done.load(); sent<d; ){
+							sent++;
+							progress->inform(static_cast<int>(100.0*sent/n));
 						}
 					}
+				}
+				this->interrupt = nullptr;
+				if(!error && ctrl_c.signalled.load()){
+					error = std::make_exception_ptr(pybind11::error_already_set());
 				}
 
 				if(error){
@@ -318,6 +316,7 @@ namespace sptlz{
 					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<sptlz::MarkTarget> targets;
 					for(size_t j=0; j<locations_by_leaf.size(); j++){
+						if(this->interrupted()) return;
 						if(mt->samples_by_leaf.at(j).size()==0){
 							if(marking && !locations_by_leaf.at(j).empty()){
 								targets.push_back({static_cast<int>(j), mt->leaf_point(static_cast<int>(j)),
@@ -360,6 +359,7 @@ namespace sptlz{
 					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<sptlz::MarkTarget> targets;
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
+						if(this->interrupted()) return;
 						if(coarsening && mt->samples_by_leaf.at(j).size()==1){
 							// the held-out datum leaves its cell empty: predicted from the coarser cell without it
 							int held = mt->samples_by_leaf.at(j).at(0);
@@ -413,6 +413,7 @@ namespace sptlz{
 					bool coarsening = this->empty_cells.kind == sptlz::EmptyCells::COARSEN;
 					std::vector<std::vector<sptlz::MarkTarget>> targets_by_fold(marking ? k : 0);
 					for(size_t j=0; j<mt->samples_by_leaf.size(); j++){
+						if(this->interrupted()) return;
 						auto &cell = mt->samples_by_leaf.at(j);
 						if(cell.size()!=0){
 							auto predictions = decoder->leaf_kfold(k, &coords, &values, &folds, &cell, &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed});

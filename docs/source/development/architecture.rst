@@ -241,6 +241,12 @@ Reproducibility under parallel execution
   requires the GIL. Inside a parallel region only the calling thread, identified by its OS thread
   id, may make such calls, the worker threads updating only atomic counters. Any new parallel code
   must follow the same rule.
+- **Ctrl-C.** The calling thread checks the signals between cells (``sptlz::Interrupt``,
+  ``include/spatialize/interrupt.hpp``), and inside the per-cell searches of adaptive IDW at most every
+  0.1 s, every thread stopping at its next cell. An interruption is then answered within one cell,
+  as a ``KeyboardInterrupt``, rather than at the end of a partition, which with a costly decoder could
+  take minutes. Measured on 3 000 data, IDW stops within half a second, adaptive IDW in 3D within two
+  seconds and kriging, whose cells each solve one system, within about eight.
 - **Python loops.** The loops written in Python, the divergences of the Pareto encoder error, the
   simulations of ESS and the ranking of SPA, run on worker processes through
   ``spatialize._parallel.map_chunks``, with the same session settings. The items go in chunks of

@@ -74,7 +74,8 @@ namespace sptlz{
   }
 
   template <class T>
-  std::vector<float> grid_search(T *func, std::vector<std::vector<float>> *ranges, std::vector<float> cur, float tol=1e-5){
+  std::vector<float> grid_search(T *func, std::vector<std::vector<float>> *ranges, std::vector<float> cur, float tol=1e-5,
+                                 const std::function<bool()> *stop=nullptr){
     int n = static_cast<int>(ranges->size());
     for(int i=0; i<n; i++){
       if((cur.at(i)<ranges->at(i).at(0))||(ranges->at(i).at(1)<cur.at(i))){
@@ -86,6 +87,7 @@ namespace sptlz{
     auto neighbors = get_full_neighboorhood(n);
 
     while(true){
+      if(stop != nullptr && (*stop)()) break;  // interrupted (Ctrl-C): the caller discards the result
       for(auto nb: neighbors){
         bool from_top=false, all_zero=true;
         // refresh new_pos
@@ -147,7 +149,7 @@ namespace sptlz{
   template <class T>
   std::vector<float> coordinate_search(T *func, std::vector<std::vector<float>> *ranges,
                                        std::vector<std::vector<float>> *steps, std::vector<float> cur,
-                                       float tol=1e-6){
+                                       float tol=1e-6, const std::function<bool()> *stop=nullptr){
     int n = static_cast<int>(ranges->size());
     for(int i=0; i<n; i++){
       if((cur.at(i)<ranges->at(i).at(0))||(ranges->at(i).at(1)<cur.at(i))){
@@ -160,6 +162,7 @@ namespace sptlz{
     for(size_t level=0; level<levels; level++){
       bool improved = true;
       while(improved){
+        if(stop != nullptr && (*stop)()) return(cur);  // interrupted (Ctrl-C): the caller discards it
         improved = false;
         for(int i=0; i<n; i++){
           auto &st = steps->at(i);

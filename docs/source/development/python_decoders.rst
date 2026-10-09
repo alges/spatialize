@@ -224,8 +224,7 @@ A Python decoder goes through the same engine as the built-in ones, with a few c
 - **Any partition and dimension.** It works with every partition process (``p_process``) and in
   every dimension, since the functions receive the locations as they are.
 - **Session settings.** The fixed ``domain`` applies. The settings ``parallel`` and ``num_threads``
-  have no effect, as said above. Ctrl-C stops the computation at the end of the partition in
-  progress.
+  have no effect, as said above. Ctrl-C stops the computation at the end of the cell in progress.
 - **Errors.** An exception raised by a function stops the estimation and reaches the caller as a
   ``SpatializeError`` carrying its message.
 

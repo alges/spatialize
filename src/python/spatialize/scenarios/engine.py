@@ -1232,10 +1232,197 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _mark_data(d, box, rng):
+    """Data of a mark_law scenario: ``d["n"]`` data uniform in ``d["box"]`` (default the domain) plus
+    ``d["cluster"]["n"]`` uniform in ``d["cluster"]["box"]``, with distinct values (smooth field
+    plus noise), so a member identifies the datum it came from."""
+    parts = [(int(d["n"]), np.asarray(d.get("box", box), float))]
+    if "cluster" in d:
+        parts.append((int(d["cluster"]["n"]), np.asarray(d["cluster"]["box"], float)))
+    pts = np.vstack([b[:, 0] + rng.random((n, len(box))) * (b[:, 1] - b[:, 0]) for n, b in parts])
+    u = (pts - box[:, 0]) / (box[:, 1] - box[:, 0])
+    vals = np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1]) + 0.3 * rng.standard_normal(len(pts))
+    return pts.astype(np.float32), vals.astype(np.float32)
+
+
+def _mark_probabilities(cell, at_s_t, n, law):
+    """Probability of each datum being the member of a query, under one partition, for the decoder
+    ``draw`` with marks drawn as data (``mark_value="datum"``).
+
+    Parameters
+    ----------
+    cell : int
+        The query's cell label.
+    at_s_t : ndarray of int, shape (n,)
+        The cell labels of the data.
+    n : int
+        Number of data.
+    law : {"cells", "data"}
+        The mark source: one cell with data drawn uniformly, then one of its data uniformly
+        (``"cells"``), or one datum drawn uniformly (``"data"``).
+
+    Returns
+    -------
+    ndarray of shape (n,)
+        Uniform over the data of the query's cell when it holds data, otherwise the mark law.
+    """
+    p = np.zeros(n)
+    inside = at_s_t == cell
+    if inside.any():
+        p[inside] = 1.0 / inside.sum()
+    elif law == "data":
+        p[:] = 1.0 / n
+    else:
+        labels, counts = np.unique(at_s_t, return_inverse=False, return_counts=True)
+        share = dict(zip(labels.tolist(), (1.0 / (len(labels) * counts)).tolist()))
+        p[:] = [share[c] for c in at_s_t.tolist()]
+    return p
+
+
+def eval_mark_law(sc: Scenario, runner: Runner, mode: str, seed: int,
+                  save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``mark_law``: the law of the members under ``empty_cells="mark"`` (P5, P8, P9).
+
+    The estimators use the decoder ``draw`` with marks drawn as data (``mark_value="datum"``), so
+    every member is one datum and its law under each partition has a closed form given the cells
+    (:func:`_mark_probabilities`), read with ``runner.cells``. Kinds (key ``kind``), one outcome per
+    estimator of ``estimators``:
+
+    - ``member_law`` — goodness of fit: at each of ``data.locations``, the number of times each
+      datum is the member against its expectation, the sum over the partitions of its probability
+      under the mark source ``law``. The Pearson statistic is referred to :math:`\chi^2` with
+      :math:`k - q` degrees of freedom (k counts with positive expectation, q locations);
+    - ``weights_sum`` — almost-sure: at each location the weights of the data, the mean over the
+      partitions of the cell mean run on each datum's indicator (the estimator, or the one its entry
+      names with ``reference``, with the cell mean under ``"nan"``),
+      sum to one with the residual weight, the share of partitions in which the cell is empty, up to
+      ``tolerance``;
+    - ``residual_grows`` — paired relation: the location ``far`` has an empty cell more often than
+      the location ``near`` (indices into ``data.locations``), paired by partition;
+    - ``pair_product`` — identity: at the two locations ``pair``, the mean over the partitions of
+      the product of their members minus its expectation given the cells is zero. Under one shared
+      mark the expectation of an empty cell is the mark law's second moment, under distinct cells
+      the product of the means. With ``shuffle``, the members of the second location are taken from
+      the next partition, as if each location drew its own value (a negative control);
+    - ``preferential`` — paired relation over ``fields`` fields: the error of the mean of the marks
+      of ``estimator_b`` (drawn among the data) about the field's spatial mean exceeds that of
+      ``estimator`` (one vote per cell), read at the location ``far`` beyond the data, in the
+      partitions where its cell is empty. The field is ``field.base`` plus ``field.jump`` inside
+      ``data.cluster.box``, plus noise of standard deviation ``field.noise``; the data are ``data.n``
+      uniform in the domain plus ``data.cluster.n`` in the cluster's box.
+
+    Reads ``data`` and ``estimators_T``.
+    """
+    s = sc.spec
+    T = int(_mode_value(s["estimators_T"], mode))
+    entries = {e["id"]: e for e in s["estimators"]}
+    ests = {eid: sc.estimator(e) for eid, e in entries.items()}
+    box = np.asarray(s["domain"]["box"], float)
+    d = s["data"]
+    gseed = int(d["generator_seed"])
+    if "locations" in d:
+        pts, vals = _mark_data(d, box, np.random.default_rng(gseed))
+        qry = np.asarray(d["locations"], np.float32)
+    cache = {}
+
+    def members(eid, values=None, key=""):
+        if (eid, key) not in cache:
+            v = vals if values is None else np.asarray(values, np.float32)
+            cache[(eid, key)] = np.asarray(runner.members(ests[eid], pts, v, qry, n_members=T, seed=seed), float)
+        return cache[(eid, key)]
+
+    def labels(eid):
+        key = ("cells", ests[eid].encoder, ests[eid].rate)
+        if key not in cache:
+            lab = np.asarray(runner.cells(ests[eid], pts, np.vstack([qry, pts]), n_members=T, seed=seed))
+            cache[key] = (lab[: len(qry)], lab[len(qry):])
+        return cache[key]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        for eid in check["estimators"]:
+            est = ests[eid]
+            profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+            cid, title = f"{check['id']}-{eid}", f"{check['title']} ({eid}) [{profile}]"
+            needed = [est] + [ests[k] for k in (entries[eid].get("reference"), check.get("estimator_b")) if k]
+            reason = ""
+            if not all(runner.supports(e) for e in needed):
+                reason = f"{runner.name} does not support " + ", ".join(
+                    f"{e.encoder}/{e.decoder}/{e.empty_cells}" for e in needed)
+            elif not hasattr(runner, "cells"):
+                reason = f"{runner.name} does not give the cells of its partitions"
+            if reason:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=reason))
+                continue
+            if kind == "member_law":
+                m = members(eid)
+                at_q, at_s = labels(eid)
+                counts, expected = [], []
+                for qi in range(len(qry)):
+                    e_q = sum(_mark_probabilities(at_q[qi, t], at_s[:, t], len(vals), check["law"]) for t in range(T))
+                    c_q = np.array([np.sum(m[qi].astype(np.float32) == v) for v in vals])
+                    keep = e_q > 0
+                    counts += list(c_q[keep]); expected += list(e_q[keep])
+                r = families.gof_counts(counts, expected, df=len(counts) - len(qry))
+            elif kind == "weights_sum":
+                ref = entries[eid].get("reference", eid)
+                ind = [members(ref, (np.arange(len(vals)) == j).astype(float), f"onehot{j}") for j in range(len(vals))]
+                w = sum(np.nan_to_num(x, nan=0.0) for x in ind).mean(axis=1)
+                residual = np.isnan(ind[0]).mean(axis=1)
+                r = families.almost_sure(int((np.abs(w + residual - 1.0) > float(check["tolerance"])).sum()), len(qry))
+            elif kind == "residual_grows":
+                at_q, at_s = labels(eid)
+                empty = np.array([~np.isin(at_q[:, t], at_s[:, t]) for t in range(T)]).T.astype(float)
+                r = families.paired_relation(empty[int(check["far"])], empty[int(check["near"])], better="greater")
+            elif kind == "pair_product":
+                m = members(eid)
+                at_q, at_s = labels(eid)
+                a, b = (int(i) for i in check["pair"])
+                law = entries[eid]["mark"]["source"]
+                ya, yb = m[a], m[b]
+                if check.get("shuffle"):
+                    yb = np.roll(yb, -1)
+                expect = np.empty(T)
+                for t in range(T):
+                    pa = _mark_probabilities(at_q[a, t], at_s[:, t], len(vals), law)
+                    pb = _mark_probabilities(at_q[b, t], at_s[:, t], len(vals), law)
+                    shared_mark = at_q[a, t] == at_q[b, t] and not np.isin(at_q[a, t], at_s[:, t])
+                    expect[t] = pa @ (vals.astype(float) ** 2) if shared_mark else (pa @ vals) * (pb @ vals)
+                dev = ya * yb - expect
+                r = families.identity([dev.mean() / (dev.std(ddof=1) / np.sqrt(T))], "mean(Y_a·Y_b − E[Y_a·Y_b | cells])")
+            elif kind == "preferential":
+                K = int(_mode_value(check["fields"], mode))
+                f = check["field"]
+                far = np.asarray([check["far"]], np.float32)
+                cbox = np.asarray(d["cluster"]["box"], float)
+                spatial_mean = float(f["base"]) + float(f["jump"]) * float(np.prod(cbox[:, 1] - cbox[:, 0]) / np.prod(box[:, 1] - box[:, 0]))
+                err = {eid: [], check["estimator_b"]: []}
+                for k in range(K):
+                    rng = np.random.default_rng([gseed, k])
+                    p = np.vstack([box[:, 0] + rng.random((int(d["n"]), len(box))) * (box[:, 1] - box[:, 0]),
+                                   cbox[:, 0] + rng.random((int(d["cluster"]["n"]), len(box))) * (cbox[:, 1] - cbox[:, 0])])
+                    inside = np.all((p >= cbox[:, 0]) & (p <= cbox[:, 1]), axis=1)
+                    v = float(f["base"]) + float(f["jump"]) * inside + float(f["noise"]) * rng.standard_normal(len(p))
+                    p, v = p.astype(np.float32), v.astype(np.float32)
+                    lab = np.asarray(runner.cells(est, p, np.vstack([far, p]), n_members=T, seed=seed + k))
+                    empty = ~np.array([np.isin(lab[0, t], lab[1:, t]) for t in range(T)])
+                    for e in err:
+                        mk = np.asarray(runner.members(ests[e], p, v, far, n_members=T, seed=seed + k), float)[0]
+                        err[e].append(abs(mk[empty].mean() - spatial_mean))
+                r = families.paired_relation(err[check["estimator_b"]], err[eid], better="greater")
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                    known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
-              "posterior_audit": eval_posterior_audit}
+              "posterior_audit": eval_posterior_audit, "mark_law": eval_mark_law}
 
 
 # ----------------------------------------------------------------------------- run

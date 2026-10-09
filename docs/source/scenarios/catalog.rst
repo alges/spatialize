@@ -94,8 +94,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - :ref:`P5 <scenario-P5>`
      - weights on the data plus residual weight sum to 1
-     - ready
-     - derive the target for the implemented mark strategies
+     - **implemented**
+     - —
    * - :ref:`P6 <scenario-P6>`
      - the law at a location does not depend on the other queries
      - **implemented**
@@ -106,12 +106,12 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - derive the closed form independently
    * - :ref:`P8 <scenario-P8>`
      - empty cells share one mark
-     - ready
-     - derive the target for the implemented mark strategies
+     - **implemented**
+     - —
    * - :ref:`P9 <scenario-P9>`
-     - cell-weighted marks are unbiased under preferential sampling
-     - ready
-     - derive the target for the implemented mark strategies
+     - cell-weighted marks lie closer to the spatial law under preferential sampling
+     - **implemented**
+     - —
    * - :ref:`P10 <scenario-P10>`
      - each empty-cell policy does what it declares
      - **implemented**

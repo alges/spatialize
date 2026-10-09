@@ -21,8 +21,8 @@ namespace sptlz{
   // (DECODER: the kind of value the decoder gives elsewhere, an observed value for the drawing
   // decoders) or one of its data drawn uniformly (DATUM: the block-mark model, where a block's value
   // is one mark whatever the decoder). The
-  // cells of one partition are drawn without repetition while candidates remain. In leave-one-out
-  // and k-fold the held-out data take no part.
+  // draws are independent, with repetition, so the marks of distinct empty cells are iid given the
+  // partition. In leave-one-out and k-fold the held-out data take no part.
   enum class EmptyCells { NAN_MEMBER, MARK, COARSEN };
   enum class MarkSource { LOCAL, CELLS, DATA };
 

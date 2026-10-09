@@ -35,7 +35,8 @@ Top-level keys
    * - ``evaluator``
      - string
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
-       ``map_visual``, ``edge_cases``, ``draw_laws`` or ``locality`` (below).
+       ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
+       ``cv_selection``, ``posterior_audit`` or ``mark_law`` (below).
    * - ``book``
      - mapping
      - Source in the theory: ``topic`` (by content) and the draft's section, equation and figure
@@ -326,6 +327,49 @@ against a *reference* decoder run with the same seed.
      * - ``frequencies``
        - ``estimator``, ``reference`` (the cell mean): the counts of each datum match their
          expectation (gof-closed).
+
+Evaluator ``mark_law``
+----------------------
+
+This evaluator decides the law of the members under ``empty_cells="mark"`` (scenarios P5, P8 and
+P9). The estimators use the decoder ``draw`` with marks drawn as data, so that every member is one
+datum. Its probability under each partition then follows from the cells, read through the runner's
+method ``cells``. It is uniform over the data of the location's cell when that cell holds data.
+Otherwise it is the mark law, one cell with data drawn uniformly then one of its data
+(``"cells"``), or one datum drawn uniformly (``"data"``).
+
+- ``truth``: ``generator: smooth_plus_noise`` (P5, P8) or a step field (P9), drawn by the
+  evaluator, not pinned.
+- ``data``: ``n`` data uniform in ``box`` (default the domain), an optional ``cluster`` (``n`` data
+  uniform in its ``box``), the ``locations`` read (P5, P8) and ``generator_seed``.
+- per check, ``kind``, ``estimators`` and its keys:
+
+  .. list-table::
+     :header-rows: 1
+     :widths: 22 78
+
+     * - ``kind``
+       - keys and test
+     * - ``member_law``
+       - ``law`` (``cells`` or ``data``): at each location, the count of each datum against the sum
+         over the partitions of its probability (gof-closed).
+     * - ``weights_sum``
+       - ``tolerance``. The estimator, or the one its entry names with ``reference``, is the cell
+         mean under ``"nan"``. Run on each datum's indicator, its weights sum to one with the share
+         of partitions whose cell is empty (almost-sure).
+     * - ``residual_grows``
+       - ``near``, ``far`` (indices into ``locations``): the location ``far`` has an empty cell more
+         often, paired by partition (paired-relation).
+     * - ``pair_product``
+       - ``pair`` (two indices), optional ``shuffle``. The mean product of the two members minus its
+         expectation given the cells is zero (identity). A shared empty cell gives the second moment
+         of the mark law, distinct cells the product of the means. ``shuffle`` takes the second
+         member from the next partition, a negative control.
+     * - ``preferential``
+       - ``estimator_b``, ``far``, ``field`` (``base``, ``jump`` inside the cluster's box,
+         ``noise``), ``fields``. Over the fields, the marks of ``estimator_b`` lie farther from the
+         field's spatial mean than those of the estimator, read at ``far`` in the partitions where
+         its cell is empty (paired-relation).
 
 Data files
 ==========

@@ -1,0 +1,46 @@
+id: P8-shared-mark
+version: 1
+tier: T2
+evaluator: mark_law
+book:
+  topic: "a cell without data contributes a single mark, shared by all its locations; distinct cells have independent marks"
+  draft_2026_10: "ch 12, the block-mark model"   # the book is a draft
+purpose: >
+  Two locations far from the data share one mark when they fall in the same empty cell, and receive
+  independent marks otherwise. Given the cells, the expected product of their members is then the
+  second moment of the mark law under a shared empty cell, and the product of the means under
+  distinct cells. The covariance of the members is therefore the variance of the mark law times the
+  probability of sharing an empty cell. Pairing the second location's members with the next
+  partition, as if each location drew its own value, must be rejected.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 40
+  box: [[0.0, 0.6], [0.0, 0.6]]
+  locations: [[0.9, 0.9], [0.95, 0.95]]  # far from the data, ℓ1 distance 0.1: often one empty cell
+  generator_seed: 20261009
+estimators_T: {ci: 4000, full: 16000}
+estimators:
+  - {id: m-cells, encoder: mondrian, rate: 4.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}}
+  - {id: m-data, encoder: mondrian, rate: 4.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: datum}}
+  - {id: v-cells, encoder: voronoi, rate: 12.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}}
+checks:
+  - id: product
+    title: "the product of the members matches one shared mark per empty cell, independent marks across cells"
+    kind: pair_product
+    family: identity
+    pair: [0, 1]
+    estimators: [m-cells, m-data, v-cells]
+  - id: control-independent
+    title: "negative control: one value drawn per location does not match the shared mark"
+    kind: pair_product
+    family: identity
+    pair: [0, 1]
+    shuffle: true
+    estimators: [m-cells]
+    expect: {default: reject}
+provenance:
+  v1: "2026-10-09: first version, after the marks of distinct empty cells became independent draws; sizes fixed before the first run."

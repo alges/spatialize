@@ -9,8 +9,8 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2, P3, P6, P10, P11 and P12 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
-law of the marks of empty cells, so their targets must first be derived for the mark strategies
+P2, P3, P5, P6, P8, P9, P10, P11 and P12 are implemented. P1, P4 and P7 can be implemented now. P5, P8
+and P9 read the law of the marks of empty cells, with targets derived for the mark strategies
 Spatialize implements (:doc:`../theory/blockmark`).
 
 .. _scenario-P1:
@@ -128,19 +128,50 @@ P4 — The estimated law is a law
 P5 — Residual weight of the decoders
 ====================================
 
-:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
+:Status: **implemented**
+:Evaluator: ``mark_law``
 :Source in the theory: the limit law of the estimator as a mixture of the data values with the mark
   law
 :Claim: at a location, the weights on the observed values sum to one together with the *residual
   weight*, the proportion of partitions in which the location's cell has no data. The residual weight
-  grows with the distance to the data. With ``empty_cells="mark"`` on a block-mark truth, the law of
-  the members equals the mixture of the data values with the estimated mark law, weighted that way.
+  grows with the distance to the data. With ``empty_cells="mark"`` the law of the members is the
+  mixture of the data values with the mark law, weighted that way.
+
+**Setup.** 30 data uniform in :math:`[0, 0.6]^2` and 30 in :math:`[0, 0.2]^2`, a cluster, with the
+field of P10. Six locations run along the diagonal from :math:`(0.3, 0.3)` to :math:`(1, 1)`. The
+estimators use the Mondrian partition of rate 4 and the Voronoi partition with uniform nuclei of
+intensity 12, with :math:`T = 2\,000` members in ``ci`` and :math:`8\,000` in ``full``.
+
+**Target.** With the decoder ``draw`` and ``mark_value="datum"`` every member is one datum. Under a
+partition :math:`t`, write :math:`C` for the location's cell, :math:`\mathcal C_t` for the cells
+holding data and :math:`n_{C'}` for the number of data in :math:`C'`. The member is the datum
+:math:`z_i` with probability
+
+.. math::
+
+   p_t(i) = \begin{cases}
+   1/n_C & \text{if } C \text{ holds data and } i \in C, \\
+   1/(|\mathcal C_t|\, n_{C(i)}) & \text{if } C \text{ is empty, under } \texttt{mark\_source="cells"}, \\
+   1/n & \text{if } C \text{ is empty, under } \texttt{mark\_source="data"},
+   \end{cases}
+
+and 0 otherwise. The evaluator reads the cells with the runner's method ``cells``, so the expected
+count of each datum at a location is :math:`\sum_t p_t(i)`.
 
 **Checks.**
 
-- *almost-sure*. The weights sum to one.
-- *paired-relation*. The residual weight is larger far from the data.
-- *gof* (:math:`\chi^2` or Kolmogorov–Smirnov) of the member law against the mixture.
+- *gof-closed* (``law-cells``, ``law-data``). At each location, the count of each datum against its
+  expectation. The Pearson statistic is referred to :math:`\chi^2` with :math:`k - 6` degrees of
+  freedom, k being the counts with positive expectation.
+- *almost-sure* (``weights``). Run on the indicator of each datum, the cell mean under ``"nan"`` gives
+  the weights :math:`w_i(x)` as the mean over the partitions. They sum to one with the residual
+  weight, the share of NaN members, up to :math:`10^{-4}`.
+- *paired-relation* (``residual``). The location :math:`(1, 1)` has an empty cell more often than
+  :math:`(0.3, 0.3)`, paired by partition.
+- *negative control* (``control-law``). The marks drawn among the data, tested against the
+  cell-weighted law, must be rejected. The cluster makes the two laws differ.
+
+**Results.** Not run yet.
 
 .. _scenario-P6:
 
@@ -201,35 +232,72 @@ P7 — Covariance of an uncorrelated field
 P8 — Data-free cells share one mark
 ===================================
 
-:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
-:Source in the theory: a cell without data contributes a single mark, shared by all its locations
+:Status: **implemented**
+:Evaluator: ``mark_law``
+:Source in the theory: a cell without data contributes a single mark, shared by all its locations,
+  the marks of distinct cells being independent
 :Claim: with ``empty_cells="mark"``, two queries far from the data have members whose covariance
-  equals the variance of the estimated mark law times their co-occurrence probability.
+  equals the variance of the mark law times the probability that they share an empty cell.
+
+**Setup.** 40 data uniform in :math:`[0, 0.6]^2` with the field of P10, and the locations
+:math:`a = (0.9, 0.9)` and :math:`b = (0.95, 0.95)`. The estimators use the decoder ``draw`` with
+marks drawn as data, on the Mondrian partition of rate 4 (marks from the cells and from the data)
+and on the Voronoi partition of intensity 12 (marks from the cells), with :math:`T = 4\,000` members
+in ``ci`` and :math:`16\,000` in ``full``.
+
+**Target.** Given the cells of partition :math:`t`, with :math:`p_t` the law of P5 at each location,
+
+.. math::
+
+   E[Y_a Y_b \mid t] = \begin{cases}
+   \sum_i p_t(i)\, z_i^2 & \text{if } a, b \text{ share an empty cell}, \\
+   \big(\sum_i p_{t,a}(i)\, z_i\big)\big(\sum_i p_{t,b}(i)\, z_i\big) & \text{otherwise},
+   \end{cases}
+
+since one shared mark gives the second moment of the mark law, while distinct cells give independent
+members. Averaging over the partitions gives the covariance of the claim.
 
 **Checks.**
 
-- *identity* on the covariance.
-- *negative control*: drawing an independent value per location gives covariance 0, which the test
-  must reject.
+- *identity* (``product``). The mean over the partitions of :math:`Y_a Y_b - E[Y_a Y_b \mid t]`,
+  divided by its standard error, is referred to :math:`N(0, 1)`.
+- *negative control* (``control-independent``). Taking :math:`Y_b` from the next partition, as if
+  each location drew its own value, must be rejected.
+
+The marks of distinct empty cells are independent draws, as in the block-mark model. Distinct
+sources within a partition would make them negatively correlated, which this check would detect.
+
+**Results.** Not run yet.
 
 .. _scenario-P9:
 
 P9 — Mark law under preferential sampling
 =========================================
 
-:Status: ready (not yet implemented), target to be derived for the implemented mark strategies
+:Status: **implemented**
+:Evaluator: ``mark_law``
 :Source in the theory: the block-mark model has one mark per cell
-:Claim: under preferential sampling, estimating the mark law with one draw per data-bearing cell
-  (``mark_source="cells"``) gives an unbiased estimate. Drawing among all data
-  (``mark_source="data"``) gives one biased towards the densely sampled zone.
+:Claim: under preferential sampling, the marks drawn with one vote per cell with data
+  (``mark_source="cells"``) lie closer to the spatial law of the field than the marks drawn among
+  all the data (``mark_source="data"``), which lean towards the densely sampled zone.
 
-**Setup.** A preferential design, with 150 uniform data plus 150 in the central quarter of the
-domain.
+**Setup.** On each of 20 fields in ``ci`` and 40 in ``full``, 150 data uniform in the unit square
+and 150 in the central quarter :math:`[0.25, 0.75]^2`. The field is 2 in the central quarter and 0
+elsewhere, plus noise of standard deviation 0.3, so its spatial mean is 0.5. The estimators use the
+decoder ``draw`` with marks drawn as data on the Mondrian partition of rate 6, with :math:`T = 400`
+members in ``ci`` and :math:`1\,000` in ``full``. The marks are read at :math:`(1.5, 1.5)`, beyond the
+domain, in the partitions where its cell is empty.
 
-**Checks.**
+**Check.**
 
-- *gof* of the cell-weighted estimate against the true mark law.
-- *paired-relation*. The data-weighted estimate lies farther from it.
+- *paired-relation* (``closer``). Over the fields, the error of the mean of the data-drawn marks
+  about 0.5 exceeds that of the cell-drawn marks (paired t-test).
+
+One vote per cell is unbiased only approximately. Cells straddling the central quarter draw its
+data more often, and cells without data take no vote. The check is therefore a paired relation, not
+a goodness of fit to the true mark law.
+
+**Results.** Not run yet.
 
 .. _scenario-P10:
 
@@ -280,8 +348,8 @@ of the partitions through the runner (:doc:`extending`).
 - ``data-law``, *gof-closed*. At the query nearest to the corner :math:`(1, 1)`, opposite the data,
   the marks drawn among the data (``data``) are uniform over the 40 data. The members of the
   partitions where the query's cell is empty, one per partition and so independent, are counted per
-  datum, and the Pearson statistic is referred to :math:`\chi^2_{39}`. The empty cells of one
-  partition draw distinct data, which by symmetry leaves the law at one location uniform.
+  datum, and the Pearson statistic is referred to :math:`\chi^2_{39}`. Each empty cell draws its
+  datum uniformly, independently of the other empty cells.
 - *negative controls*. ``"coarsen"`` with IDW predicts at each location, so the queries of one empty
   cell must not share one value. ``"mark"`` with the ``local`` strategy predicts with IDW at the
   empty cell's point, so its marks must not be data values.

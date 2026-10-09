@@ -42,7 +42,7 @@ def test_mark_fills_each_empty_cell_with_one_value(partition, alpha, mark_source
     """Under empty_cells="mark" every location of an empty cell takes one value, shared by the cell;
     the cells with data keep the members of "nan"; with a drawing decoder (or mark_source="data") the
     marks are observed values; leave-one-out and k-fold have no NaN; the marks do not depend on the
-    number of threads; the empty cells of one partition draw distinct data under "data"."""
+    number of threads, nor on the other empty cells requested (iid draws, with repetition)."""
     s, v, _ = DATA["2d"]
     rng = np.random.default_rng(cases.GENERATOR_SEED)
     v = rng.normal(size=len(v)).astype(np.float32)     # continuous values: distinct data, distinct marks
@@ -59,15 +59,12 @@ def test_mark_fills_each_empty_cell_with_one_value(partition, alpha, mark_source
     if decoder == "draw" or mark_source == "data" or mark_value == "datum":
         assert np.isin(mark[empty], v).all()
     for t in range(cases.T):
-        cells = np.unique(at_q[empty[:, t], t])
-        values = []
-        for c in cells:
-            shared = set(mark[at_q[:, t] == c, t])
-            assert len(shared) == 1
-            values += list(shared)
-        if mark_source == "data" and len(cells) <= len(v):
-            assert len(set(values)) == len(values)      # no datum serves two empty cells
+        for c in np.unique(at_q[empty[:, t], t]):
+            assert len(set(mark[at_q[:, t] == c, t])) == 1
     assert np.array_equal(mark, run("mark", threads=1))
+    # a subset of the queries that keeps their box (hence the partitions) keeps the marks
+    keep = np.unique(np.concatenate([np.arange(0, len(q), 7), q.argmin(0), q.argmax(0)]))
+    assert np.array_equal(run("mark", queries=q[keep])[empty[keep]], mark[keep][empty[keep]])
     for method in ("loo", "kfold"):
         assert not np.isnan(run("mark", method, queries=s)).any()
 

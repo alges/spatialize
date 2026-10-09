@@ -96,9 +96,10 @@ namespace sptlz{
 
 			// The marks of one partition (empty_cells.hpp): each target, in the order given, draws a
 			// source among the cells holding data that `usable` accepts (the nearest mark_knn of them,
-			// or all), without repetition while candidates remain, and receives that cell's decoder
-			// prediction at its point (or, with mark_value "datum", one of its data); with mark_source
-			// "data", a datum drawn without repetition.
+			// or all) and receives that cell's decoder prediction at its point (or, with mark_value
+			// "datum", one of its data); with mark_source "data", a datum. The draws are independent, with
+			// repetition (iid marks, as in the block-mark model), so a mark depends on its own key only,
+			// never on the other empty cells requested.
 			template <typename Usable>
 			void fill_marks(int t, sptlz::Partition *mt, std::vector<sptlz::MarkTarget> &targets, Usable usable,
 			                std::vector<std::vector<float>> &results){
@@ -108,13 +109,8 @@ namespace sptlz{
 					std::vector<int> data;
 					for(int d=0; d<static_cast<int>(values.size()); d++) if(usable(d)) data.push_back(d);
 					if(data.empty()) return;
-					std::vector<bool> used(values.size(), false);
 					for(auto &target: targets){
-						std::vector<int> free;
-						for(int d: data) if(!used.at(d)) free.push_back(d);
-						const auto &pool = free.empty() ? data : free;
-						int d = pool.at(sptlz::mark_pick(sptlz::mark_uniform(this->seed, t, target.key, 1), static_cast<int>(pool.size())));
-						used.at(d) = true;
+						int d = data.at(sptlz::mark_pick(sptlz::mark_uniform(this->seed, t, target.key, 1), static_cast<int>(data.size())));
 						for(int r: target.rows) results.at(r).at(t) = values.at(d);
 					}
 					return;
@@ -122,7 +118,6 @@ namespace sptlz{
 				std::vector<int> eligible = cells_with_data(mt, usable);
 				std::vector<std::vector<float>> points;
 				for(int c: eligible) points.push_back(mt->leaf_point(c));
-				std::vector<bool> used(mt->samples_by_leaf.size(), false);
 				for(auto &target: targets){
 					std::vector<int> candidates;   // positions in `eligible`
 					for(size_t a=0; a<eligible.size(); a++) if(eligible.at(a) != target.cell) candidates.push_back(static_cast<int>(a));
@@ -133,11 +128,7 @@ namespace sptlz{
 						std::stable_sort(candidates.begin(), candidates.end(), [&dist](int x, int y){ return(dist.at(x) < dist.at(y)); });
 						candidates.resize(policy.knn);
 					}
-					std::vector<int> free;
-					for(int a: candidates) if(!used.at(eligible.at(a))) free.push_back(a);
-					const auto &pool = free.empty() ? candidates : free;
-					int c = eligible.at(pool.at(sptlz::mark_pick(sptlz::mark_uniform(this->seed, t, target.key, 1), static_cast<int>(pool.size()))));
-					used.at(c) = true;
+					int c = eligible.at(candidates.at(sptlz::mark_pick(sptlz::mark_uniform(this->seed, t, target.key, 1), static_cast<int>(candidates.size()))));
 					std::vector<int> source;
 					for(int d: mt->samples_by_leaf.at(c)) if(usable(d)) source.push_back(d);
 					if(!policy.value_from_decoder){

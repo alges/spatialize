@@ -66,8 +66,8 @@ The settings are the following.
       block-mark model's single law of the marks for the whole field.
     - ``"data"`` draws one datum uniformly among all the data, so densely sampled zones weigh more.
 
-    The empty cells of one partition draw their sources without repetition while candidates remain.
-    In leave-one-out and k-fold the data held out take no part.
+    The empty cells of one partition draw their sources independently, with repetition, so their
+    marks are independent given the partition. In leave-one-out and k-fold the data held out take no part.
 
 ``mark_knn`` (positive int)
     The number of nearby cells with data among which ``mark_source="local"`` draws. The default is 8.

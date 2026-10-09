@@ -1,0 +1,38 @@
+id: P9-preferential-mark-law
+version: 1
+tier: T2
+evaluator: mark_law
+book:
+  topic: "the block-mark model has one mark per cell: the mark law weighs cells, not data"
+  draft_2026_10: "ch 12, the block-mark model"   # the book is a draft
+purpose: >
+  Under a preferential design, with a dense cluster where the field is high, marks drawn with one
+  vote per cell with data (mark_source "cells") follow the spatial law of the field, while marks
+  drawn among all the data (mark_source "data") lean towards the cluster. Over many fields, the mean
+  of the cell-drawn marks must lie closer to the field's spatial mean than that of the data-drawn
+  marks. One vote per cell is unbiased only approximately (cells straddling the cluster, cells
+  without data), so the check is a paired relation, not a goodness of fit.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: preferential_step}
+data:
+  n: 150                                 # uniform in the domain
+  cluster: {n: 150, box: [[0.25, 0.75], [0.25, 0.75]]}
+  generator_seed: 20261009
+estimators_T: {ci: 400, full: 1000}
+estimators:
+  - {id: m-cells, encoder: mondrian, rate: 6.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}}
+  - {id: m-data, encoder: mondrian, rate: 6.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: datum}}
+checks:
+  - id: closer
+    title: "cell-drawn marks lie closer to the spatial mean than data-drawn marks"
+    kind: preferential
+    family: paired-relation
+    estimator_b: m-data
+    far: [1.5, 1.5]                      # beyond the domain: its cell is almost always empty
+    field: {base: 0.0, jump: 2.0, noise: 0.3}   # 2 inside the cluster's box (a quarter of the area)
+    fields: {ci: 20, full: 40}
+    estimators: [m-cells]
+provenance:
+  v1: "2026-10-09: first version; the goodness of fit to the true mark law was dropped for a paired relation, one vote per cell being unbiased only approximately; sizes fixed before the first run."

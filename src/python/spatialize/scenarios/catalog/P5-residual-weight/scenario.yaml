@@ -1,0 +1,72 @@
+id: P5-residual-weight
+version: 1
+tier: T2
+evaluator: mark_law
+book:
+  topic: "the limit law of the estimator: the data values weighted by the cells, the residual weight sent to the mark law"
+  draft_2026_10: "ch 12, the block-mark model and the higher-order estimator"   # the book is a draft
+purpose: >
+  At a location, the data share the weight of the partitions whose cell holds data, and the cells
+  without data send theirs, the residual weight, to the mark law. With the decoder draw and marks
+  drawn as data every member is one datum, whose probability under each partition follows from the
+  cells: uniform over the data of the location's cell, or the mark law when the cell is empty (one
+  cell with data drawn uniformly then one of its data, or one datum among all). The law of the
+  members must match these probabilities. The weights read through the cell mean must sum to one
+  with the residual weight, which must grow away from the data. A clustered design makes the two
+  mark laws differ, so the law of the marks drawn among the data, tested against the cell law,
+  serves as a negative control.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 30
+  box: [[0.0, 0.6], [0.0, 0.6]]          # the data cover 36 % of the domain
+  cluster: {n: 30, box: [[0.0, 0.2], [0.0, 0.2]]}
+  locations: [[0.3, 0.3], [0.45, 0.45], [0.6, 0.6], [0.75, 0.75], [0.9, 0.9], [1.0, 1.0]]
+  generator_seed: 20261009
+estimators_T: {ci: 2000, full: 8000}
+estimators:
+  - {id: m-cells, encoder: mondrian, rate: 4.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}}
+  - {id: m-data, encoder: mondrian, rate: 4.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: datum}}
+  - {id: m-cm-nan, encoder: mondrian, rate: 4.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: v-cells, encoder: voronoi, rate: 12.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: cells, knn: 8, value: datum}}
+  - {id: v-data, encoder: voronoi, rate: 12.0, decoder: draw, params: {}, empty_cells: mark,
+     mark: {source: data, knn: 8, value: datum}}
+  - {id: v-cm-nan, encoder: voronoi, rate: 12.0, decoder: cellmean, params: {}, empty_cells: nan}
+checks:
+  - id: law-cells
+    title: "the members follow the data of the cell, or the cell-weighted mark law when it is empty"
+    kind: member_law
+    family: gof-closed
+    law: cells
+    estimators: [m-cells, v-cells]
+  - id: law-data
+    title: "the members follow the data of the cell, or the data-weighted mark law when it is empty"
+    kind: member_law
+    family: gof-closed
+    law: data
+    estimators: [m-data, v-data]
+  - id: weights
+    title: "the weights of the data sum to one with the residual weight"
+    kind: weights_sum
+    family: almost-sure
+    tolerance: 1.0e-4                     # float32 sums of the cell mean over 2 000 to 8 000 partitions
+    estimators: [m-cm-nan, v-cm-nan]
+  - id: residual
+    title: "the residual weight is larger far from the data"
+    kind: residual_grows
+    family: paired-relation
+    near: 0
+    far: 5
+    estimators: [m-cells, v-cells]
+  - id: control-law
+    title: "negative control: marks drawn among the data do not follow the cell-weighted mark law"
+    kind: member_law
+    family: gof-closed
+    law: cells
+    estimators: [m-data]
+    expect: {default: reject}
+provenance:
+  v1: "2026-10-09: first version, with the target derived for the implemented mark strategies; sizes and tolerances fixed before the first run."

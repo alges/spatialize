@@ -205,10 +205,9 @@ gives the value.
      with :math:`\mathcal C_t` the cells of partition :math:`t` holding data and :math:`n_{C'}` the
      number of data in :math:`C'`, which is the block-mark model exactly.
 
-3. **No repetition within a partition.** The empty cells of one partition, taken in a fixed order,
-   draw distinct sources while candidates remain, so two empty cells do not copy one value, which
-   would couple them as if they formed one block. Empty cells of different partitions draw
-   independently.
+3. **Independent marks.** Each empty cell draws its source independently of the other empty cells,
+   with repetition, as the block-mark model gives each block an independent mark. Given the
+   partition, the marks of two empty cells are therefore independent, with covariance zero.
 4. **Reproducible draws.** The random numbers of a mark depend only on the seed of the run, the
    partition and the cell. A mark does not change with the number of threads, nor with the other
    locations requested.

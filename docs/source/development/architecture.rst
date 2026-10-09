@@ -176,8 +176,8 @@ with ``mark_source``, ``mark_knn`` and ``mark_value``. The decoder is never call
 itself.
 
 - Under ``"mark"``, ``fill_marks`` draws for each empty cell a source cell holding data, among the
-  ``mark_knn`` nearest to the cell's ``leaf_point`` or among all of them, without repetition within
-  a partition, then takes the source's decoder prediction at that point, or one of its data. The
+  ``mark_knn`` nearest to the cell's ``leaf_point`` or among all of them, independently of the other
+  empty cells and with repetition, then takes the source's decoder prediction at that point, or one of its data. The
   random numbers depend only on the seed, the tree and a key (the cell in estimation, the held-out
   datum in leave-one-out, the cell and the fold in k-fold).
 - Under ``"coarsen"``, ``fill_coarse`` asks the partition for the coarser cell with data,

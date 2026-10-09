@@ -8,6 +8,16 @@ The cross-validated predictive law at each datum and its analysis, which ranks t
 
 .. currentmodule:: spatialize.gs.spa
 
+.. autofunction:: posterior_audit
+
+.. autoclass:: PosteriorAudit
+   :members:
+
+Version 1.2 interface
+=====================
+
+The names of version 1.2 work on top of :func:`posterior_audit`.
+
 .. autofunction:: cv_sample_pred_posterior
 
 .. autoclass:: PosteriorSampleAnalyzer

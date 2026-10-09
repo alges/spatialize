@@ -50,6 +50,10 @@ New
   declare (:ref:`scenario-P10`). Scenario P11 shows the selection bias of a cross-validation score
   that drops undefined members (:ref:`scenario-P11`).
 - :func:`~spatialize.empirical.silverman_bandwidth`, the bandwidth of the kernel density estimates.
+- **Posterior analysis of the data** (:doc:`reference/spa`). :func:`~spatialize.gs.spa.posterior_audit`
+  builds the law of each datum from the other data, with any decoder and partition, on the session
+  domain or the box of the data, and reports the share of partitions each law rests on
+  (:attr:`~spatialize.gs.spa.PosteriorAudit.support`). The functions of version 1.2 work on top of it.
 
 Under study
 -----------
@@ -95,10 +99,22 @@ Results that change
   :math:`1/(1 + d^p)`, close to a cell mean on small domains).
 - **Cross-validation.** Kriging's leave-one-out applied its weights to the wrong data, and k-fold
   gave 0.0 instead of an undefined value in cells left with a single datum.
+- **Posterior analysis.** The law of each datum no longer contains the datum. Version 1.2 added the
+  value to its own members, which put a kernel on it and capped its surprise, so
+  ``sample_quantiles``, ``sample_entropy`` and the ranking change. A datum whose law fails to fit
+  keeps NaN readings and one warning counts them, where it used to be dropped silently.
+- **Laws outside their range.** The cumulative distribution function of an
+  :class:`~spatialize.empirical.EmpiricalModel` is 0 below its grid and 1 above, and its density 0
+  outside, where both were undefined (NaN). A datum far above its law now reads 1.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn
-  at each call.
+  at each call; the plotting methods of the posterior analysis return their figure, without
+  showing it; the reference pages of :func:`~spatialize.gs.esi.esi_hparams_search`,
+  :func:`~spatialize.gs.esi.esi_pareto_hparams_search`,
+  :func:`~spatialize.gs.cat_esi.cat_esi_hparams_search` and
+  :func:`~spatialize.gs.spa.cv_sample_pred_posterior` show their documentation, which their
+  decorator dropped.
 
 Removed
 -------

@@ -279,3 +279,25 @@ def test_custom_decoder_from_estimation_alone_matches_idw(partition, alpha, meth
         for policy in ("mark", "coarsen"):
             filled = np.asarray(LIB.run(*args, "custom", {"estimation": _python_idw}, *tail, policy)[1])
             assert not np.isnan(filled).any()
+
+
+def test_posterior_audit_builds_each_law_from_the_other_data():
+    """posterior_audit computes the same members as the 1.2 function given the data as queries; the
+    law of a datum is fitted to its defined members alone, never to the datum; a cumulative
+    distribution function is 0 below its grid and 1 above, so a datum far outside its law gets
+    0 or 1 and not NaN."""
+    from spatialize.gs.spa import posterior_audit, cv_sample_pred_posterior
+    from spatialize.empirical import FittedModelFactory
+    s, v, _ = DATA["2d"]
+    v = v.copy()
+    v[3] = v.max() + 10 * (v.max() - v.min())          # far above every other value
+    kw = dict(local_interpolator="idw", exponent=2.0, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED,
+              callback=lambda *a, **k: None)
+    audit = posterior_audit(s, v, fitted_model_factory=FittedModelFactory(), **kw)
+    old = cv_sample_pred_posterior(s, v, s, fitted_model_factory=FittedModelFactory(), **kw)
+    assert np.array_equal(audit.members, old.members, equal_nan=True)
+    assert np.array_equal(audit.support, np.isfinite(audit.members).mean(axis=1))
+    model = audit.model(3)
+    assert np.array_equal(np.sort(model.data_), np.sort(audit.members[3][np.isfinite(audit.members[3])]))
+    assert old.sample_quantiles[3] == 1.0
+    assert model.cdf(model.x_[0] - 1.0) == 0.0 and model.pdf(model.x_[-1] + 1.0) == 0.0

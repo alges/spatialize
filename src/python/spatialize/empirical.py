@@ -1146,7 +1146,7 @@ class EmpiricalModel(BaseEmpiricalModel):
         y : array_like
             Values to interpolate.
         """
-        def __init__(self, x, y):
+        def __init__(self, x, y, outside=None):
             """
             Build the Akima interpolant from a grid `x` and values `y`.
 
@@ -1156,7 +1156,11 @@ class EmpiricalModel(BaseEmpiricalModel):
                 Grid for interpolation.
             y : array_like
                 Values to interpolate.
+            outside : tuple of float, optional
+                The values below and above the grid (0 and 1 for a cumulative distribution
+                function, 0 and 0 for a density). Default: NaN outside the grid.
             """
+            self.__outside = outside
             # Ensure x is sorted for interpolation
             sort_indices = np.argsort(x)
             x_sorted = x[sort_indices]
@@ -1183,7 +1187,14 @@ class EmpiricalModel(BaseEmpiricalModel):
             float or ndarray
                 Interpolated value(s).
             """
-            return self.__f(x)
+            y = self.__f(x)
+            if self.__outside is not None:
+                lo, hi = self.__f.x[0], self.__f.x[-1]
+                xa = np.asarray(x)
+                y = np.where(xa < lo, self.__outside[0], np.where(xa > hi, self.__outside[1], y))
+                if np.ndim(x) == 0:
+                    y = float(y)
+            return y
 
         def derivative(self):
             """
@@ -1283,8 +1294,9 @@ class EmpiricalModel(BaseEmpiricalModel):
         self.cdf_ = cdf_ / np.max(cdf_) # Normalize to ensure max is 1.0
 
         # Create interpolators
-        self.pdf = self.F(self.x_, self.pdf_)
-        self.cdf = self.F(self.x_, self.cdf_)
+        # outside the grid the law has no mass: density 0, cumulative probability 0 below and 1 above
+        self.pdf = self.F(self.x_, self.pdf_, outside=(0.0, 0.0))
+        self.cdf = self.F(self.x_, self.cdf_, outside=(0.0, 1.0))
         self.inv_cdf = self.F(self.cdf_, self.x_)
 
     def entropy(self, a=None, b=None, base=np.e, epsilon=1e-10):

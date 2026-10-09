@@ -1,3 +1,5 @@
+import functools
+
 import numpy as np
 from rich.progress import track
 
@@ -39,6 +41,7 @@ def _default(value):
 
 def signature_overload(pivot_arg, common_args, specific_args):
     def outer_function(func):
+        @functools.wraps(func)  # keeps the docstring and signature for help() and the reference docs
         def inner_function(*args, **kwargs):
             pivot_key, pivot_default_value, pivot_desc = pivot_arg
 

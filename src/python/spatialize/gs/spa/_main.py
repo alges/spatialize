@@ -1,205 +1,287 @@
-import numpy as np
-import pandas as pd
+"""Posterior analysis of the data: each datum read against the predictive law the other data give.
+
+Cross-validation predicts each datum from the others, with the partitions and the decoder alone, so
+the law at a datum carries the evidence the rest of the data give about it, without a variogram or
+a model chosen beforehand. :func:`posterior_audit` computes these laws and returns a
+:class:`PosteriorAudit`. :func:`cv_sample_pred_posterior` and :class:`PosteriorSampleAnalyzer`, the
+names of version 1.2, are kept on top of it.
+"""
 import random as rd
+import warnings
+from copy import deepcopy
+
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.colors import ListedColormap
-from matplotlib.lines import Line2D
 
-from copy import deepcopy
-from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 import spatialize.gs.esi.aggfunction as af
+from spatialize import SpatializeError, logging
 from spatialize._parallel import map_chunks
-from spatialize.gs.esi._main import build_arg_list
 from spatialize._util import signature_overload, per_call, random_seed
-from spatialize.logging import default_singleton_callback, log_message
-from spatialize import SpatializeError, logging  # Assuming 'logging' here refers to your custom logging
 from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
-                                   _loo_target_skewness)
+                                  _loo_target_skewness)
+from spatialize.gs import (lib_spatialize_facade, partitioning_process, local_interpolator as li,
+                           with_more_decoders, decoder_arguments)
+from spatialize.logging import default_singleton_callback, log_message
 from spatialize.viz import PlotStyle
 
 
-class PosteriorSampleAnalyzer:
-    """
-    Analyzes results from cross-validated posterior samples.
+def _default_factory():
+    return FittedModelFactory(nan_model_name="ignore", point_model_name="vim", n_components=3,
+                              bgm_sample_size=1000, bgm_max_iter=100)
 
-    This class takes the output of a cross-validation process, along with
-    the original sample points and values, to compute empirical models,
-    quantiles, and entropy for each sample. It also provides methods for
-    ranking samples based on entropy and for visualizing the results.
+
+_COMMON = {"k": -1,
+           "p_process": partitioning_process.MONDRIAN,
+           "data_cond": True,
+           "n_partitions": 200,
+           "alpha": 0.8,
+           "seed": random_seed,
+           "folding_seed": random_seed,
+           "fitted_model_factory": per_call(_default_factory),
+           "callback": default_singleton_callback,
+           "best_params_found": None}
+
+_SPECIFIC = with_more_decoders({
+    li.IDW: {"exponent": 2.0},
+    li.KRIGING: {"model": "spherical", "nugget": 0.5, "range": 50.0, "sill": 0.9},
+    li.ADAPTIVE_IDW: {"metric": "mae"},
+})
+
+
+def _with_best_params(kwargs):
+    """The arguments with those of ``best_params_found`` in force, except ``n_partitions``."""
+    best = kwargs.get("best_params_found")
+    if best is None:
+        return kwargs
+    log_message(logging.logger.debug(f"using best params found: {best}"))
+    out = dict(kwargs)
+    out.update({key: value for key, value in best.items() if key != "n_partitions"})
+    return out
+
+
+def _cv_members(points, values, queries, kwargs):
+    """The cross-validation members at the data, (n, n_partitions), computed through ``run``.
+
+    ``queries`` only take part in the box of the partitions, as in version 1.2."""
+    points = np.asarray(points, dtype=np.float32)
+    values = np.asarray(values, dtype=np.float32)
+    n = points.shape[0]
+    k = kwargs["k"]
+    method = "loo" if k in (-1, n) else "kfold"
+    alpha = kwargs["alpha"]
+    if alpha >= 1.0:
+        raise ValueError(f"alpha must be < 1 (got {alpha})")
+    if kwargs["p_process"] == partitioning_process.VORONOI and not kwargs["data_cond"]:
+        alpha = -alpha
+    decoder = kwargs["local_interpolator"]
+    params = {name: kwargs.get(name) for name in decoder_arguments(decoder)}
+    try:
+        _, members = lib_spatialize_facade.run(
+            points, values, np.asarray(queries, dtype=np.float32), kwargs["p_process"], decoder, params, alpha,
+            kwargs["n_partitions"], kwargs["seed"], method=method, k=0 if method == "loo" else k,
+            folding_seed=kwargs["folding_seed"], callback=kwargs["callback"])
+    except Exception as e:
+        raise SpatializeError(e) from e
+    return np.asarray(members)
+
+
+class PosteriorAudit:
+    """The predictive law of each datum built from the other data, and its readings.
 
     Parameters
     ----------
-    cv_post_result : ndarray
-        The posterior results from a cross-validation process. Expected to be
-        a 2D array where rows correspond to samples and columns to posterior
-        draws.
-    points : ndarray
-        Coordinates of the sample points.
-    sample_values : ndarray
-        The true values at the sample points.
-    fitted_model_factory : empirical.FittedModelFactory
-        A factory object to create fitted empirical models.
+    members : ndarray of shape (n, T)
+        The cross-validation members at each datum, one per partition: each datum predicted from the
+        other data. NaN where the datum's cell held no other datum (``empty_cells="nan"``).
+    points : ndarray of shape (n, d)
+        The data locations.
+    values : ndarray of shape (n,)
+        The data values.
+    fitted_model_factory : FittedModelFactory, optional
+        The density model fitted to each datum's members (:mod:`spatialize.empirical`). Default: a
+        variational Gaussian mixture of three components.
     callback : callable, optional
-        Callback function for logging or progress updates, default: `default_singleton_callback`.
+        Progress and logging callback.
+
+    Attributes
+    ----------
+    members, points, values
+        As given.
+    support : ndarray of shape (n,)
+        The share of defined members of each datum: the share of partitions in which its law rests
+        on other data. A low support marks an isolated datum, whose law rests on few partitions.
+
+    Notes
+    -----
+    The law of a datum never contains the datum itself, so a value its neighbours do not support
+    keeps all of its surprise.
+    """
+
+    def __init__(self, members, points, values, fitted_model_factory=None, callback=default_singleton_callback):
+        self.members = np.asarray(members, dtype=np.float64)
+        self.points = np.asarray(points)
+        self.values = np.asarray(values, dtype=np.float64).ravel()
+        if self.members.shape[0] != len(self.values):
+            raise SpatializeError(f"members has {self.members.shape[0]} rows for {len(self.values)} data")
+        self.fitted_model_factory = fitted_model_factory if fitted_model_factory is not None else _default_factory()
+        self.callback = callback
+        self.support = np.isfinite(self.members).mean(axis=1)
+        self._models = {}
+        self._targets = None
+
+    def _widening_targets(self):
+        f = self.fitted_model_factory
+        if self._targets is None:
+            # leave-one-out targets: each datum's k nearest OTHER data, so its own value does not
+            # deflate its target
+            var = _loo_target_variance(self.points, self.values, knn=f.widening_knn) if f.widening else None
+            skew = (_loo_target_skewness(self.points, self.values, knn=f.widening_knn)
+                    if f.widening == "skew_normal" else None)
+            self._targets = (var, skew)
+        return self._targets
+
+    def model(self, i):
+        """The density model of datum ``i``'s law, fitted to its defined members, or None.
+
+        Parameters
+        ----------
+        i : int
+            Index of the datum.
+
+        Returns
+        -------
+        EmpiricalModel or None
+            None when fewer than two members are defined or the fit fails.
+        """
+        if i not in self._models:
+            sample = self.members[i][np.isfinite(self.members[i])]
+            f = self.fitted_model_factory
+            var, skew = self._widening_targets()
+            model = None
+            if sample.size >= 2:
+                try:
+                    model = EmpiricalModel(sample=sample, fitted_model_factory=f,
+                                           target_var=None if var is None else var[i],
+                                           target_skew=None if skew is None else skew[i],
+                                           seed=None if f.seed is None else f.seed + i)
+                except Exception as e:
+                    log_message(logging.logger.debug(f"no law for datum {i} (value {self.values[i]}): {e}"))
+            self._models[i] = model
+        return self._models[i]
+
+    def models(self):
+        """The density models of every datum (see :meth:`model`), warning once about the data
+        without one.
+
+        Returns
+        -------
+        list of EmpiricalModel or None
+        """
+        out = [self.model(i) for i in range(len(self.values))]
+        missing = sum(m is None for m in out)
+        if missing:
+            log_message(logging.logger.warning(
+                f"{missing} of {len(out)} data have no fitted law (fewer than two defined members or a "
+                f"failed fit); their readings are NaN"))
+        return out
+
+
+class PosteriorSampleAnalyzer(PosteriorAudit):
+    """The posterior analysis of version 1.2, on top of :class:`PosteriorAudit`.
+
+    Parameters
+    ----------
+    cv_post_result : ndarray of shape (n, T)
+        The cross-validation members at each datum.
+    points : ndarray of shape (n, d)
+        The data locations.
+    sample_values : ndarray of shape (n,)
+        The data values.
+    fitted_model_factory : FittedModelFactory
+        The density model fitted to each datum's members.
+    callback : callable, optional
+        Progress and logging callback.
 
     Attributes
     ----------
     post_result : ndarray
-        The posterior results passed at construction time.
-    points : ndarray
-        Coordinates of the sample points.
+        The members, as ``members``.
     sample_values : ndarray
-        The true values at the sample points.
-    fitted_model_factory : empirical.FittedModelFactory
-        The factory used to create fitted empirical models.
-    callback : callable
-        Callback used for logging or progress updates.
-    emodels : dict[int, empirical.EmpiricalModel]
-        Fitted empirical model for each sample, keyed by sample index.
-    sample_quantiles : dict[int, float]
-        CDF value of the true sample value under its fitted empirical model,
-        keyed by sample index.
-    sample_entropy : dict[int, float]
-        Entropy of the fitted empirical model, keyed by sample index.
+        The data values, as ``values``.
+    emodels : dict of int to EmpiricalModel
+        The fitted law of each datum that has one.
+    sample_quantiles : dict of int to float
+        The value of each datum's cumulative distribution function at the datum, NaN without a law.
+    sample_entropy : dict of int to float
+        The entropy of each datum's law, NaN without a law.
+
+    Notes
+    -----
+    Since version 1.3 the law of a datum is fitted to its members alone. Version 1.2 added the datum
+    to its own members, which put a kernel on it and capped its surprise.
     """
 
     def __init__(self, cv_post_result, points, sample_values, fitted_model_factory,
                  callback=default_singleton_callback):
-        """
-        Initialize the PosteriorSampleAnalyzer.
-
-        Parameters
-        ----------
-        cv_post_result : ndarray
-            The posterior results from a cross-validation process. Expected
-            to be a 2D array where rows correspond to samples and columns to
-            posterior draws.
-        points : ndarray
-            Coordinates of the sample points.
-        sample_values : ndarray
-            The true values at the sample points.
-        fitted_model_factory : empirical.FittedModelFactory
-            A factory object to create fitted empirical models.
-        callback : callable, optional
-            Callback function for logging or progress updates,
-            default: `default_singleton_callback`.
-        """
+        super().__init__(cv_post_result, points, sample_values, fitted_model_factory, callback)
         self.post_result = cv_post_result
-        self.points = points
         self.sample_values = sample_values
-        self.fitted_model_factory = fitted_model_factory
-        self.callback = callback
-
-        self.emodels = {}
-        self.sample_quantiles = {}
-        self.sample_entropy = {}
-
-        # ensemble widening needs a target local variance (and, for widening="skew_normal",
-        # a target local skewness); this is a leave-one-out CV result, so points and
-        # sample_values coincide -- use the self-excluding k-NN variant to avoid each point's
-        # zero-distance match to itself deflating its target
-        target_var_arr = (
-            _loo_target_variance(points, sample_values, knn=fitted_model_factory.widening_knn)
-            if fitted_model_factory.widening else None
-        )
-        target_skew_arr = (
-            _loo_target_skewness(points, sample_values, knn=fitted_model_factory.widening_knn)
-            if fitted_model_factory.widening == "skew_normal" else None
-        )
-
-        for i in range(len(self.sample_values)):
-            data = np.append(self.post_result[i, :], self.sample_values[i])
-            target_var = target_var_arr[i] if target_var_arr is not None else None
-            target_skew = target_skew_arr[i] if target_skew_arr is not None else None
-            # derive a per-point seed so widening doesn't draw identical noise at every
-            # sample (mirrors the `self.seed + i` pattern used elsewhere, e.g. futures/esmi/_main.py)
-            point_seed = (fitted_model_factory.seed + i
-                          if fitted_model_factory.seed is not None else None)
-            emodel = EmpiricalModel(sample=data, fitted_model_factory=fitted_model_factory,
-                                    target_var=target_var, target_skew=target_skew, seed=point_seed)
-            self.emodels[i] = emodel
-            try:
-                h = emodel.entropy()
-                self.sample_entropy[i] = h
-                p = emodel.cdf(self.sample_values[i])
-                self.sample_quantiles[i] = p
-            except Exception as e:
-                # Use your existing logging mechanism
-                log_message(logging.logger.debug(f"error for values[{i}] = {self.sample_values[i]}: {e}"))
-                continue
+        models = self.models()
+        self.emodels = {i: m for i, m in enumerate(models) if m is not None}
+        self.sample_quantiles, self.sample_entropy = {}, {}
+        for i, m in enumerate(models):
+            q = h = np.nan
+            if m is not None:
+                try:
+                    h, q = float(m.entropy()), float(m.cdf(self.values[i]))
+                except Exception as e:
+                    log_message(logging.logger.debug(f"no readings for datum {i}: {e}"))
+            self.sample_quantiles[i], self.sample_entropy[i] = q, h
 
     def rank_samples(self, entropy_mass_alphas=[0.5, 0.7, 0.9, 0.99]):
-        """
-        Categorizes sample values based on their central entropy intervals.
+        """Categorizes sample values based on their central entropy intervals.
 
-        The categories are determined by the specified entropy masses (alphas),
-        which define the width of the intervals. A smaller alpha corresponds to a
-        narrower interval (more central mass), and samples falling outside wider
-        intervals are considered more "certain" (i.e., they are in the tails of
-        their posterior distribution).
-
-        The categorization logic is as follows:
-        A sample is assigned to `level_j` if it falls outside the interval
-        defined by `alphas_[-(j+1)]` but inside all wider intervals (those with
-        larger alpha values). `level_0` represents the most certain samples
-        (outside the widest interval), and `level_k` (where k = len(alphas))
-        represents the most uncertain samples (inside the narrowest interval).
-
-        For example, with default `entropy_mass_alphas = [0.5, 0.7, 0.9, 0.99]`:
-
-        +----------+---------------------------------------+--------------------------+
-        | Category | Interval Match                        | Interpretation           |
-        +==========+=======================================+==========================+
-        | level_0  | outside 99% interval                  | most **certain** (tail)  |
-        +----------+---------------------------------------+--------------------------+
-        | level_1  | outside 90% interval, inside 99%      | more certain             |
-        +----------+---------------------------------------+--------------------------+
-        | level_2  | outside 70% interval, inside 90%      | moderate certainty       |
-        +----------+---------------------------------------+--------------------------+
-        | level_3  | outside 50% interval, inside 70%      | less certain             |
-        +----------+---------------------------------------+--------------------------+
-        | level_4  | inside 50% interval                   | most **uncertain**       |
-        +----------+---------------------------------------+--------------------------+
+        A sample is assigned to ``level_j`` if it falls outside the interval of the ``(j+1)``-th
+        largest alpha but inside every wider one; ``level_0`` holds the samples outside the widest
+        interval (the tails), ``level_k`` (k = number of alphas) those inside every interval.
 
         Parameters
         ----------
-        entropy_mass_alphas : list[float], optional
-            List of alpha values (between 0 and 1) defining the central
-            entropy mass for intervals. Defaults to `[0.5, 0.7, 0.9, 0.99]`.
+        entropy_mass_alphas : list of float, optional
+            The masses of the intervals. Default: ``[0.5, 0.7, 0.9, 0.99]``.
 
         Returns
         -------
         pandas.DataFrame
-            A DataFrame with 'value' (original sample value) and 'category'
-            (e.g., "level_0") columns.
+            ``value`` and ``category`` (``"level_j"``, or None without a law).
 
         Notes
         -----
-        The samples are ranked on several processes (``joblib``) under the
-        session settings ``parallel`` and ``num_threads``
-        (:mod:`spatialize.session`), when the work is large enough to repay
-        starting them. When it runs in parallel, a script should
-        call this method within an ``if __name__ == "__main__":`` block to avoid
-        multiprocessing issues (especially on Windows and macOS).
+        The samples are ranked on several processes (``joblib``) under the session settings
+        ``parallel`` and ``num_threads`` (:mod:`spatialize.session`), when the work is large enough
+        to repay starting them. When it runs in parallel, a script should call this method within an
+        ``if __name__ == "__main__":`` block.
         """
-        alphas_ = sorted(entropy_mass_alphas)  # narrowest to widest intervals
-
-        values = self.sample_values
-        emodels = self.emodels
+        alphas_ = sorted(entropy_mass_alphas)
+        values, emodels = self.sample_values, self.emodels
 
         def rows_data(rows):
             idx = list(rows)
-            return [values[k] for k in idx], [emodels[k] for k in idx]
+            return [values[k] for k in idx], [emodels.get(k) for k in idx]
 
         def categorize_rows(rows, data):
-            # the most certain category whose interval leaves the value out (None on error)
             vals, models = data
             out = []
             for i, value, emodel in zip(rows, vals, models):
+                if emodel is None:
+                    out.append(None)
+                    continue
                 try:
-                    cat = len(alphas_)  # default: inside every interval, the most uncertain
-                    for j, alpha in enumerate(reversed(alphas_)):  # widest to narrowest
+                    cat = len(alphas_)
+                    for j, alpha in enumerate(reversed(alphas_)):
                         low, high = emodel.central_entropy_interval(alpha)['interval']
                         if value < low or value > high:
                             cat = j
@@ -210,451 +292,281 @@ class PosteriorSampleAnalyzer:
                     out.append(None)
             return out
 
-        categories_results = map_chunks(categorize_rows, len(values), data_for=rows_data,
-                                        callback=self.callback)
-
+        categories = map_chunks(categorize_rows, len(values), data_for=rows_data, callback=self.callback)
         log_message(logging.logger.info(
-            f"categorized {len(values)} samples into {len(set(cat for cat in categories_results if cat is not None))} categories."))
-
-        return pd.DataFrame({'value': self.sample_values, 'category': categories_results})
+            f"categorized {len(values)} samples into {len(set(c for c in categories if c is not None))} categories."))
+        return pd.DataFrame({'value': self.sample_values, 'category': categories})
 
     def plot_summary(self, theme='alges', color=None, **figargs):
-        """
-        Plot a summary of the posterior sample analysis.
-
-        Creates a figure with three subplots: a histogram of the original
-        sample values, a histogram of the calculated sample percentiles
-        (CDFs), and a histogram of the calculated sample entropies.
+        """Histograms of the values, of the cumulative probabilities of the data in their laws and of
+        the entropies of the laws.
 
         Parameters
         ----------
         theme : str, optional
-            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Default: 'alges'.
+            Plot theme (:class:`~spatialize.viz.PlotStyle`). Default: ``'alges'``.
         color : str, optional
-            Color for the histograms. If None, uses theme default.
-        **figargs : dict, optional
-            Keyword arguments passed to `matplotlib.pyplot.subplots`, e.g.
-            `figsize=(12, 4)`.
+            Histogram colour. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`, e.g. ``figsize=(12, 4)``.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
         """
         with PlotStyle(theme=theme, color=color) as style:
             fig, ax = plt.subplots(1, 3, **figargs)
             fig.suptitle("Posterior Sample Analysis")
             fig.subplots_adjust(wspace=0.3)
-
-            ax[0].hist(self.sample_values, 25, density=True, histtype='stepfilled', alpha=0.8, color=style.color, zorder=3)
-            ax[0].set_title("Value")
-
-            ax[1].hist(list(self.sample_quantiles.values()), 25, density=True, histtype='stepfilled',
-                       alpha=0.8, color=style.color, zorder=3)  # Ensure it's a list for hist
-            ax[1].set_title("Percentiles")
-
-            ax[2].hist(list(self.sample_entropy.values()), 25, density=True, histtype='stepfilled',
-                       alpha=0.8, color=style.color, zorder=3)  # Ensure it's a list for hist
-            ax[2].set_title("Entropy")
-
-        # Consider plt.show() or returning fig if used in non-interactive environments
-        # plt.show()
+            for a, data, title in ((ax[0], self.values, "Value"),
+                                   (ax[1], list(self.sample_quantiles.values()), "Percentiles"),
+                                   (ax[2], list(self.sample_entropy.values()), "Entropy")):
+                data = np.asarray(data, dtype=float)
+                a.hist(data[np.isfinite(data)], 25, density=True, histtype='stepfilled', alpha=0.8,
+                       color=style.color, zorder=3)
+                a.set_title(title)
+        return fig
 
     def quick_plot_models(self, n_imgs=6, n_cols=3, seed=42, theme='alges', cmap=None, **figargs):
-        """
-        Plot a grid of individual empirical model fits for a random sample of data points.
-
-        For each selected data point, plots the histogram of its posterior
-        samples, the Probability Density Function (PDF), and the Cumulative
-        Distribution Function (CDF) derived from its empirical model.
+        """A grid of the laws of randomly chosen data: histogram of the members, density and scaled
+        cumulative distribution function.
 
         Parameters
         ----------
         n_imgs : int, optional
-            Number of random samples/images to plot, default: 6. If greater
-            than the total number of samples, it is capped.
+            Number of data shown. Default: 6.
         n_cols : int, optional
-            Number of columns in the plot grid, default: 3.
+            Number of columns of the grid. Default: 3.
         seed : int, optional
-            Seed for the random number generator to ensure reproducibility of
-            sample selection, default: 42. If None, a random seed is used.
+            Seed of the choice of data. Default: 42.
         theme : str, optional
-            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Default: 'alges'.
+            Plot theme. Default: ``'alges'``.
         cmap : str or Colormap, optional
-            Colormap used to color each subplot's histogram. If None, uses
-            theme default.
-        **figargs : dict, optional
-            Keyword arguments passed to `matplotlib.pyplot.subplots` when
-            creating the figure.
+            Colours of the panels. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure or None
+            None when no datum has a law.
         """
-        r = self.post_result
-        values = self.sample_values
-
-        if n_imgs > values.shape[0]:
-            n_imgs = values.shape[0]
-
-        n_rows = n_imgs // n_cols if n_imgs % n_cols == 0 else (n_imgs // n_cols + 1)
-
-        # Handle seeding for reproducibility
-        current_random_state = rd.getstate()  # Save current state
+        available = sorted(self.emodels)
+        n_imgs = min(n_imgs, len(available))
+        if not n_imgs:
+            log_message(logging.logger.warning("No empirical models available to plot in quick_plot_models."))
+            return None
+        n_rows = -(-n_imgs // n_cols)
+        state = rd.getstate()
         if seed is not None:
             rd.seed(seed)
-
-        # random sample of colormap images to plot
-        # Ensure emodels keys match the indices used (0 to len(values)-1)
-        available_indices = [i for i in range(values.shape[0]) if i in self.emodels]
-        if n_imgs > len(available_indices):
-            n_imgs = len(available_indices)  # Cap n_imgs by available models
-
-        if not available_indices:
-            log_message(logging.logger.warning("No empirical models available to plot in quick_plot_models."))
-            rd.setstate(current_random_state)  # Restore random state
-            return
-
-        hist_idx = rd.sample(available_indices, k=n_imgs)
-        rd.setstate(current_random_state)  # Restore random state
-
-        plot_histogram_grid_with_pdf_cdf(r, hist_idx, self.emodels, n_rows, n_cols,
-                                         bins=25, theme=theme, cmap=cmap, **figargs)
+        idx = rd.sample(available, k=n_imgs)
+        rd.setstate(state)
+        return plot_histogram_grid_with_pdf_cdf(self.post_result, idx, self.emodels, n_rows, n_cols, bins=25,
+                                                theme=theme, cmap=cmap, **figargs)
 
     def plot_ranking(self, samples_ranking, theme='alges', color=None, cmap=None, figsize=(11, 6)):
-        """
-        Plot the sample ranking results.
-
-        Creates a figure with two subplots: a bar chart showing the count of
-        samples in each category, and a scatter plot of the sample points
-        colored by their assigned category.
+        """The counts of each category and the data coloured by category, on their first two
+        coordinates.
 
         Parameters
         ----------
         samples_ranking : pandas.DataFrame
-            DataFrame containing 'value' and 'category' columns, as returned
-            by `rank_samples`.
+            The output of :meth:`rank_samples`.
         theme : str, optional
-            Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-            'alges', 'minimal', 'publication'. Default: 'alges'.
+            Plot theme. Default: ``'alges'``.
         color : str, optional
-            Color for the bar chart. If None, uses theme default.
+            Bar colour. Default: the theme's.
         cmap : str or Colormap, optional
-            Colormap used for the categorized scatter plot. If None, uses
-            theme default.
+            Colours of the categories. Default: the theme's.
         figsize : tuple, optional
-            Size of the figure for plotting, default: (11, 6).
+            Figure size. Default: ``(11, 6)``.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
         """
         with PlotStyle(theme=theme, color=color, cmap=cmap) as style:
             fig, ax = plt.subplots(1, 2, figsize=figsize)
-
-            categories_series = samples_ranking["category"]  # This is a pandas Series
-            # For bar plot, count occurrences of each category
-            category_counts = categories_series.value_counts().sort_index()
-
-            ax[0].bar(category_counts.index.astype(str), category_counts.values, color=style.color, zorder=3)
+            categories = samples_ranking["category"]
+            counts = categories.value_counts().sort_index()
+            ax[0].bar(counts.index.astype(str), counts.values, color=style.color, zorder=3)
             ax[0].set_title("Categories")
-            ax[0].tick_params(axis='x', rotation=45)  # Rotate labels if they overlap
+            ax[0].tick_params(axis='x', rotation=45)
 
-            # Scatter plot part
-            # Ensure categories are strings for consistent processing
-            categories_str = categories_series.astype(str).values
-            unique_cats = sorted(
-                list(set(c for c in categories_str if c != 'None')))  # Exclude 'None' if it's an error marker
-
-            if not unique_cats:
-                log_message(logging.logger.warning("No valid categories to plot in plot_ranking scatter plot."))
-                ax[1].set_title("Categorized Samples (No data)")
-                plt.tight_layout()
-                # plt.show() # Depending on usage
-                return
-
-            cat_to_num = {cat: i for i, cat in enumerate(unique_cats)}
-
-            # Map categories to numbers, handling potential 'None' or unmapped
-            category_nums = np.array([cat_to_num.get(str(cat), -1) for cat in categories_series.values])
-
-            # Filter out points where category was None or unmapped (-1)
-            valid_indices = (category_nums != -1)
-
-            if not np.any(valid_indices):
-                log_message(logging.logger.warning("All categories are unmapped or None in plot_ranking."))
-                ax[1].set_title("Categorized Samples (No valid data)")
-                plt.tight_layout()
-                # plt.show()
-                return
-
-            points_to_plot = self.points[valid_indices]
-            category_nums_to_plot = category_nums[valid_indices]
-
-            # Check array lengths
-            if len(points_to_plot) != len(category_nums_to_plot):  # Should not happen if logic is correct
-                log_message(logging.logger.error("Mismatch between points and categories after filtering!"))
-                # Fallback or raise error
-                plt.tight_layout()
-                return
-
-            # Create custom colormap from the theme/user-provided cmap (resolved by PlotStyle,
-            # so palette names like 'batlow' or 'alges' work here too, not just matplotlib names)
-            base_cmap = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
-            n_colors = max(len(unique_cats), 2)
-            cat_cmap = ListedColormap(base_cmap.resampled(n_colors)(np.linspace(0, 1, len(unique_cats))))
-
-            # Plot
-            if points_to_plot.shape[0] > 0:  # Check if there's anything to plot
-                sc = ax[1].scatter(points_to_plot[:, 0], points_to_plot[:, 1],
-                                   c=category_nums_to_plot, cmap=cat_cmap, s=30, edgecolor='white', linewidth=0.5, zorder=3)
-                # Add colorbar
-                cbar = plt.colorbar(sc, ax=ax[1], ticks=list(range(len(unique_cats))), orientation='vertical')
-                cbar.set_ticklabels(unique_cats)  # Set colorbar labels to category names
-            else:
-                log_message(logging.logger.info("No points to display in categorized scatter plot."))
-
-            # Set the aspect ratio to 1:1 (equal axes)
-            ax[1].set_aspect('equal', adjustable='box')
+            names = sorted(set(str(c) for c in categories if c is not None))
             ax[1].set_title("Categorized Samples")
+            if not names:
+                log_message(logging.logger.warning("No valid categories to plot in plot_ranking."))
+                fig.tight_layout()
+                return fig
+            number = {c: i for i, c in enumerate(names)}
+            nums = np.array([number.get(str(c), -1) if c is not None else -1 for c in categories])
+            ok = nums >= 0
+            base = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
+            cat_cmap = ListedColormap(base.resampled(max(len(names), 2))(np.linspace(0, 1, len(names))))
+            pts = np.asarray(self.points, dtype=float)
+            y = pts[ok, 1] if pts.shape[1] > 1 else np.zeros(ok.sum())
+            sc = ax[1].scatter(pts[ok, 0], y, c=nums[ok], cmap=cat_cmap, s=30, edgecolor='white',
+                               linewidth=0.5, zorder=3, vmin=-0.5, vmax=len(names) - 0.5)
+            cbar = plt.colorbar(sc, ax=ax[1], ticks=list(range(len(names))), orientation='vertical')
+            cbar.set_ticklabels(names)
+            ax[1].set_aspect('equal', adjustable='box')
             ax[1].set_xlabel("X")
             ax[1].set_ylabel("Y")
-            # plt.grid(True) # grid can sometimes make scatter plots busy
-            plt.tight_layout()
-            # plt.show() # Depending on usage
+            fig.tight_layout()
+        return fig
 
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
-                    common_args={"k": -1,
-                                 "griddata": False,
-                                 "p_process": partitioning_process.MONDRIAN,  # partitioning process
-                                 "data_cond": True,  # whether to condition the partitioning process on samples
-                                 # -- valid only when ‘p_process’ is ‘voronoi’.
-                                 "n_partitions": 200,
-                                 "alpha": 0.8,
-                                 "agg_function": af.mean,
-                                 "seed": random_seed,
-                                 "folding_seed": random_seed,
-                                 "fitted_model_factory": per_call(lambda: FittedModelFactory(
-                                     nan_model_name="ignore",
-                                     point_model_name="vim", n_components=3,
-                                     bgm_sample_size=1000, bgm_max_iter=100
-                                 )),
-                                 "callback": default_singleton_callback,
-                                 "best_params_found": None
-                                 },
-                    specific_args=with_more_decoders({
-                        li.IDW: {"exponent": 2.0},
-                        li.KRIGING: {"model": "spherical",
-                                     "nugget": 0.5,
-                                     "range": 50.0,
-                                     "sill": 0.9},
-                        li.ADAPTIVE_IDW: {"metric": "mae"}
-                    }))
-def cv_sample_pred_posterior(points, values, xi, **kwargs):
-    """
-    Perform cross-validation for sample prediction and generate posterior distributions.
+                    common_args=dict(_COMMON),
+                    specific_args=_SPECIFIC)
+def posterior_audit(points, values, **kwargs):
+    """The predictive law of each datum built from the other data.
 
-    This function uses the spatialization library (`lib_spatialize_facade`) to
-    perform cross-validation (either k-fold or leave-one-out) on the provided
-    sample points and values. It then uses the results to initialize and
-    return a `PosteriorSampleAnalyzer` object.
-
-    The specific behavior of the cross-validation, including the local
-    interpolator (e.g., IDW, Kriging), partitioning process, and aggregation
-    functions, is controlled by `kwargs` and the `@signature_overload`
-    decorator.
+    Each datum is predicted from the other data by cross-validation (leave-one-out, or k-fold with
+    ``k``) with the partitions and the decoder, so its law carries the evidence the rest of the data
+    give about it, with no variogram or model chosen beforehand.
 
     Parameters
     ----------
-    points : ndarray
-        Coordinates of the sample points (e.g., [[x1,y1], [x2,y2], ...]).
-    values : ndarray
-        Observed values at each sample point.
-    xi : object or tuple
-        Prediction locations or configuration for prediction. If a tuple, it
-        is deep-copied; otherwise it is shallow-copied.
-    best_params_found : dict or None, optional
-        Parameter dict typically obtained from the ``best_result()`` method
-        of an ESI hyperparameter search. When given, every key it contains
-        **overrides** the corresponding argument otherwise in effect, with
-        one exception: ``n_partitions`` is ignored if present -- the value
-        passed at the call site (or its default) is used instead. This is
-        intentional: it lets you run the hyperparameter search cheaply with
-        few partitions and then run the posterior analysis with many. The
-        dict you pass is not mutated. Default: ``None``.
-    **kwargs : dict
-        Keyword arguments that control the cross-validation and posterior
-        analysis. Largely defined by the `@signature_overload` decorator and
-        can include `local_interpolator`, `k` (for k-fold), `p_process`,
-        `n_partitions`, `fitted_model_factory`, `callback`, etc. See the
-        decorator for default values and specific options.
+    points : array_like of shape (n, d)
+        The data locations.
+    values : array_like of shape (n,)
+        The data values.
+    local_interpolator : str, optional
+        The decoder, any of the catalogue (:func:`~spatialize.gs.esi.esi_nongriddata`), with its
+        parameters as keyword arguments. Default: ``"idw"``.
+    k : int, optional
+        ``-1`` (or n) for leave-one-out, otherwise the number of folds. Default: -1.
+    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
+        The partition process. Default: ``"mondrian"``.
+    data_cond : bool, optional
+        Voronoi only: nuclei among the data (True) or uniform in the box. Default: True.
+    n_partitions : int, optional
+        The number of partitions, the members of each law. Default: 200.
+    alpha : float, optional
+        The granularity of the partitions. Default: 0.8.
+    seed, folding_seed : int, optional
+        Seeds of the partitions and of the folds. Default: drawn at random.
+    fitted_model_factory : FittedModelFactory, optional
+        The density model of each law. Default: a variational Gaussian mixture of three components.
+    best_params_found : dict, optional
+        The output of a search's ``best_result()``; its keys override the arguments, except
+        ``n_partitions``. The dict is not modified. Default: None.
+    callback : callable, optional
+        Progress and logging callback.
+
+    Returns
+    -------
+    PosteriorAudit
+
+    Notes
+    -----
+    The partitions are drawn on the session domain (:mod:`spatialize.session`), or on the box of the
+    data without one. Cells without other data follow the session setting ``empty_cells``: under
+    ``"nan"``, the default, an isolated datum's law rests on the partitions in which its cell holds
+    other data, the share :attr:`PosteriorAudit.support` reports.
+    """
+    kwargs = _with_best_params(kwargs)
+    members = _cv_members(points, values, points, kwargs)
+    return PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"])
+
+
+@signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
+                    common_args=dict(_COMMON, griddata=False, agg_function=af.mean),
+                    specific_args=_SPECIFIC)
+def cv_sample_pred_posterior(points, values, xi, **kwargs):
+    """The posterior analysis of version 1.2: the law of each datum built from the other data.
+
+    Parameters
+    ----------
+    points : ndarray of shape (n, d)
+        The data locations.
+    values : ndarray of shape (n,)
+        The data values.
+    xi : ndarray or tuple
+        Locations that only enlarge the box the partitions are drawn on, as in version 1.2.
+        :func:`posterior_audit` has no such argument, its box being the session domain or that of
+        the data.
+    **kwargs
+        As :func:`posterior_audit`; ``griddata`` and ``agg_function`` are accepted and ignored.
 
     Returns
     -------
     PosteriorSampleAnalyzer
-        An analyzer object containing the posterior distributions and tools
-        for their analysis.
 
     Raises
     ------
     SpatializeError
-        If an error occurs during the underlying spatialization
-        cross-validation process.
+        If the cross-validation fails.
     """
-    method, k = "kfold", kwargs["k"]
-    if k == points.shape[0] or k == -1:
-        method = "loo"
-
-    log_message(logging.logger.debug('calling libspatialize'))
-
-    if kwargs.get("best_params_found") is not None:  # Use .get for safer access
-        try:
-            log_message(logging.logger.debug(f"best number of partitions found: "
-                                             f"{kwargs['best_params_found']['n_partitions']}"))
-            # It's generally safer not to delete from kwargs if it's passed around,
-            # but if this is intended, it's fine.
-            # del kwargs["best_params_found"]["n_partitions"]
-        except KeyError:
-            pass  # n_partitions might not be in best_params_found
-        log_message(logging.logger.debug(f"using best params found: {kwargs['best_params_found']}"))
-        for param_key, param_val in kwargs["best_params_found"].items():
-            # Only overwrite if not 'n_partitions' or if explicitly allowed to be overwritten
-            # The original code overwrites n_partitions from best_params_found if present,
-            # then potentially again from kwargs["n_partitions"] if 'n_partitions' was
-            # not deleted from best_params_found.
-            # The logic here seems to be that `n_partitions` in `kwargs` takes precedence.
-            if param_key != "n_partitions":  # Avoid overwriting n_partitions if it's special
-                kwargs[param_key] = param_val
-
-    # get the cross validation function
-    cross_validate = lib_spatialize_facade.get_operator(points, kwargs["local_interpolator"],
-                                                        method, kwargs["p_process"])
-
-    if isinstance(xi, tuple):
-        p_xi = deepcopy(xi)
-    else:
-        p_xi = xi.copy()  # Assuming xi is copyable (e.g., numpy array)
-
-    # get the argument list
-    l_args = build_arg_list(points, values, p_xi, kwargs)
-    if method == "kfold":
-        l_args.insert(-2, k)
-        l_args.insert(-2, kwargs["folding_seed"])
-
-    # run
-    try:
-        _, cv = cross_validate(*l_args)
-    except Exception as e:
-        raise SpatializeError(e)  # from e might be better for traceback
-
+    kwargs = _with_best_params(kwargs)
+    queries = deepcopy(xi) if isinstance(xi, tuple) else np.asarray(xi).copy()
+    members = _cv_members(points, values, queries, kwargs)
     log_message(logging.logger.info(f"using fitted model factory: {kwargs['fitted_model_factory']}"))
-    return PosteriorSampleAnalyzer(cv, points, values, kwargs['fitted_model_factory'],
+    return PosteriorSampleAnalyzer(members, points, values, kwargs['fitted_model_factory'],
                                    callback=kwargs['callback'])
 
-#todo: move this function to viz
+
 def plot_histogram_grid_with_pdf_cdf(r, data_indices, emodels, n_rows, n_cols, bins=25, figsize=(15, 10),
                                      theme='alges', cmap=None):
-    """
-    Plot a grid of histograms for specified data samples.
-
-    For each specified sample (by index), visualizes its posterior
-    distribution. Each subplot in the grid includes a histogram of the
-    posterior samples for that data point, the Probability Density Function
-    (PDF) line derived from its empirical model, and a scaled Cumulative
-    Distribution Function (CDF) line from its empirical model, overlaid for
-    comparison.
+    """A grid of the laws of the given data: histogram of the fitted data, density and scaled
+    cumulative distribution function.
 
     Parameters
     ----------
-    r : ndarray
-        The full 2D array of posterior samples, where rows correspond to data
-        points and columns to posterior draws.
+    r : ndarray of shape (n, T)
+        The members of each datum.
     data_indices : list of int
-        Row indices from `r` (and corresponding keys in `emodels`) for which
-        to plot the histograms.
-    emodels : dict[int, empirical.EmpiricalModel] or list of empirical.EmpiricalModel
-        Empirical model objects. If a dict, it should be keyed by
-        `data_indices`. Each emodel object must have attributes `x_` (x-axis
-        values), `pdf_` (PDF values), and `cdf_` (CDF values).
-    n_rows : int
-        Number of rows in the subplot grid.
-    n_cols : int
-        Number of columns in the subplot grid.
+        The data shown.
+    emodels : dict of int to EmpiricalModel, or list
+        The fitted law of each datum.
+    n_rows, n_cols : int
+        The shape of the grid.
     bins : int, optional
-        Number of bins to use for the histograms, default: 25.
-    figsize : tuple of float, optional
-        Overall figure size (width, height) in inches, default: (15, 10).
+        Number of bins of the histograms. Default: 25.
+    figsize : tuple, optional
+        Figure size. Default: ``(15, 10)``.
     theme : str, optional
-        Theme name. Available: 'whitegrid', 'darkgrid', 'white', 'dark',
-        'alges', 'minimal', 'publication'. Default: 'alges'.
+        Plot theme. Default: ``'alges'``.
     cmap : str or Colormap, optional
-        Colormap used to color each subplot's histogram. If None, uses theme
-        default.
+        Colours of the panels. Default: the theme's.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
     with PlotStyle(theme=theme, cmap=cmap) as style:
-        base_cmap = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
-        n_colors = max(n_rows * n_cols, 2)
-        panel_colors = base_cmap(np.linspace(0.15, 0.85, n_colors))
+        base = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
+        panel_colors = base(np.linspace(0.15, 0.85, max(n_rows * n_cols, 2)))
         pdf_color = plt.rcParams['text.color']
-
-        N = len(data_indices)
-        fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize)
-        axs = axs.flatten()  # Flatten to easily iterate regardless of grid shape
-
-        for i in range(n_rows * n_cols):
-            ax = axs[i]
-            if i < N:
-                idx = data_indices[i]
-
-                try:
-                    # Access emodel, works if emodels is dict keyed by idx, or list if idx is 0-based sequential
-                    emodel = emodels[idx]
-                except (KeyError, IndexError):
-                    log_message(
-                        logging.logger.warning(f"Empirical model for index {idx} not found. Skipping plot for this index."))
-                    ax.axis('off')
-                    continue
-                except TypeError:  # If emodels is None or not subscriptable
-                    log_message(logging.logger.error(
-                        f"Emodels is not a valid collection (dict/list). Skipping plot for index {idx}."))
-                    ax.axis('off')
-                    continue
-
-                # histogram the data actually fitted (post-widening, when configured) so it
-                # lines up with the overlaid PDF/CDF; fall back to the raw posterior matrix
-                # for models that don't carry it (e.g. built directly from a skl_model)
-                data = getattr(emodel, "data_", None)
-                if data is None:
-                    if idx >= r.shape[0]:
-                        log_message(
-                            logging.logger.warning(f"Index {idx} out of bounds for posterior samples matrix r. Skipping."))
-                        ax.axis('off')
-                        continue
-                    data = r[idx, :]
-
-                color = panel_colors[i % len(panel_colors)]
-
-                # Plot histogram
-                ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.8, color=color, edgecolor='black', zorder=2)
-
-                # Plot PDF
-                if hasattr(emodel, 'x_') and hasattr(emodel, 'pdf_'):
-                    ax.plot(emodel.x_, emodel.pdf_, '-', color=pdf_color, label="PDF", zorder=3)
-                else:
-                    log_message(logging.logger.warning(f"Emodel for index {idx} missing x_ or pdf_ attributes."))
-
-                # Get current axis limits for scaling CDF
-                # ymin, ymax = ax.get_ylim() # Get ylim *after* histogram and PDF are plotted for better scale
-
-                # Plot scaled CDF
-                if hasattr(emodel, 'x_') and hasattr(emodel, 'cdf_'):
-                    # Ensure PDF is plotted first to set a reasonable y-axis scale
-                    # If PDF wasn't plotted, ylim might not be representative
-                    current_ymin, current_ymax = ax.get_ylim()
-                    scaled_cdf = emodel.cdf_ * (current_ymax - current_ymin) + current_ymin
-                    ax.plot(emodel.x_, scaled_cdf, '-b', label="CDF (scaled)", zorder=3)
-                else:
-                    log_message(
-                        logging.logger.warning(f"Emodel for index {idx} missing x_ or cdf_ attributes for CDF plotting."))
-
-                # Label
-                ax.set_title(f'Sample {idx}', fontsize=10)
-                ax.set_xlabel('Value', fontsize=8)
-                ax.set_ylabel('Density', fontsize=8)
-                ax.tick_params(axis='both', which='major', labelsize=7)  # Smaller tick labels
-                ax.legend(fontsize=6)
-            else:
-                ax.axis('off')  # hide unused plots
-
-        plt.tight_layout()
-        plt.show()
+        fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+        axs = axs.flatten()
+        for i, ax in enumerate(axs):
+            if i >= len(data_indices):
+                ax.axis('off')
+                continue
+            idx = data_indices[i]
+            try:
+                emodel = emodels[idx]
+            except (KeyError, IndexError, TypeError):
+                log_message(logging.logger.warning(f"Empirical model for index {idx} not found."))
+                ax.axis('off')
+                continue
+            data = getattr(emodel, "data_", None)
+            if data is None:
+                data = np.asarray(r[idx, :])
+                data = data[np.isfinite(data)]
+            ax.hist(data, bins=bins, density=True, histtype='stepfilled', alpha=0.8,
+                    color=panel_colors[i % len(panel_colors)], edgecolor='black', zorder=2)
+            ax.plot(emodel.x_, emodel.pdf_, '-', color=pdf_color, label="PDF", zorder=3)
+            lo, hi = ax.get_ylim()
+            ax.plot(emodel.x_, emodel.cdf_ * (hi - lo) + lo, '-b', label="CDF (scaled)", zorder=3)
+            ax.set_title(f'Sample {idx}', fontsize=10)
+            ax.set_xlabel('Value', fontsize=8)
+            ax.set_ylabel('Density', fontsize=8)
+            ax.tick_params(axis='both', which='major', labelsize=7)
+            ax.legend(fontsize=6)
+        fig.tight_layout()
+    return fig

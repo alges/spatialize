@@ -247,6 +247,11 @@ Reproducibility under parallel execution
   as a ``KeyboardInterrupt``, rather than at the end of a partition, which with a costly decoder could
   take minutes. Measured on 3 000 data, IDW stops within half a second, adaptive IDW in 3D within two
   seconds and kriging, whose cells each solve one system, within about eight.
+- **Progress of a parallel loop.** At the same checks the calling thread reports the partitions
+  every thread has finished, not only its own, so a bar advances with the whole team and its time
+  remaining holds from the start. Reporting only at the end of the calling thread's partitions made
+  the bar jump, its early estimate of the time remaining being many times too long when each
+  partition takes minutes.
 - **Python loops.** The loops written in Python, the divergences of the Pareto encoder error, the
   simulations of ESS and the ranking of SPA, run on worker processes through
   ``spatialize._parallel.map_chunks``, with the same session settings. The items go in chunks of

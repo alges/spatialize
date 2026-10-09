@@ -159,7 +159,9 @@ Results that change
   ignored with a warning, and other locations are drawn as points.
 - **Ctrl-C** stopped a run only at the end of a partition, which with adaptive IDW in 3D could take
   many minutes, and an interrupted fit raised a ``RuntimeError``. A run now stops within one cell,
-  inside the fit of adaptive IDW within a fraction of a second, with a ``KeyboardInterrupt``.
+  inside the fit of adaptive IDW within a fraction of a second, with a ``KeyboardInterrupt``. The
+  progress bars of the compiled loops now advance with every thread, so their time remaining no
+  longer overstates a long fit many times over.
 - **Smaller corrections.** Adaptive IDW returns the datum at a data location; kriging no longer
   depends on the number of threads; co-estimation estimates each variable from its own data; a
   failed simulation at a location gives undefined scenarios and one warning; default seeds are drawn

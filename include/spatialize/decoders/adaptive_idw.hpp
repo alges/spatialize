@@ -394,13 +394,23 @@ namespace sptlz{
         std::atomic<int> n_done(0);
         // asked inside the per-cell searches by every thread: the calling thread checks the signals
         // at most every 0.1 s, the others read the flag
+        // ... and reports the partitions every thread has finished, so the progress (and its
+        // time remaining) moves with the whole team, not only with the calling thread's partitions
         auto last_check = std::chrono::steady_clock::now();
+        int sent = 0;  // progress tokens sent, touched by the calling thread only
+        auto report = [&](){
+          for(int d=n_done.load(); sent<d; ){
+            sent++;
+            progress->inform(sent);
+          }
+        };
         const std::function<bool()> stop = [&]() -> bool {
           if(!interrupted.load() && std::this_thread::get_id() == caller){
             auto now = std::chrono::steady_clock::now();
             if(now - last_check > std::chrono::milliseconds(100)){
               last_check = now;
               if(PyErr_CheckSignals() != 0) interrupted = true;
+              else report();
             }
           }
           return(interrupted.load());
@@ -440,16 +450,18 @@ namespace sptlz{
             mt->leaf_params.at(j) = get_params2(&leaf_coords, &leaf_values, leaf_rand);
           }
 
-          int done = ++n_done;
+          ++n_done;
           if(std::this_thread::get_id() == caller && !interrupted.load()){
             if (PyErr_CheckSignals() != 0) {  // to allow ctrl-c from user
               interrupted = true;
+            }else{
+              report();
             }
-            progress->inform(done);
           }
         }
 
         this->stop_check = nullptr;
+        if(!interrupted.load()) report();
         if(interrupted.load()){
           delete logger;
           delete progress;

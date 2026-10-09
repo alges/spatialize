@@ -246,6 +246,14 @@ namespace sptlz{
 				std::atomic<int> done(0);
 				std::exception_ptr error = nullptr;
 				int sent = 0;  // progress tokens sent, touched by the calling thread only
+				// between cells the calling thread reports the trees every thread has finished, so the
+				// progress moves with the whole team, not only with the calling thread's trees
+				ctrl_c.on_check = [&](){
+					for(int d=done.load(); sent<d; ){
+						sent++;
+						progress->inform(static_cast<int>(100.0*sent/n));
+					}
+				};
 
 				#ifdef _OPENMP
 				#pragma omp parallel for schedule(dynamic, 1) if(parallel)
@@ -268,11 +276,8 @@ namespace sptlz{
 						ctrl_c.stop.store(true);
 					}
 					done++;
-					if(std::this_thread::get_id() == caller && !ctrl_c.requested()){
-						for(int d=done.load(); sent<d; ){
-							sent++;
-							progress->inform(static_cast<int>(100.0*sent/n));
-						}
+					if(std::this_thread::get_id() == caller){
+						ctrl_c.requested();  // checks Ctrl-C and reports the progress
 					}
 				}
 				this->interrupt = nullptr;

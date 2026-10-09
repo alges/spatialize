@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <thread>
+#include <functional>
 #include <pybind11/pybind11.h>
 
 namespace sptlz{
@@ -14,12 +15,16 @@ namespace sptlz{
     const std::thread::id caller = std::this_thread::get_id();
     std::atomic<bool> stop{false};
     std::atomic<bool> signalled{false};
+    // run by the calling thread at each check, e.g. to report the progress of every thread
+    std::function<void()> on_check;
 
     bool requested(){
       if(!stop.load() && std::this_thread::get_id() == caller){
         if(PyErr_CheckSignals() != 0){  // to allow ctrl-c from user
           signalled.store(true);
           stop.store(true);
+        }else if(on_check){
+          on_check();
         }
       }
       return(stop.load());

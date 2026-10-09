@@ -53,7 +53,12 @@ New
 - **Posterior analysis of the data** (:doc:`reference/spa`). :func:`~spatialize.gs.spa.posterior_audit`
   builds the law of each datum from the other data, with any decoder and partition, on the session
   domain or the box of the data, and reports the share of partitions each law rests on
-  (:attr:`~spatialize.gs.spa.PosteriorAudit.support`). The functions of version 1.2 work on top of it.
+  (:attr:`~spatialize.gs.spa.PosteriorAudit.support`). Each datum gets its position in its law, a
+  tail probability, a level, a log score and a flag controlling the false discovery rate
+  (Benjamini–Hochberg), after the laws are widened, spread by one fitted factor and given tails
+  (Student-t kernels by default, or generalized Pareto). ``calibration()`` reports how well the laws
+  are calibrated, with plots of the calibration, of the surprise on the map and of each datum's law
+  (:doc:`theory/posterior`). The functions of version 1.2 work on top of it.
 
 Under study
 -----------
@@ -100,8 +105,14 @@ Results that change
 - **Cross-validation.** Kriging's leave-one-out applied its weights to the wrong data, and k-fold
   gave 0.0 instead of an undefined value in cells left with a single datum.
 - **Posterior analysis.** The law of each datum no longer contains the datum. Version 1.2 added the
-  value to its own members, which put a kernel on it and capped its surprise, so
-  ``sample_quantiles``, ``sample_entropy`` and the ranking change. A datum whose law fails to fit
+  value to its own members on purpose, so that the law always reached the datum and its tail
+  probability stayed away from 0, at the price of capping its surprise. A model of the tails now
+  does that work. ``sample_quantiles`` and ``sample_entropy`` change accordingly.
+  :meth:`~spatialize.gs.spa.PosteriorSampleAnalyzer.rank_samples` now places each datum by the
+  central intervals of *probability* of its law, as the theory describes, where version 1.2 used
+  intervals holding a share of the entropy of a fitted density, whose probability differed from the
+  share (about 0.55 for 0.5 and 0.93 for 0.9). It no longer runs on several processes, having
+  become a direct reading. A datum whose law fails to fit
   keeps NaN readings and one warning counts them, where it used to be dropped silently.
 - **Laws outside their range.** The cumulative distribution function of an
   :class:`~spatialize.empirical.EmpiricalModel` is 0 below its grid and 1 above, and its density 0

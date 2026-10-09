@@ -18,7 +18,6 @@ from matplotlib.colors import ListedColormap
 
 import spatialize.gs.esi.aggfunction as af
 from spatialize import SpatializeError, logging
-from spatialize._parallel import map_chunks
 from spatialize._util import signature_overload, per_call, random_seed
 from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
                                   _loo_target_skewness)
@@ -88,6 +87,145 @@ def _cv_members(points, values, queries, kwargs):
     return np.asarray(members)
 
 
+def _bh(p, q):
+    """Benjamini–Hochberg at false discovery rate q over the finite p-values."""
+    p = np.asarray(p, dtype=float)
+    ok = np.isfinite(p)
+    out = np.zeros(len(p), dtype=bool)
+    m = int(ok.sum())
+    if m == 0:
+        return out
+    idx = np.flatnonzero(ok)[np.argsort(p[ok], kind="stable")]
+    passed = np.flatnonzero(p[idx] <= q * np.arange(1, m + 1) / m)
+    if passed.size:
+        out[idx[: passed[-1] + 1]] = True
+    return out
+
+
+def _scale_maps(scale, values):
+    """The map to the scale of the readings and its inverse, fitted to the data values."""
+    identity = lambda a: np.asarray(a, dtype=np.float64)
+    if scale == "raw":
+        return identity, identity
+    if scale == "yeojohnson":
+        from scipy.stats import yeojohnson
+        from scipy.special import inv_boxcox
+        _, lam = yeojohnson(np.asarray(values, dtype=np.float64))
+
+        def fwd(a):
+            a = np.asarray(a, dtype=np.float64)
+            out = np.empty_like(a)
+            pos = a >= 0
+            out[pos] = np.log1p(a[pos]) if abs(lam) < 1e-12 else ((a[pos] + 1) ** lam - 1) / lam
+            neg = ~pos
+            out[neg] = (-np.log1p(-a[neg]) if abs(lam - 2) < 1e-12
+                        else -((1 - a[neg]) ** (2 - lam) - 1) / (2 - lam))
+            return out
+
+        def inv(y):
+            y = np.asarray(y, dtype=np.float64)
+            out = np.full_like(y, np.nan)
+            pos = y >= 0
+            if abs(lam) < 1e-12:
+                out[pos] = np.expm1(y[pos])
+            else:
+                # with lambda < 0 the scale is bounded above by -1/lambda, which maps to +infinity
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    out[pos] = np.where(lam * y[pos] + 1 > 0, inv_boxcox(y[pos], lam) - 1, np.inf)
+            neg = y < 0
+            if abs(lam - 2) < 1e-12:
+                out[neg] = -np.expm1(-y[neg])
+            else:
+                # with lambda > 2 the scale is bounded below by 1/(2 - lambda), which maps to -infinity
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    out[neg] = np.where((2 - lam) * (-y[neg]) + 1 > 0, 1 - inv_boxcox(-y[neg], 2 - lam), -np.inf)
+            return out
+        return fwd, inv
+    # normal scores, linear between the data and continued linearly past the extremes
+    from scipy.stats import norm
+    srt = np.sort(np.asarray(values, dtype=np.float64))
+    sc = norm.ppf((np.arange(1, len(srt) + 1) - 0.5) / len(srt))
+
+    def extend(x, xs, ys):
+        y = np.interp(x, xs, ys)
+        lo_slope = (ys[1] - ys[0]) / max(xs[1] - xs[0], 1e-12)
+        hi_slope = (ys[-1] - ys[-2]) / max(xs[-1] - xs[-2], 1e-12)
+        y = np.where(x < xs[0], ys[0] + lo_slope * (x - xs[0]), y)
+        return np.where(x > xs[-1], ys[-1] + hi_slope * (x - xs[-1]), y)
+    return (lambda a: extend(np.asarray(a, dtype=np.float64), srt, sc),
+            lambda y: extend(np.asarray(y, dtype=np.float64), sc, srt))
+
+
+def _fit_spread(laws, values, target=0.9):
+    """The factor c such that, with every law spread by c around its median, a share ``target`` of
+    the data lies inside the central ``target`` interval of its law."""
+    centred = [(np.median(x), x - np.median(x)) for x in laws]
+    keep = [i for i, x in enumerate(laws) if x.size]
+    if not keep:
+        return 1.0
+    a, b = (1 - target) / 2, (1 + target) / 2
+
+    def coverage(c):
+        pit = np.array([np.mean(centred[i][0] + c * centred[i][1] < values[i]) for i in keep])
+        return np.mean((pit >= a) & (pit <= b))
+    lo, hi = 0.05, 50.0
+    for _ in range(40):
+        c = np.sqrt(lo * hi)
+        lo, hi = (c, hi) if coverage(c) < target else (lo, c)
+    return float(np.sqrt(lo * hi))
+
+
+def _tail_readings(laws, values, tails, nu, q=0.9):
+    """Per datum, under the tail model: log density at the datum, entropy read on the law's sample,
+    and the probabilities of the law below and above the datum."""
+    from scipy.special import logsumexp
+    from scipy.stats import norm, t as student, genpareto
+    from spatialize.empirical import silverman_bandwidth
+    n = len(values)
+    logf, ent, below, above = (np.full(n, np.nan) for _ in range(4))
+    kernel = (norm, ()) if tails in ("normal", "gpd") else (student, (nu,))
+    for i, (x, z) in enumerate(zip(laws, values)):
+        if x.size < 2:
+            continue
+        h = silverman_bandwidth(x)
+        u = (np.append(x, z)[:, None] - x[None, :]) / h
+        logs = logsumexp(kernel[0].logpdf(u, *kernel[1]), axis=1) - np.log(x.size * h)
+        logf[i], ent[i] = logs[-1], -float(np.mean(logs[:-1]))
+        uz = (z - x) / h
+        below[i] = float(np.exp(logsumexp(kernel[0].logcdf(uz, *kernel[1])) - np.log(x.size)))
+        above[i] = float(np.exp(logsumexp(kernel[0].logsf(uz, *kernel[1])) - np.log(x.size)))
+    if tails == "gpd":
+        # pooled generalized Pareto tails over the laws standardised by median and IQR
+        std, ex_hi, ex_lo = [], [], []
+        for x in laws:
+            if x.size < 2:
+                std.append(None)
+                continue
+            m = np.median(x)
+            sc = float(np.subtract(*np.percentile(x, [75, 25]))) or float(np.std(x)) or 1.0
+            w = (x - m) / sc
+            uh, ul = np.quantile(w, q), np.quantile(w, 1 - q)
+            std.append((m, sc, w, uh, ul))
+            ex_hi += list(w[w > uh] - uh)
+            ex_lo += list(ul - w[w < ul])
+        fit_hi = genpareto.fit(ex_hi, floc=0) if len(ex_hi) > 10 else None
+        fit_lo = genpareto.fit(ex_lo, floc=0) if len(ex_lo) > 10 else None
+        for i, (st, z) in enumerate(zip(std, values)):
+            if st is None:
+                continue
+            m, sc, w, uh, ul = st
+            xz = (z - m) / sc
+            if xz > uh and fit_hi is not None:
+                above[i] = (1 - q) * float(genpareto.sf(xz - uh, *fit_hi))
+            else:
+                above[i] = float(np.mean(w >= xz))
+            if xz < ul and fit_lo is not None:
+                below[i] = (1 - q) * float(genpareto.sf(ul - xz, *fit_lo))
+            else:
+                below[i] = float(np.mean(w <= xz))
+    return logf, ent, below, above
+
+
 class PosteriorAudit:
     """The predictive law of each datum built from the other data, and its readings.
 
@@ -101,10 +239,43 @@ class PosteriorAudit:
     values : ndarray of shape (n,)
         The data values.
     fitted_model_factory : FittedModelFactory, optional
-        The density model fitted to each datum's members (:mod:`spatialize.empirical`). Default: a
+        The density model of :meth:`model`, for plots (:mod:`spatialize.empirical`). Default: a
         variational Gaussian mixture of three components.
     callback : callable, optional
         Progress and logging callback.
+    widening : {"auto", "gamma", "skew_normal", False}, optional
+        How each datum's members are widened before they are read (:meth:`law`). Each member is the
+        prediction of a partition-average, so the members spread less than the data do around it,
+        and laws read without widening put too many data in their tails (:meth:`calibration`). The
+        members are widened to the variance of the datum's ``widening_knn`` nearest other data, the
+        ensemble widening of :class:`~spatialize.empirical.FittedModelFactory`. ``"auto"``
+        chooses ``"gamma"`` for non-negative values and ``"skew_normal"`` otherwise. Default:
+        ``"auto"``.
+    widening_knn : int, optional
+        The number of nearest other data the widening reads. Default: 12.
+    seed : int, optional
+        Seed of the widening draws. Default: 0.
+    scale : {"raw", "yeojohnson", "normal_scores"}, optional
+        The scale on which the laws are read. ``"raw"`` reads the values as they are;
+        ``"yeojohnson"`` through a Yeo–Johnson transform fitted to the data, monotone and smooth, which
+        makes a skewed variable more symmetric and keeps how far an extreme value lies;
+        ``"normal_scores"`` through the normal scores of the data, which make the data normal but
+        bring every extreme value to the largest score, so a gross error stands out less. The
+        readings in probability (positions, p-values, levels, flags) do not depend on a monotone
+        scale by themselves, only through the kernels and the widening, which act on that scale.
+        Default: ``"raw"``.
+    calibrate : bool, optional
+        Whether every law's spread around its median is multiplied by one factor, fitted so that 90 %
+        of the data lie inside the central 90 % interval of their law (:attr:`spread_factor`).
+        Default: True.
+    tails : {"t", "gpd", "normal"}, optional
+        The model of the law beyond its sample, for the p-values and the log scores. ``"t"``, a
+        kernel density with Student-t kernels of ``nu`` degrees of freedom; ``"gpd"``, generalized
+        Pareto tails beyond the 10 % and 90 % quantiles of each law, with one shape and scale per
+        side pooled over all the laws standardised by their median and interquartile range;
+        ``"normal"``, a kernel density with Gaussian kernels. Default: ``"t"``.
+    nu : float, optional
+        The degrees of freedom of the Student-t kernels. Default: 3.
 
     Attributes
     ----------
@@ -113,14 +284,25 @@ class PosteriorAudit:
     support : ndarray of shape (n,)
         The share of defined members of each datum: the share of partitions in which its law rests
         on other data. A low support marks an isolated datum, whose law rests on few partitions.
+    spread_factor : float
+        The factor of ``calibrate`` (1 without it): above 1, the widened laws were still too narrow.
 
     Notes
     -----
     The law of a datum never contains the datum itself, so a value its neighbours do not support
-    keeps all of its surprise.
+    keeps all of its surprise. The target of the widening is a robust variance (the squared scaled
+    median absolute deviation of the neighbours), so an erroneous neighbour does not widen a law
+    enough to hide another error.
+
+    The laws of an ensemble read by cross-validation are narrow, since each member averages a cell,
+    and light in their tails. Read as they are, they put many more data in their tails than their
+    probabilities say, so a test at a given level flags clean data. The widening, the factor and the
+    tail model correct this in turn, measured on synthetic fields (:doc:`/theory/posterior`), without
+    a guarantee: :meth:`calibration` tells how well the laws are calibrated for the data at hand.
     """
 
-    def __init__(self, members, points, values, fitted_model_factory=None, callback=default_singleton_callback):
+    def __init__(self, members, points, values, fitted_model_factory=None, callback=default_singleton_callback,
+                 widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0):
         self.members = np.asarray(members, dtype=np.float64)
         self.points = np.asarray(points)
         self.values = np.asarray(values, dtype=np.float64).ravel()
@@ -131,6 +313,19 @@ class PosteriorAudit:
         self.support = np.isfinite(self.members).mean(axis=1)
         self._models = {}
         self._targets = None
+        self.widening = widening
+        self.widening_knn = int(widening_knn)
+        self.seed = 0 if seed is None else int(seed)
+        if scale not in ("raw", "yeojohnson", "normal_scores"):
+            raise SpatializeError(f"scale must be 'raw', 'yeojohnson' or 'normal_scores'; got {scale!r}")
+        if tails not in ("t", "gpd", "normal"):
+            raise SpatializeError(f"tails must be 't', 'gpd' or 'normal'; got {tails!r}")
+        self.scale, self.calibrate, self.tails, self.nu = scale, bool(calibrate), tails, float(nu)
+        self._fwd, self._inv = _scale_maps(scale, self.values)
+        self._tvalues = self._fwd(self.values)
+        self._laws = None
+        self._factor = None
+        self._readings = None
 
     def _widening_targets(self):
         f = self.fitted_model_factory
@@ -188,6 +383,401 @@ class PosteriorAudit:
                 f"failed fit); their readings are NaN"))
         return out
 
+    # ------------------------------------------------------------------ readings of each datum
+    def _robust_targets(self):
+        """Per datum, the robust variance and the skewness of its nearest other data, on the scale
+        of the readings."""
+        from scipy.spatial import cKDTree
+        pts, z, k = np.asarray(self.points, float), self._tvalues, self.widening_knn
+        n = len(z)
+        _, idx = cKDTree(pts).query(pts, k=min(k + 1, n))
+        idx = np.reshape(idx, (n, -1))
+        var = np.empty(n)
+        for i in range(n):
+            nb = z[idx[i][idx[i] != i][:k]]
+            var[i] = (1.4826 * np.median(np.abs(nb - np.median(nb)))) ** 2 if nb.size else 0.0
+        skew = _loo_target_skewness(pts, z, knn=k)
+        return var, skew
+
+    def _widened(self):
+        """Each datum's defined members on the scale of the readings, widened."""
+        if self._laws is None:
+            from spatialize.empirical import _widen_sample
+            var, skew = self._robust_targets() if self.widening else (None, None)
+            laws = []
+            for j in range(len(self.values)):
+                m = self.members[j]
+                x = self._fwd(m[np.isfinite(m)])
+                if self.widening and x.size >= 2 and var[j] > 0:
+                    mode = self.widening
+                    if mode == "gamma" and np.any(x < 0):
+                        mode = "skew_normal"
+                    x = _widen_sample(x, mode, var[j], skew[j], np.random.default_rng(self.seed + j))
+                laws.append(np.asarray(x, dtype=np.float64))
+            self._laws = laws
+        return self._laws
+
+    @property
+    def spread_factor(self):
+        """The factor multiplying every law's spread around its median (see ``calibrate``)."""
+        if self._factor is None:
+            self._factor = _fit_spread(self._widened(), self._tvalues) if self.calibrate else 1.0
+        return self._factor
+
+    def law(self, i):
+        """The sample datum ``i``'s readings come from, on the scale of the readings: its defined
+        members, transformed by ``scale``, widened by ``widening`` and spread by
+        :attr:`spread_factor`.
+
+        Parameters
+        ----------
+        i : int
+            Index of the datum.
+
+        Returns
+        -------
+        ndarray
+            Empty for a datum without defined members.
+        """
+        x = self._widened()[i]
+        c = self.spread_factor
+        if c == 1.0 or x.size == 0:
+            return x
+        m = np.median(x)
+        return m + c * (x - m)
+
+    def pit(self):
+        r"""The position of each datum in its law, :math:`\hat F_{-i}(z_i)`, under the tail model.
+
+        Returns
+        -------
+        ndarray of shape (n,)
+            The probability of the law (:meth:`law`, with the kernels or tails of ``tails``) below
+            the datum, the same law the p-values read. NaN for a datum without defined members.
+        """
+        _, _, below, above = self._kde()
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return below / (below + above)
+
+    def _kde(self):
+        """Per datum: the log density of its law at the datum, the entropy of the law read on its
+        sample, and the probabilities of the law below and above the datum, under ``tails``."""
+        if self._readings is None:
+            laws = [self.law(i) for i in range(len(self.values))]
+            self._readings = _tail_readings(laws, self._tvalues, self.tails, self.nu)
+        return self._readings
+
+    def tail_p(self):
+        r"""The two-sided surprise of each datum: how rarely its law gives a value as extreme.
+
+        Returns
+        -------
+        ndarray of shape (n,)
+            :math:`\min\{1, 2\min(P_-, P_+)\}`, with :math:`P_-` and :math:`P_+` the probabilities
+            of the law below and above the datum under the tail model ``tails``. The model carries
+            the law past its sample, so a datum far outside its law gets a p-value as small as its
+            distance warrants, where counting the members could not go below one over their
+            number. NaN for a datum without defined members.
+        """
+        _, _, below, above = self._kde()
+        return np.minimum(1.0, 2.0 * np.minimum(below, above))
+
+    def flags(self, q=0.05):
+        """The data whose surprise survives the Benjamini–Hochberg procedure at false discovery
+        rate ``q``.
+
+        With n data, a share of them falls in the tails of their laws by chance alone. Among the
+        flagged data, the expected share of such chance flags is at most ``q`` (for independent or
+        positively dependent p-values).
+
+        Parameters
+        ----------
+        q : float, optional
+            The false discovery rate. Default: 0.05.
+
+        Returns
+        -------
+        ndarray of bool, shape (n,)
+        """
+        return _bh(self.tail_p(), q)
+
+    def levels(self, alphas=(0.5, 0.7, 0.9, 0.99)):
+        r"""The level of each datum: the widest central probability interval of its law that leaves
+        it out.
+
+        Parameters
+        ----------
+        alphas : sequence of float, optional
+            The probabilities :math:`\alpha` of the central intervals
+            :math:`[\hat q_{(1-\alpha)/2}, \hat q_{(1+\alpha)/2}]`. Default: ``(0.5, 0.7, 0.9, 0.99)``.
+
+        Returns
+        -------
+        ndarray of object, shape (n,)
+            ``"level_j"``: ``level_0`` outside the widest interval, ``level_k`` (k the number of
+            alphas) inside every one. None for a datum without defined members. A datum lies outside
+            the interval of probability :math:`\alpha` with probability :math:`1 - \alpha` when its
+            law is right, so the share of data at each level is read against these probabilities.
+        """
+        pit = self.pit()
+        alphas = sorted(alphas)
+        out = np.empty(len(pit), dtype=object)
+        for i, u in enumerate(pit):
+            if not np.isfinite(u):
+                out[i] = None
+                continue
+            cat = len(alphas)
+            for j, a in enumerate(reversed(alphas)):
+                if u < (1 - a) / 2 or u > (1 + a) / 2:
+                    cat = j
+                    break
+            out[i] = f"level_{cat}"
+        return out
+
+    def table(self, q=0.05, alphas=(0.5, 0.7, 0.9, 0.99)):
+        r"""The readings of every datum, one row each.
+
+        Parameters
+        ----------
+        q : float, optional
+            The false discovery rate of the flags. Default: 0.05.
+        alphas : sequence of float, optional
+            The probabilities of the levels. Default: ``(0.5, 0.7, 0.9, 0.99)``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``value``; ``pit`` (:meth:`pit`); ``tail_p`` (:meth:`tail_p`); ``flag`` (:meth:`flags`);
+            ``level`` (:meth:`levels`); ``surprisal``, the log score :math:`-\log \hat f_{-i}(z_i)`
+            of the datum under a Gaussian kernel density of its members; ``entropy``, the entropy of
+            that density read on the members, so that ``excess`` = ``surprisal`` − ``entropy`` is
+            near 0 for a datum typical of its law; ``width90``, the width of the central 90 %
+            interval of the law, in the units of the values; ``support`` (:attr:`support`). The log
+            scores and the entropy are on the scale of the readings (``scale``).
+        """
+        logf, ent, below, above = self._kde()
+        tail = np.minimum(1.0, 2.0 * np.minimum(below, above))
+        q5 = np.array([np.percentile(self.law(i), 5) if self.law(i).size else np.nan for i in range(len(self.values))])
+        q95 = np.array([np.percentile(self.law(i), 95) if self.law(i).size else np.nan for i in range(len(self.values))])
+        lo, hi = self._inv(q5), self._inv(q95)
+        return pd.DataFrame({"value": self.values, "pit": self.pit(), "tail_p": tail,
+                             "flag": _bh(tail, q), "level": self.levels(alphas), "surprisal": -logf,
+                             "entropy": ent, "excess": -logf - ent, "width90": hi - lo,
+                             "support": self.support})
+
+    # ------------------------------------------------------------------ global readings
+    def calibration(self, alphas=(0.5, 0.8, 0.9, 0.95, 0.99)):
+        r"""Whether the laws are calibrated: read it before the flags.
+
+        A datum lies inside the central interval of probability :math:`\alpha` of its law with
+        probability :math:`\alpha` when the law is right, and its position (:meth:`pit`) is
+        uniform. Laws too narrow put too many data in the tails, which inflates every flag; laws
+        too wide hide surprises.
+
+        Parameters
+        ----------
+        alphas : sequence of float, optional
+            The probabilities of the intervals compared. Default: ``(0.5, 0.8, 0.9, 0.95, 0.99)``.
+
+        Returns
+        -------
+        dict
+            ``coverage``, a DataFrame with, per ``alpha``, the share of data inside the interval
+            (``observed``), its binomial standard error under calibration (``se``) and ``z`` =
+            (observed − alpha)/se, and with ``calibrate`` the share before the factor
+            (``before_factor``); ``spread_factor``; ``ks_p``, the p-value of the Kolmogorov–Smirnov test of the
+            positions against the uniform law; ``n``, the data with a law; ``verdict``,
+            ``"calibrated"``, ``"too narrow"`` or ``"too wide"`` (an interval more than 3 standard
+            errors off). A verdict other than calibrated is also logged as a warning.
+
+        Notes
+        -----
+        No theorem makes the cross-validated laws of an ensemble calibrated, so this is a reading,
+        not a property. Too narrow laws can be widened (:class:`~spatialize.empirical.FittedModelFactory`,
+        ``widening``) or obtained from coarser partitions (a smaller ``alpha``).
+        """
+        from scipy import stats
+        pit = self.pit()
+        pit = pit[np.isfinite(pit)]
+        n = len(pit)
+        rows = []
+        for a in sorted(alphas):
+            inside = float(np.mean((pit >= (1 - a) / 2) & (pit <= (1 + a) / 2))) if n else np.nan
+            se = np.sqrt(a * (1 - a) / n) if n else np.nan
+            rows.append({"alpha": a, "observed": inside, "se": se, "z": (inside - a) / se if n else np.nan})
+        cov = pd.DataFrame(rows)
+        if self.calibrate:
+            raw = self._widened()
+            before = np.array([np.mean(x < z) if x.size else np.nan for x, z in zip(raw, self._tvalues)])
+            before = before[np.isfinite(before)]
+            cov["before_factor"] = [float(np.mean((before >= (1 - a) / 2) & (before <= (1 + a) / 2)))
+                                    for a in cov["alpha"]]
+        ks_p = float(stats.kstest(pit, "uniform").pvalue) if n else np.nan
+        verdict = "calibrated"
+        if n and (cov["z"] < -3).any():
+            verdict = "too narrow"
+        elif n and (cov["z"] > 3).any():
+            verdict = "too wide"
+        if verdict != "calibrated":
+            log_message(logging.logger.warning(
+                f"the laws of the data look {verdict}: " + ", ".join(
+                    f"{r.alpha:g} → {r.observed:.3f}" for r in cov.itertuples()) +
+                ("; flags are inflated, consider widening or coarser partitions" if verdict == "too narrow"
+                 else "; surprises may be hidden")))
+        return {"coverage": cov, "ks_p": ks_p, "n": n, "verdict": verdict, "spread_factor": self.spread_factor}
+
+    # ------------------------------------------------------------------ plots
+    def plot_calibration(self, alphas=None, theme='alges', color=None, **figargs):
+        """The histogram of the positions of the data in their laws, against the uniform law, and the
+        observed coverage of the central intervals against their probability.
+
+        Parameters
+        ----------
+        alphas : sequence of float, optional
+            The probabilities of the coverage curve. Default: 0.05 to 0.99.
+        theme : str, optional
+            Plot theme (:class:`~spatialize.viz.PlotStyle`). Default: ``'alges'``.
+        color : str, optional
+            Main colour. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        alphas = np.linspace(0.05, 0.99, 20) if alphas is None else np.asarray(alphas)
+        pit = self.pit()
+        pit = pit[np.isfinite(pit)]
+        n = max(len(pit), 1)
+        figargs.setdefault("figsize", (10, 4))
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 2, **figargs)
+            bins = 10
+            ax[0].hist(pit, bins=bins, range=(0, 1), density=True, histtype='stepfilled', alpha=0.8,
+                       color=style.color, zorder=3)
+            band = 2 * np.sqrt(bins / n * (1 - 1 / bins))
+            ax[0].axhspan(1 - band, 1 + band, color='grey', alpha=0.2, zorder=1)
+            ax[0].axhline(1, color='grey', lw=1, zorder=2)
+            ax[0].set_xlabel("position of the datum in its law (PIT)")
+            ax[0].set_ylabel("density")
+            ax[0].set_title("Positions")
+            obs = [np.mean((pit >= (1 - a) / 2) & (pit <= (1 + a) / 2)) for a in alphas]
+            ax[1].plot([0, 1], [0, 1], color='grey', lw=1)
+            ax[1].plot(alphas, obs, 'o-', color=style.color, ms=3)
+            ax[1].set_xlabel("probability of the central interval")
+            ax[1].set_ylabel("share of data inside")
+            ax[1].set_title("Coverage")
+            ax[1].set_aspect('equal', adjustable='box')
+            fig.tight_layout()
+        return fig
+
+    def plot_map(self, q=0.05, theme='alges', cmap=None, **figargs):
+        """The data on their first two coordinates, coloured by their surprise, the flagged data
+        circled.
+
+        Parameters
+        ----------
+        q : float, optional
+            The false discovery rate of the flags. Default: 0.05.
+        theme : str, optional
+            Plot theme. Default: ``'alges'``.
+        cmap : str or Colormap, optional
+            Colour map of the surprise. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        pts = np.asarray(self.points, dtype=float)
+        y = pts[:, 1] if pts.shape[1] > 1 else np.zeros(len(pts))
+        with np.errstate(divide="ignore"):
+            s = -np.log10(self.tail_p())
+        flag = self.flags(q)
+        figargs.setdefault("figsize", (7, 6))
+        with PlotStyle(theme=theme, cmap=cmap) as style:
+            fig, ax = plt.subplots(1, 1, **figargs)
+            base = matplotlib.colormaps[style.cmap] if isinstance(style.cmap, str) else style.cmap
+            order = np.argsort(np.nan_to_num(s, nan=-1.0))      # the most surprising data drawn on top
+            sc = ax.scatter(pts[order, 0], y[order], c=s[order], cmap=base.reversed(), s=25, zorder=3,
+                            vmin=0, vmax=max(3.0, float(np.nanmax(s[np.isfinite(s)])) if np.isfinite(s).any() else 3.0))
+            ax.scatter(pts[flag, 0], y[flag], s=120, facecolors='none', edgecolors=plt.rcParams['text.color'],
+                       linewidths=1.2, zorder=4, label=f"flagged (FDR {q:g})")
+            plt.colorbar(sc, ax=ax, label="surprise, −log10 p")
+            ax.set_aspect('equal', adjustable='box')
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
+            ax.set_title("Surprise of each datum")
+            if flag.any():
+                ax.legend(loc="best", fontsize=8)
+            fig.tight_layout()
+        return fig
+
+    def plot_value_pit(self, theme='alges', color=None, **figargs):
+        """Each datum's value against its position in its law: high values systematically in the
+        upper tail, or low ones in the lower, show laws that do not follow the values' range.
+
+        Parameters
+        ----------
+        theme : str, optional
+            Plot theme. Default: ``'alges'``.
+        color : str, optional
+            Point colour. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        figargs.setdefault("figsize", (6, 4))
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 1, **figargs)
+            ax.scatter(self.values, self.pit(), s=15, color=style.color, zorder=3)
+            ax.axhline(0.5, color='grey', lw=1)
+            ax.set_xlabel("value")
+            ax.set_ylabel("position in its law (PIT)")
+            ax.set_ylim(-0.02, 1.02)
+            fig.tight_layout()
+        return fig
+
+    def plot_datum(self, i, bins=25, theme='alges', color=None, **figargs):
+        """The law of datum ``i``: the histogram of its sample (:meth:`law`) and the datum.
+
+        Parameters
+        ----------
+        i : int
+            Index of the datum.
+        bins : int, optional
+            Number of bins. Default: 25.
+        theme : str, optional
+            Plot theme. Default: ``'alges'``.
+        color : str, optional
+            Histogram colour. Default: the theme's.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        x = self._inv(self.law(i))
+        x = x[np.isfinite(x)]
+        figargs.setdefault("figsize", (6, 4))
+        with PlotStyle(theme=theme, color=color) as style:
+            fig, ax = plt.subplots(1, 1, **figargs)
+            if x.size:
+                ax.hist(x, bins=bins, density=True, histtype='stepfilled', alpha=0.8, color=style.color, zorder=2)
+            ax.axvline(self.values[i], color='red', lw=1.5, zorder=4, label=f"datum {i}: {self.values[i]:.4g}")
+            ax.set_xlabel("value")
+            ax.set_ylabel("density")
+            ax.set_title(f"Datum {i}: p = {self.tail_p()[i]:.3g}, support {self.support[i]:.2f}")
+            ax.legend(fontsize=8)
+            fig.tight_layout()
+        return fig
+
 
 class PosteriorSampleAnalyzer(PosteriorAudit):
     """The posterior analysis of version 1.2, on top of :class:`PosteriorAudit`.
@@ -226,7 +816,8 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
 
     def __init__(self, cv_post_result, points, sample_values, fitted_model_factory,
                  callback=default_singleton_callback):
-        super().__init__(cv_post_result, points, sample_values, fitted_model_factory, callback)
+        super().__init__(cv_post_result, points, sample_values, fitted_model_factory, callback,
+                         widening=False)
         self.post_result = cv_post_result
         self.sample_values = sample_values
         models = self.models()
@@ -242,60 +833,35 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
             self.sample_quantiles[i], self.sample_entropy[i] = q, h
 
     def rank_samples(self, entropy_mass_alphas=[0.5, 0.7, 0.9, 0.99]):
-        """Categorizes sample values based on their central entropy intervals.
+        """The level of each datum, as :meth:`PosteriorAudit.levels`.
 
-        A sample is assigned to ``level_j`` if it falls outside the interval of the ``(j+1)``-th
-        largest alpha but inside every wider one; ``level_0`` holds the samples outside the widest
-        interval (the tails), ``level_k`` (k = number of alphas) those inside every interval.
+        A sample is assigned to ``level_j`` if it falls outside the central probability interval of
+        the ``(j+1)``-th largest alpha but inside every wider one; ``level_0`` holds the samples
+        outside the widest interval (the tails), ``level_k`` (k = number of alphas) those inside
+        every interval.
 
         Parameters
         ----------
         entropy_mass_alphas : list of float, optional
-            The masses of the intervals. Default: ``[0.5, 0.7, 0.9, 0.99]``.
+            The probabilities of the central intervals. Default: ``[0.5, 0.7, 0.9, 0.99]``.
 
         Returns
         -------
         pandas.DataFrame
-            ``value`` and ``category`` (``"level_j"``, or None without a law).
+            ``value`` and ``category`` (``"level_j"``, or None for a datum without defined members).
 
         Notes
         -----
-        The samples are ranked on several processes (``joblib``) under the session settings
-        ``parallel`` and ``num_threads`` (:mod:`spatialize.session`), when the work is large enough
-        to repay starting them. When it runs in parallel, a script should call this method within an
-        ``if __name__ == "__main__":`` block.
+        Since version 1.3 the intervals are central intervals of probability, read from the members,
+        as the theory describes. Version 1.2 used the narrowest intervals holding a share of the
+        entropy of the fitted density, whose probability differed from the share (about 0.55 for 0.5
+        and 0.93 for 0.9), so the levels could not be read against their probabilities. The
+        parameter keeps its name for compatibility.
         """
-        alphas_ = sorted(entropy_mass_alphas)
-        values, emodels = self.sample_values, self.emodels
-
-        def rows_data(rows):
-            idx = list(rows)
-            return [values[k] for k in idx], [emodels.get(k) for k in idx]
-
-        def categorize_rows(rows, data):
-            vals, models = data
-            out = []
-            for i, value, emodel in zip(rows, vals, models):
-                if emodel is None:
-                    out.append(None)
-                    continue
-                try:
-                    cat = len(alphas_)
-                    for j, alpha in enumerate(reversed(alphas_)):
-                        low, high = emodel.central_entropy_interval(alpha)['interval']
-                        if value < low or value > high:
-                            cat = j
-                            break
-                    out.append(f"level_{cat}")
-                except Exception as e:
-                    log_message(logging.logger.debug(f"error for values[{i}] = {value}: {e}"))
-                    out.append(None)
-            return out
-
-        categories = map_chunks(categorize_rows, len(values), data_for=rows_data, callback=self.callback)
+        categories = self.levels(entropy_mass_alphas)
         log_message(logging.logger.info(
-            f"categorized {len(values)} samples into {len(set(c for c in categories if c is not None))} categories."))
-        return pd.DataFrame({'value': self.sample_values, 'category': categories})
+            f"categorized {len(categories)} samples into {len(set(c for c in categories if c is not None))} categories."))
+        return pd.DataFrame({'value': self.sample_values, 'category': list(categories)})
 
     def plot_summary(self, theme='alges', color=None, **figargs):
         """Histograms of the values, of the cumulative probabilities of the data in their laws and of
@@ -419,7 +985,8 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
 
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
-                    common_args=dict(_COMMON),
+                    common_args=dict(_COMMON, widening="auto", widening_knn=12, scale="raw", calibrate=True,
+                                     tails="t", nu=3.0),
                     specific_args=_SPECIFIC)
 def posterior_audit(points, values, **kwargs):
     """The predictive law of each datum built from the other data.
@@ -449,8 +1016,22 @@ def posterior_audit(points, values, **kwargs):
         The granularity of the partitions. Default: 0.8.
     seed, folding_seed : int, optional
         Seeds of the partitions and of the folds. Default: drawn at random.
+    widening : {"auto", "gamma", "skew_normal", False}, optional
+        How the members are widened before they are read (:class:`PosteriorAudit`). Default:
+        ``"auto"``.
+    widening_knn : int, optional
+        The number of nearest other data the widening reads. Default: 12.
+    scale : {"raw", "yeojohnson", "normal_scores"}, optional
+        The scale the laws are read on (:class:`PosteriorAudit`). Default: ``"raw"``.
+    calibrate : bool, optional
+        Whether one factor on every law's spread brings the 90 % coverage to nominal. Default: True.
+    tails : {"t", "gpd", "normal"}, optional
+        The model of the laws' tails (:class:`PosteriorAudit`). Default: ``"t"``.
+    nu : float, optional
+        The degrees of freedom of the Student-t kernels. Default: 3.
     fitted_model_factory : FittedModelFactory, optional
-        The density model of each law. Default: a variational Gaussian mixture of three components.
+        The density model of :meth:`PosteriorAudit.model`, for plots. Default: a variational
+        Gaussian mixture of three components.
     best_params_found : dict, optional
         The output of a search's ``best_result()``; its keys override the arguments, except
         ``n_partitions``. The dict is not modified. Default: None.
@@ -470,7 +1051,17 @@ def posterior_audit(points, values, **kwargs):
     """
     kwargs = _with_best_params(kwargs)
     members = _cv_members(points, values, points, kwargs)
-    return PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"])
+    audit = PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"],
+                           widening=kwargs["widening"], widening_knn=kwargs["widening_knn"], seed=kwargs["seed"],
+                           scale=kwargs["scale"], calibrate=kwargs["calibrate"], tails=kwargs["tails"],
+                           nu=kwargs["nu"])
+    weak = int(np.sum(audit.support < 0.5))
+    if weak:
+        log_message(logging.logger.warning(
+            f"{weak} of {len(audit.values)} data have a law resting on fewer than half of the partitions "
+            f"(support < 0.5): isolated data, whose cells often hold no other datum. The session setting "
+            f"empty_cells='mark' or 'coarsen' gives them a law in every partition"))
+    return audit
 
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),

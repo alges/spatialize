@@ -4,22 +4,8 @@
 Further readings
 #################
 
-The ensemble supports other readings, each with its own module.
-
-Posterior analysis of the data
-==============================
-
-Cross-validation predicts each datum :math:`z_i` from the others, which gives at every datum a
-predictive law :math:`\hat F_{-i}` built without it. The position of the datum in that law tells how surprising it is. Spatialize sorts the data by the central intervals of increasing mass
-:math:`\alpha_1 < \alpha_2 < \dots` of :math:`\hat F_{-i}`,
-
-.. math::
-
-   I_{\alpha} = \big[\hat q_{(1-\alpha)/2},\ \hat q_{(1+\alpha)/2}\big],
-
-placing each datum at the level of the widest interval that leaves it out. A datum outside even the
-widest interval lies in the far tail of its law, which points to data that disagree with their
-surroundings, such as transcription errors, a change of support or a genuinely anomalous place.
+The ensemble supports other readings, each with its own module. The analysis of the data against
+the laws the other data give has its own page (:doc:`posterior`).
 
 Categorical variables
 =====================
@@ -71,8 +57,7 @@ when both of its members are valid.
 In Spatialize
 =============
 
-Posterior analysis is :func:`~spatialize.gs.spa.cv_sample_pred_posterior` and its
-``rank_samples`` (:doc:`../reference/spa`), categorical estimation the functions of
+Categorical estimation is the functions of
 :doc:`../reference/cat_esi`, and the entropy and mutual information the estimators of
 :doc:`../reference/futures`, where they are experimental: their interface and results may still
 change.

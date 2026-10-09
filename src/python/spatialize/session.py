@@ -20,10 +20,9 @@ The settings are the following.
 ``parallel`` (bool)
     Whether the compiled code runs on several threads, and the Python loops on several processes
     (``joblib``): the encoder error of the Pareto search
-    (:func:`~spatialize.gs.esi.esi_pareto_hparams_search`), the simulations
-    (:func:`~spatialize.gs.ess.ess_sample`) and the ranking of the data
-    (:meth:`~spatialize.gs.spa.PosteriorSampleAnalyzer.rank_samples`), these only when the work
-    repays starting the processes. The default is ``True``. Results are the same bit for bit with
+    (:func:`~spatialize.gs.esi.esi_pareto_hparams_search`) and the simulations
+    (:func:`~spatialize.gs.ess.ess_sample`), these only when the work repays starting the
+    processes. The default is ``True``. Results are the same bit for bit with
     any number of threads or processes, so the setting changes only the run time. When Spatialize was built without OpenMP, a warning says once
     how to install it, after which the compiled code runs on one thread, the processes being
     unaffected.

@@ -301,3 +301,42 @@ def test_posterior_audit_builds_each_law_from_the_other_data():
     assert np.array_equal(np.sort(model.data_), np.sort(audit.members[3][np.isfinite(audit.members[3])]))
     assert old.sample_quantiles[3] == 1.0
     assert model.cdf(model.x_[0] - 1.0) == 0.0 and model.pdf(model.x_[-1] + 1.0) == 0.0
+
+
+def test_posterior_audit_readings_are_consistent():
+    """The readings of the posterior audit agree with each other: the flags are those of the
+    Benjamini–Hochberg procedure on the p-values; the levels follow the positions; the p-values
+    never reach 0 and are 1 at most; the 1.2 ranking is the probability levels; the spread factor
+    brings the 90 % coverage of the widened laws to nominal; every scale maps back to the values;
+    every tail model gives a reading at every datum."""
+    from spatialize.gs.spa import posterior_audit, cv_sample_pred_posterior
+    from spatialize.gs.spa._main import _scale_maps, _fit_spread
+    from spatialize.empirical import FittedModelFactory
+    s, v, _ = DATA["2d"]
+    v = np.exp(v - v.mean()).astype(np.float32)
+    kw = dict(n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED, callback=lambda *a, **k: None)
+    for options in ({}, {"tails": "gpd"}, {"tails": "normal", "calibrate": False}, {"scale": "yeojohnson"},
+                    {"scale": "normal_scores"}):
+        audit = posterior_audit(s, v, **kw, **options)
+        t = audit.table()
+        p = t.tail_p.to_numpy()
+        assert np.all((p > 0) & (p <= 1))
+        order = np.argsort(p)
+        k = np.flatnonzero(p[order] <= 0.05 * np.arange(1, len(p) + 1) / len(p))
+        expected = np.zeros(len(p), bool)
+        if k.size:
+            expected[order[:k[-1] + 1]] = True
+        assert np.array_equal(t.flag.to_numpy(), expected)
+        u = t.pit.to_numpy()
+        outside99 = (u < 0.005) | (u > 0.995)
+        assert np.array_equal(t.level.to_numpy() == "level_0", outside99)
+        assert np.isfinite(t[["pit", "tail_p", "surprisal", "entropy"]].to_numpy()).all()
+        fwd, inv = _scale_maps(audit.scale, audit.values)
+        assert np.allclose(inv(fwd(audit.values)), audit.values, rtol=1e-6, atol=1e-9)
+        if audit.calibrate:
+            laws, z = audit._widened(), audit._tvalues
+            c = audit.spread_factor
+            pit = np.array([np.mean(np.median(x) + c * (x - np.median(x)) < zi) for x, zi in zip(laws, z)])
+            assert abs(np.mean((pit >= 0.05) & (pit <= 0.95)) - 0.9) <= 2.0 / len(z)
+    old = cv_sample_pred_posterior(s, v, s, fitted_model_factory=FittedModelFactory(), **kw)
+    assert list(old.rank_samples().category) == list(old.levels())

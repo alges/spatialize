@@ -21,6 +21,7 @@ ends with a pointer to the functions that implement it.
    error
    esi
    ess
+   posterior
    other
 
 The pages build on one another in that order. A reader in a hurry can read the second, then the

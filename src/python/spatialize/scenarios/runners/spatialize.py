@@ -37,7 +37,7 @@ def alpha_from_rate(rate, domain):
     rate : float
         Rate (lifetime) λ of the Mondrian process.
     domain : sequence of (low, high)
-        The box H.
+        The box H. Spatialize measures it on the data, so the runner passes the box of the samples.
 
     Returns
     -------
@@ -59,6 +59,14 @@ def alpha_from_rate(rate, domain):
     if not alpha < 1.0:
         raise ValueError(f"rate {rate} gives alpha {alpha} >= 1")
     return alpha
+
+
+def _granularity_box(samples, domain):
+    """The box whose μ(H) spatialize turns into the Mondrian lifetime: the box of the data, or the
+    domain when the data's box has no extent (a single datum)."""
+    s = np.asarray(samples, np.float32)
+    box = list(zip(s.min(axis=0).tolist(), s.max(axis=0).tolist()))
+    return box if sum(hi - lo for lo, hi in box) > 0 else domain
 
 
 def alpha_from_intensity(intensity, domain, n_samples):
@@ -202,7 +210,9 @@ class SpatializeRunner:
         q = np.vstack([np.asarray(queries, np.float32), corners])
         partition, data_cond = PROFILES[est.encoder]
         if partition.startswith("mondrian"):
-            alpha = alpha_from_rate(est.rate, est.domain)
+            # spatialize measures the box of the data, except for the partition of version 1.2
+            box = est.domain if partition == "mondrian-legacy" else _granularity_box(samples, est.domain)
+            alpha = alpha_from_rate(est.rate, box)
         else:
             alpha = alpha_from_intensity(est.rate, est.domain, len(samples))
             if not alpha < 1.0:  # spatialize accepts |alpha| < 1 only: expected nuclei < n/2

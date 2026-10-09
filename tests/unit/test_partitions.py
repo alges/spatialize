@@ -40,3 +40,22 @@ def test_cells_group_the_data_as_the_mondrian_leaf_function(ds):
     leaf = np.asarray(LIB.get_leaf_for_samples_using_esi(s, cases.T, cases.ALPHA, None, cases.SEED))
     labels = np.asarray(LIB.cells(s, s, "mondrian", cases.ALPHA, cases.T, cases.SEED))
     assert np.array_equal(_canonical(leaf), _canonical(labels))
+
+
+def test_mondrian_law_at_a_location_does_not_depend_on_the_other_queries():
+    """The lifetime comes from the data's box, and the Mondrian process is consistent under
+    restriction: queries far beyond the data enlarge the box the partition is drawn on, but the
+    probability that two nearby locations share a cell stays exp(-lambda |h|_1)."""
+    s, _, _ = DATA["2d"]
+    s = s[:40]
+    alpha, n = 0.6, 20000
+    lam = 1 / (float((s.max(0) - s.min(0)).sum()) * (1 - alpha))
+    c, ext = s.mean(0), s.max(0) - s.min(0)
+    near = np.array([c, c + [0.1 * ext[0], 0.0], c + [0.0, 0.12 * ext[1]]], np.float32)
+    h = np.abs(near[1:] - near[0]).sum(1)
+    far = np.array([s.max(0) + 3 * ext, s.min(0) - 2 * ext], np.float32)
+    for q in (near, np.vstack([near, far])):
+        labels = LIB.cells(s, q, "mondrian", alpha, n, cases.SEED)
+        p = (labels[1:3] == labels[0]).mean(1)
+        e = np.exp(-lam * h)
+        assert np.all(np.abs(p - e) < 4 * np.sqrt(e * (1 - e) / n)), (p, e)

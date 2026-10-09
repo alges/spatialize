@@ -11,9 +11,11 @@ The settings are the following.
 ``domain`` (array-like of shape (d, 2), or ``None``)
     The box ``[[low, high], ...]`` on which the partitions are drawn, one row per coordinate. With
     ``None``, the default, the box is the smallest one containing the data and the queries of each
-    call. The partitions then depend on the other locations requested, and so does the estimate at
-    a location. With a fixed domain, the estimate at a location no longer depends on the other
-    queries (for kriging, up to float32 rounding, since each cell solves its queries together). The
+    call. The partitions drawn then depend on the other locations requested. The Mondrian rate
+    comes from the box of the data in either case. Under the default Mondrian process the law of
+    the estimate at a location therefore does not depend on the other queries, while under
+    ``"mondrian-legacy"`` and Voronoi it does. With a fixed domain, the estimate at a location no
+    longer depends on the other queries under any partition (for kriging, up to float32 rounding, since each cell solves its queries together). The
     hyperparameter searches then draw the same partitions as the estimation for the same seed. Every
     datum and query must lie in the domain.
 

@@ -131,8 +131,8 @@ def mondrian_co_occurrence(sets, rate):
     ----------
     sets : sequence of array_like, each of shape (k_i, d)
     rate : float
-        The rate :math:`\\lambda`; for Spatialize's ``alpha`` on a box :math:`H`,
-        :math:`\\lambda = 1/(\\mu(H)(1-\\alpha))`.
+        The rate :math:`\\lambda`; for Spatialize's ``alpha`` with data in a box :math:`D`,
+        :math:`\\lambda = 1/(\\mu(D)(1-\\alpha))`.
 
     Returns
     -------

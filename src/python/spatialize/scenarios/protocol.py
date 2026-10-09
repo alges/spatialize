@@ -25,7 +25,8 @@ class EstimatorSpec:
         The encoder's rate in the book's terms: the Mondrian rate/budget λ, or the intensity λ_V
         of the Poisson–Voronoi generators, per unit volume. Runners derive
         their own parameters from it and from ``domain`` — for spatialize's Mondrian,
-        ``alpha = 1 - 1/(λ·μ(H))``; for its Voronoi, ``|alpha| = 2·λ_V·|H|/n``.
+        ``alpha = 1 - 1/(λ·μ(D))`` with D the box of the data; for its Voronoi,
+        ``|alpha| = 2·λ_V·|H|/n``.
     domain : sequence of (low, high)
         The box H the partition is drawn on.
     decoder : str

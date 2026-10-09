@@ -1,5 +1,5 @@
 id: P6-locality
-version: 2
+version: 3
 tier: T2
 evaluator: locality
 book:
@@ -9,9 +9,11 @@ purpose: >
   The law of the estimate at a location must not change when the other locations requested change,
   since the partitions are drawn from a law fixed on the domain. The same location is estimated with
   one seed, first together with a few other queries, then with many. With the other queries inside the
-  declared domain the law must stay the same. With the other queries extending past the domain, an
-  implementation that draws its partitions on the box of data and queries changes the law, which the
-  second check documents for Spatialize (its fixed session domain removes the effect).
+  declared domain the law must stay the same. With the other queries extending past the domain, the
+  box the partitions are drawn on grows. The theory's Mondrian process, with its lifetime fixed by the
+  data, keeps the same law; a partition without that consistency changes it, which the second check
+  documents for Spatialize's Voronoi and its Mondrian partition of version 1.2 (a fixed session domain
+  removes the effect).
 domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
 data:
   n: 150
@@ -24,24 +26,27 @@ estimators_T: {ci: 3000, full: 12000}
 estimators:
   - {id: idw, encoder: mondrian, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
   - {id: idw-theory, encoder: mondrian-theory, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw-legacy, encoder: mondrian-legacy, rate: 4.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
   - {id: idw-voronoi, encoder: voronoi, rate: 36.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
 checks:
   - id: inside
     title: "the law at a location ignores other queries inside the domain"
     kind: inside
     family: two-sample
-    estimators: [idw, idw-theory, idw-voronoi]
+    estimators: [idw, idw-theory, idw-legacy, idw-voronoi]
   - id: beyond
-    title: "queries beyond the domain change the box, hence the law at a location"
+    title: "queries beyond the domain enlarge the box, which leaves the theory's Mondrian law unchanged"
     kind: beyond
     family: two-sample
-    estimators: [idw, idw-theory, idw-voronoi]
+    estimators: [idw, idw-theory, idw-legacy, idw-voronoi]
     expect:
-      # Spatialize draws its partitions on the box of data and queries: far queries enlarge the box,
-      # which coarsens the Mondrian cells for the same alpha and spreads the Voronoi nuclei.
-      mondrian: reject
-      mondrian-theory: reject
+      # Spatialize draws its partitions on the box of data and queries, with the Mondrian lifetime
+      # fixed by the data's box. Far queries enlarge the box: the theory's Mondrian process is
+      # consistent under restriction and keeps the law at the location; the partition of version 1.2
+      # (rate measured on the enlarged box) and the Voronoi nuclei spread over the box change it.
+      mondrian-legacy: reject
       voronoi: reject
 provenance:
   v1: "2026-10-07: first version (phase 2), with the session domain that makes the box fixed; sizes fixed before the first run"
   v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."
+  v3: "2026-10-09: Spatialize's Mondrian lifetime now comes from the data's box, so queries beyond the domain no longer change the law of the theory's Mondrian; the beyond check expects a pass on mondrian and mondrian-theory, and a new estimator idw-legacy (mondrian-legacy) keeps a negative control; sizes unchanged."

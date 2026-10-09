@@ -269,8 +269,9 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
                                                     sptlz::EmptyCellPolicy empty_cells = sptlz::EmptyCellPolicy()){
     std::unique_ptr<sptlz::Decoder> owned(decoder);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
+    float mu = sptlz::granularity_measure(&smp, bbox);
     auto &spec = registry::find(registry::partitions(), partition, "partition");
-    std::unique_ptr<sptlz::Ensemble> ensemble(spec.make(smp, val, bbox, alpha, forest_size, seed, visitor));
+    std::unique_ptr<sptlz::Ensemble> ensemble(spec.make(smp, val, bbox, mu, alpha, forest_size, seed, visitor));
     ensemble->set_class_name(class_name);
     ensemble->set_empty_cells(empty_cells);
     ensemble->set_decoder(owned.release());
@@ -348,8 +349,9 @@ py::array_t<int> cells(py::array_t<float> samples, py::array_t<float> queries, s
     auto qry = sptlz::ndarray_to_vector_2d(&queries);
     std::vector<float> val(smp.size(), 0.0f);
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
+    float mu = sptlz::granularity_measure(&smp, bbox);
     OmpThreads threads(num_threads);
-    std::unique_ptr<sptlz::Ensemble> ensemble(ps.make(smp, val, bbox, alpha, forest_size, seed, make_visitor(std::nullopt)));
+    std::unique_ptr<sptlz::Ensemble> ensemble(ps.make(smp, val, bbox, mu, alpha, forest_size, seed, make_visitor(std::nullopt)));
     auto r = ensemble->cells_of(&qry);
     return(sptlz::vector_2d_to_ndarray(&r));
 }
@@ -402,7 +404,7 @@ std::tuple<py::object, py::array_t<float>> estimation_custom_coesi(py::array_t<f
     }
 
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
+    float lambda = sptlz::granularity_measure(&smp, bbox);
     lambda = 1/(lambda-alpha*lambda);
 
     sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, n_aux, bbox, _co_post,
@@ -474,7 +476,7 @@ std::tuple<py::object, py::array_t<float>> marginal_loo_custom_coesi(py::array_t
     }
 
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
+    float lambda = sptlz::granularity_measure(&smp, bbox);
     lambda = 1/(lambda-alpha*lambda);
 
     sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, 100, bbox, NULL, NULL, NULL, NULL, _visitor, seed);
@@ -532,7 +534,7 @@ std::tuple<py::object, py::array_t<float>> marginal_kfold_custom_coesi(py::array
     }
 
     auto bbox = sptlz::samples_coords_bbox(&smp, &qry);
-    float lambda = sptlz::bbox_sum_interval(bbox);
+    float lambda = sptlz::granularity_measure(&smp, bbox);
     lambda = 1/(lambda-alpha*lambda);
 
     sptlz::CUSTOM_COESI* coesi = new sptlz::CUSTOM_COESI(lambda, forest_size, 100, bbox, NULL, NULL, NULL, NULL, _visitor, creation_seed);

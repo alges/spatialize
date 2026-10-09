@@ -156,25 +156,30 @@ P6 — Locality
 **Setup.** 150 data on the unit square carry the field of P2. The location :math:`v = (0.5, 0.5)` is
 estimated twice with one seed, together with 20 other queries, then together with 400. The estimators
 use IDW on the default Mondrian under its two profile names (the theory's process since version
-1.3; before, the default was the partition now called ``mondrian-legacy``) and the Voronoi partition
-with uniform nuclei,
-with :math:`T = 3\,000` members in ``ci`` and :math:`12\,000` in ``full``.
+1.3), on the partition of version 1.2 (``mondrian-legacy``) and on the Voronoi partition with uniform
+nuclei, with :math:`T = 3\,000` members in ``ci`` and :math:`12\,000` in ``full``.
 
 **Checks.**
 
 - *two-sample* (``inside``). With the 400 other queries inside the domain, the Kolmogorov–Smirnov test
   between the two laws at :math:`v` must not reject.
 - *two-sample* (``beyond``). With the 400 other queries spread over :math:`[-0.5, 1.5]^2`, past the
-  domain, the test is expected to reject on Spatialize.
+  domain, the test must not reject on the theory's Mondrian process. It is expected to reject on the
+  partition of version 1.2 and on the Voronoi partition, as negative controls.
 
 Spatialize draws its partitions on the box of the data and the queries. The runner pins that box to
 the declared domain by adding its corners as queries, so other queries inside the domain leave it
-unchanged, while queries beyond it enlarge it. A larger box coarsens the Mondrian cells for the same
-``alpha`` and spreads the Voronoi nuclei, which changes the law at :math:`v`. The second check
-documents that dependence, which a session domain removes (:doc:`../reference/session`).
+unchanged, while queries beyond it enlarge it. The rate of the default Mondrian comes from the box of
+the data, so it stays the same. The theory's Mondrian process is consistent under restriction, so on
+a larger box its cells around :math:`v` keep their law (:doc:`../theory/encoders`). The partition of
+version 1.2 measures its rate on the enlarged box, which coarsens its cells. The Voronoi nuclei spread
+over the larger box. A session domain removes the dependence for every partition
+(:doc:`../reference/session`).
 
-**Results.** On seeds 1 to 3 the law at :math:`v` is the same with any other queries inside the domain
-(p = 1 for every estimator), while queries beyond it change it (p at most :math:`10^{-6}`).
+**Results.** Before version 3 of the scenario, the rate came from the box of data and queries. On
+seeds 1 to 3 the law at :math:`v` was then the same with any other queries inside the domain (p = 1
+for every estimator), while queries beyond it changed it (p at most :math:`10^{-6}`). Version 3 has
+not been run yet.
 
 .. _scenario-P7:
 

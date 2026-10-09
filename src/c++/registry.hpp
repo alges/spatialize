@@ -47,8 +47,9 @@ namespace registry {
   };
 
   typedef std::function<sptlz::Ensemble*(std::vector<std::vector<float>> &smp, std::vector<float> &val,
-                                         std::vector<std::vector<float>> &bbox, float alpha, int forest_size,
-                                         int seed, std::function<int(std::string)> visitor)> EnsembleFactory;
+                                         std::vector<std::vector<float>> &bbox, float mu, float alpha,
+                                         int forest_size, int seed,
+                                         std::function<int(std::string)> visitor)> EnsembleFactory;
   typedef std::function<sptlz::Decoder*(int d, const py::dict &params, Method method)> DecoderFactory;
 
   struct PartitionSpec {
@@ -164,21 +165,20 @@ namespace registry {
     static const std::vector<PartitionSpec> specs = {
       {"mondrian",
        "The Mondrian process of the theory: the root draws its split time Exp(mu(H)), the cut axis is chosen with probability proportional to its side.",
-       "normalised granularity in [0, 1): lifetime lambda = 1/(mu(H)(1 - alpha)), mu(H) the sum of the box's sides",
+       "normalised granularity in [0, 1): lifetime lambda = 1/(mu(H)(1 - alpha)), mu(H) the sum of the sides of the data's box",
        1, ANY,
        [](std::vector<std::vector<float>> &smp, std::vector<float> &val, std::vector<std::vector<float>> &bbox,
-          float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
-         float lambda = sptlz::bbox_sum_interval(bbox);
-         lambda = 1/(lambda-alpha*lambda);
+          float mu, float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
+         float lambda = 1/(mu-alpha*mu);
          return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, true));
        }},
       {"mondrian-legacy",
        "The Mondrian partition of Spatialize 1.2 and earlier: the root box is always split, the cut axis drawn uniformly.",
-       "as for 'mondrian'",
+       "as for 'mondrian', but mu(H) measured on the box of samples and queries, as in version 1.2",
        1, ANY,
        [](std::vector<std::vector<float>> &smp, std::vector<float> &val, std::vector<std::vector<float>> &bbox,
-          float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
-         float lambda = sptlz::bbox_sum_interval(bbox);
+          float mu, float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
+         float lambda = sptlz::bbox_sum_interval(bbox);  // the rate of version 1.2, on the drawing box
          lambda = 1/(lambda-alpha*lambda);
          return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, false));
        }},
@@ -187,7 +187,7 @@ namespace registry {
        "nuclei rate in (-1, 1): nuclei among the samples for alpha >= 0, uniform in the box for alpha < 0",
        1, ANY,
        [](std::vector<std::vector<float>> &smp, std::vector<float> &val, std::vector<std::vector<float>> &bbox,
-          float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
+          float mu, float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
          return(new sptlz::VORONOI(smp, val, alpha, forest_size, bbox, visitor, seed));
        }},
     };

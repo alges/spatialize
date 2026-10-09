@@ -809,7 +809,9 @@ def eval_locality(sc: Scenario, runner: Runner, mode: str, seed: int,
     sets of other queries, and compared by a two-sample Kolmogorov–Smirnov test. Kinds (key
     ``kind``): ``inside``, the other queries drawn uniformly in the domain, and ``beyond``, drawn in
     the domain enlarged by ``data.beyond`` on every side, which moves the box of an implementation
-    that draws its partitions on the box of data and queries.
+    that draws its partitions on the box of data and queries. That move changes the law at the
+    location only for a partition that is not consistent under restriction, or whose rate depends
+    on the box.
 
     Reads ``data.n``, ``data.location``, ``data.few``, ``data.many``, ``data.beyond``,
     ``data.generator_seed`` and ``estimators_T``.

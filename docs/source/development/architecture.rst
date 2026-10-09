@@ -74,8 +74,9 @@ or decoder registered in C++ needs no second list in Python.
 3. ``run`` validates the arrays and the parameters, then calls the internal engine
    ``run_ensemble``, which proceeds in four stages.
 
-   - It computes the box of samples and queries and, for Mondrian, the lifetime
-     :math:`\lambda = 1/(\mu(H)(1-\alpha))`, with :math:`\mu(H)` the sum of the box's sides.
+   - It computes the box of samples and queries, on which the partitions are drawn. For Mondrian it
+     computes the lifetime :math:`\lambda = 1/(\mu(D)(1-\alpha))`, with :math:`\mu(D)` the sum of
+     the sides of the data's box (``granularity_measure``).
    - It draws the forest with a ``std::mt19937`` seeded by ``seed``.
    - It fits the decoder, continuing the same generator.
    - It runs estimation, leave-one-out or k-fold, returning ``(None, members)`` with one column per

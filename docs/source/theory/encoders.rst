@@ -11,23 +11,33 @@ choosing which spatial symmetry to assume.
 The box and the granularity
 ===========================
 
-The cells are drawn on a box :math:`H = \prod_{c=1}^d [a_c, b_c]`, with sides
-:math:`\ell_c = b_c - a_c` and :math:`\mu(H) = \sum_c \ell_c`. By default :math:`H` is the smallest
-box holding the data and the locations to estimate, so asking for estimates over a larger region
-changes the partitions. A fixed domain removes that dependence (:mod:`spatialize.session`).
+The cells are drawn on a box :math:`H = \prod_{c=1}^d [a_c, b_c]`. By default :math:`H` is the
+smallest box holding the data and the locations to estimate. The granularity is measured on the data
+instead. For a box :math:`B` with sides :math:`\ell_c = b_c - a_c`, write
+:math:`\mu(B) = \sum_c \ell_c`. Let :math:`D` be the smallest box holding the data, so that the same
+``alpha`` gives the same rate whatever locations are requested.
 
 Every process has a granularity, exposed as ``alpha``. For the Mondrian processes,
 :math:`\alpha \in [0, 1)` sets the rate
 
 .. math::
 
-   \lambda(\alpha) = \frac{1}{\mu(H)\,(1-\alpha)},
+   \lambda(\alpha) = \frac{1}{\mu(D)\,(1-\alpha)},
 
-so :math:`\alpha = 0` gives the coarsest partitions, :math:`\lambda = 1/\mu(H)`, and
+measured on :math:`H` when the data have no extent (a single datum). Hence :math:`\alpha = 0` gives
+the coarsest partitions, :math:`\lambda = 1/\mu(D)`, and
 :math:`\alpha \to 1` ever finer ones. For the Voronoi processes, :math:`|\alpha|` sets the expected
 number of cells relative to the number of data :math:`n`. Fine cells follow the field closely but
 leave each local model few data, coarse cells feed the local models well but average over places
 that may differ. The best granularity balances the two (:doc:`error`).
+
+The Mondrian process of the theory is consistent under restriction. Seen inside a smaller box, a
+partition of rate :math:`\lambda` drawn on :math:`H` is a partition of rate :math:`\lambda` of that
+box. With the rate fixed by the data, the law of the cells around a location is therefore the same
+whatever other locations are requested, each partition drawn changing with them. Locations far from the
+data enlarge :math:`H` at a fixed rate, so the partitions hold more cells. The partition of version
+1.2 and the Voronoi partitions lack that consistency, so for them the law around a location changes
+with the other locations. A fixed domain removes that dependence (:mod:`spatialize.session`).
 
 The Mondrian process
 ====================
@@ -67,8 +77,9 @@ The Mondrian partition of version 1.2
 Up to version 1.2 the default Mondrian partition departed from the recursion in two details. The
 whole box was always cut, as if :math:`E = 0` at the root. The axis was chosen uniformly, with
 probability :math:`1/d`, whatever the sides. Each child still waited
-:math:`\operatorname{Exp}\big(\sum_c \ell_c\big)` for its own cut. It remains available as
-``"mondrian-legacy"``, to reproduce earlier results.
+:math:`\operatorname{Exp}\big(\sum_c \ell_c\big)` for its own cut. The rate was measured on
+:math:`H`, the box of the data and the locations, not on :math:`D`. It remains available as
+``"mondrian-legacy"``, with that rate, to reproduce earlier results.
 
 On a square domain the difference is modest at coarse granularities, the co-occurrence lying
 somewhat below :math:`e(\{x,y\})`, and the partition holding about twice as many cells for the same

@@ -104,6 +104,14 @@ Results that change
   ``alpha`` the new default holds about half as many cells, so its partitions are coarser. A search
   of hyperparameters chooses ``alpha`` again (:doc:`theory/encoders`). The spatial entropy and
   co-estimation of :mod:`spatialize.futures` use the theory's process as well.
+- **The Mondrian rate comes from the box of the data.** ``alpha`` now sets the rate
+  :math:`\lambda = 1/(\mu(D)(1-\alpha))` on the box :math:`D` of the data, while the partitions are
+  still drawn on the box of the data and the queries. Up to version 1.2 the rate came from the box of
+  the data and the queries, so asking for estimates over a larger region coarsened the cells
+  everywhere. With the theory's Mondrian process, which is consistent under restriction, the law of
+  the estimate at a location no longer depends on the other locations requested. Results change only
+  where queries lie outside the box of the data, as on most grids. The partition of version 1.2,
+  ``"mondrian-legacy"``, keeps the rate of version 1.2 (:doc:`theory/encoders`).
 
 - **Adaptive IDW and the sharpened decoder.** Their weights were :math:`1/(10^{-10} + d^p)`, which
   gave many nearby data the same weight with large exponents and vanished for large coordinates,

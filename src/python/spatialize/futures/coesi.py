@@ -5,7 +5,7 @@ The method works in two stages.
 
 1. **Marginal stage.** Each variable, with its own data, is estimated by its own ensemble (Mondrian
    partitions and the decoder ``estimation``) at ``n_aux`` auxiliary locations drawn uniformly in
-   the box of the data and the queries. The members of each variable at each auxiliary location
+   the box of the data and the queries, with the Mondrian rate set on the box of the data. The members of each variable at each auxiliary location
    are reduced to one value by ``aggregation``.
 2. **Joint stage.** A second ensemble of Mondrian partitions is drawn on the auxiliary locations.
    In each of its cells, ``co_estimation`` receives the values of every variable at the auxiliary

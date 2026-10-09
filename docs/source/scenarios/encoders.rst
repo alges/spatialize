@@ -22,8 +22,9 @@ the theory from the processes actually implemented.
        :math:`\lambda - E`. Its co-occurrence is
        :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`. Spatialize implements it as its
        default partition, ``p_process="mondrian"`` since version 1.3 (profiles ``mondrian`` and
-       ``mondrian-theory`` in the scenario files). The box is the bounding box of samples and
-       queries, or the session domain when one is set (:doc:`../reference/session`).
+       ``mondrian-theory`` in the scenario files). It is drawn on the bounding box of samples and
+       queries, or on the session domain when one is set (:doc:`../reference/session`), with its
+       rate set on the box of the data.
    * - the Mondrian partition of Spatialize 1.2
      - The default Mondrian partition of Spatialize up to version 1.2, now
        ``p_process="mondrian-legacy"`` (profile ``mondrian-legacy``). It always splits the root
@@ -49,22 +50,24 @@ From the Mondrian rate to ``alpha``
 
 Spatialize exposes a normalised granularity :math:`\alpha \in [0, 1)` (Egaña et al., 2021, eq. 8),
 which differs from the rate :math:`\lambda`. The Mondrian budget is derived from it for the box
-:math:`H` the partition is drawn on, as
+:math:`D` of the data, as
 
 .. math::
 
    \begin{gathered}
-   \lambda(\alpha) = \frac{1}{\mu(H)\,(1-\alpha)}, \qquad \mu(H) = \sum_i (b_i - a_i),
+   \lambda(\alpha) = \frac{1}{\mu(D)\,(1-\alpha)}, \qquad \mu(D) = \sum_i (b_i - a_i),
    \\
-   \text{equivalently}\quad \alpha = 1 - \frac{1}{\lambda\,\mu(H)} .
+   \text{equivalently}\quad \alpha = 1 - \frac{1}{\lambda\,\mu(D)} .
    \end{gathered}
 
-The same :math:`\alpha` therefore gives different rates on different boxes. The value
-:math:`\alpha = 0` gives the coarsest partition (:math:`\lambda = 1/\mu(H)`), while
-:math:`\alpha \to 1` gives ever finer ones, and on the unit square :math:`\lambda = 1/(2(1-\alpha))`.
-Scenarios declare the rate :math:`\lambda` together with the domain :math:`H`. Spatialize's runner
-derives ``alpha`` from both (:func:`spatialize.scenarios.runners.spatialize.alpha_from_rate`),
-pinning the box to the declared domain by adding the domain's corners as extra queries.
+The same :math:`\alpha` therefore gives different rates for data in different boxes. The value
+:math:`\alpha = 0` gives the coarsest partition (:math:`\lambda = 1/\mu(D)`), while
+:math:`\alpha \to 1` gives ever finer ones. For data spanning the unit square,
+:math:`\lambda = 1/(2(1-\alpha))`. When the data have no extent, :math:`\mu` is measured on the box
+:math:`H` the partition is drawn on. The partition of version 1.2 measures it on :math:`H` always. Scenarios declare the rate :math:`\lambda` together with the
+domain :math:`H`. Spatialize's runner derives ``alpha`` from the rate and the box of the data
+(:func:`spatialize.scenarios.runners.spatialize.alpha_from_rate`). It pins the box the partitions are
+drawn on to the declared domain by adding the domain's corners as extra queries.
 
 From the Voronoi intensity to ``alpha``
 =======================================

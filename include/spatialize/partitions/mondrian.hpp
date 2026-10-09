@@ -113,6 +113,17 @@ namespace sptlz{
 		return(c);
 	}
 
+	// The measure mu(H) that turns alpha into a Mondrian lifetime, 1/(mu(H)(1 - alpha)): the sum of the
+	// sides of the data's box, so that the granularity does not depend on the queries. The Mondrian
+	// process is consistent under restriction, so with a fixed lifetime the law of the partition around
+	// a location does not depend on the box it is drawn on. Falls back to the drawing box `bbox` when the
+	// data's box has no extent (a single datum).
+	template <typename Samples>
+	float granularity_measure(Samples *smp, std::vector<std::vector<float>> &bbox){
+		float mu = bbox_sum_interval(samples_coords_bbox(smp));
+		return(mu > 0 ? mu : bbox_sum_interval(bbox));
+	}
+
 	class MondrianNode {
 		public:
 			int leaf_id;

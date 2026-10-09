@@ -59,8 +59,10 @@ New
   (Student-t kernels by default, or generalized Pareto). ``calibration()`` reports how well the laws
   are calibrated, with plots of the calibration, of the surprise on the map and of each datum's law
   (:doc:`theory/posterior`). The partitions also give each datum a declustering weight, the share of
-  the domain it represents, for declustered summaries of the values, while the coherence of the
-  neighbours, the proportional effect and the co-located data complete the review. The functions of version 1.2 work on top of it.
+  the domain it represents, for declustered summaries of the values, while the shift and the coherence of
+  the neighbours, which tell an isolated error from an unrepresented part of the domain, the
+  proportional effect and the co-located data complete the review. Scenario P12 holds the analysis to
+  planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.
 
 Under study
 -----------

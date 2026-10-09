@@ -9,7 +9,7 @@ fast the ensemble converges, what the decoders return, how the estimated law is 
 without data are treated. A proposition holds for every field, so most of these checks are exact
 (almost sure) or identities with a known standard error.
 
-P2, P3, P6, P10 and P11 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
+P2, P3, P6, P10, P11 and P12 are implemented. P1, P4 and P7 can be implemented now. P5, P8 and P9 read the
 law of the marks of empty cells, so their targets must first be derived for the mark strategies
 Spatialize implements (:doc:`../theory/blockmark`).
 
@@ -340,3 +340,58 @@ and warn above the session setting ``max_left_out`` (:doc:`../reference/session`
 
 The design was chosen on probes before the first run. With noise 0.05 and rate 24 the control's
 p-values, between :math:`10^{-4}` and :math:`10^{-7}`, came too close to its Holm level.
+
+.. _scenario-P12:
+
+P12 — Posterior analysis of the data
+====================================
+
+:Status: **implemented**
+:Evaluator: ``posterior_audit``
+:Source in the theory: a value its neighbours do not support may be an error or an unrepresented
+  part of the domain, which only its provenance decides (:doc:`../theory/posterior`)
+:Claim: read against the laws the other data give, planted errors are flagged, the neighbours of an
+  isolated error and of a raised patch are surprised in opposite ways, and the partitions decluster
+  a preferential design. The flags of clean fields stay within the false discovery rate, a claim
+  recorded as a known failure.
+
+**Setup.** Each replicate field holds 300 data uniform on the unit square, with values
+:math:`\sin(2\pi x) + 0.5\cos(2\pi y)` plus Gaussian noise of standard deviation 0.1, read in four
+versions:
+
+- clean;
+- with three planted errors, a value multiplied by 10, one raised by 3 standard deviations and one
+  lowered by 2.5;
+- with a square of side 0.2 raised by 1.5 (about 12 data) and one isolated error, raised by 2.5;
+- preferential, half of the data drawn where the field exceeds 0.8.
+
+The leave-one-out ensembles come from the runner's optional method ``loo``, with IDW on the Mondrian
+partition of rate :math:`10/3` (Spatialize's ``alpha`` = 0.85) and :math:`T = 300` members, and the
+cells of the partitions from ``cells``. The readings are those of
+:class:`~spatialize.gs.spa.PosteriorAudit` with its defaults, flags at :math:`q = 0.05`. The scenario
+uses 20 fields in ``ci`` and 40 in ``full``.
+
+**Checks.**
+
+- ``errors-found``, *one-sided*. The share of the planted errors flagged exceeds one half.
+- ``clean-flags``, *one-sided*, known failure. The share of clean fields with a flag stays below
+  0.05. The laws' tails remain too light at the 99 % level, so the false discovery rate is not
+  controlled.
+- ``shift-patch``, *paired-relation*. The mean shift of the square's data exceeds that of the other
+  data.
+- ``shift-error``, *one-sided*. The shift at the isolated error is negative.
+- ``declustering``, *paired-relation*. The declustered mean lies closer to the field's mean over the
+  domain than the plain mean, under the preferential design.
+- ``weights``, *almost-sure*. The declustering weights are positive and sum to 1.
+
+**Results.** On seeds 1 to 3 in ``ci`` and seed 1 in ``full`` every check passes, with 93 % to 95 %
+of the planted errors flagged, a shift of the square above the others by 0.22 (p at most
+:math:`2.1 \cdot 10^{-7}`), a shift of -0.36 at the isolated error and a declustered mean closer
+to the field's mean by 0.37. Between 30 % and 45 % of the clean fields carry a flag, the known
+failure.
+
+**History.** The first version checked the coherence of the square, which passed at its limit, the
+coherence being a weak signal (0.06 to 0.10). Inside the square a datum's law is built from
+neighbours of the square, so the datum itself is hardly surprised while its neighbourhood is. The
+shift reading replaced it before the first commit, with the sizes computed by the power rule
+(``provenance`` of the descriptor).

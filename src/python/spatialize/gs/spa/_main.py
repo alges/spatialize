@@ -297,6 +297,11 @@ class PosteriorAudit:
         ``"normal"``, a kernel density with Gaussian kernels. Default: ``"t"``.
     nu : float, optional
         The degrees of freedom of the Student-t kernels. Default: 3.
+    cells : callable, optional
+        ``cells(n_probes, seed) -> (data_cells, probe_cells)``, the labels of the cells of the data,
+        shape (n, T), and of ``n_probes`` locations drawn uniformly in the box of the partitions,
+        shape (n_probes, T), in the partitions of the members; needed by :meth:`weights`.
+        :func:`posterior_audit` provides it. Default: None.
 
     Attributes
     ----------
@@ -323,7 +328,8 @@ class PosteriorAudit:
     """
 
     def __init__(self, members, points, values, fitted_model_factory=None, callback=default_singleton_callback,
-                 widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0):
+                 widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0,
+                 cells=None):
         self.members = np.asarray(members, dtype=np.float64)
         self.points = np.asarray(points)
         self.values = np.asarray(values, dtype=np.float64).ravel()
@@ -347,7 +353,7 @@ class PosteriorAudit:
         self._laws = None
         self._factor = None
         self._readings = None
-        self._cells = None          # set by posterior_audit: the cells of locations in its partitions
+        self._cells = cells         # the cells of the data and of probe locations in the partitions
         self._weights = None
 
     def _widening_targets(self):
@@ -576,7 +582,7 @@ class PosteriorAudit:
             that law read on its sample, so that ``excess`` = ``surprisal`` − ``entropy`` is near 0
             for a datum typical of its law; ``width90``, the width of the central 90 % interval of
             the law, in the units of the values; ``support`` (:attr:`support`); ``coherence``
-            (:meth:`coherence`); ``weight`` (:meth:`weights`, NaN when the audit does not hold its
+            (:meth:`coherence`); ``shift`` (:meth:`shift`); ``weight`` (:meth:`weights`, NaN when the audit does not hold its
             partitions). The log scores and the entropy are on the scale of the readings
             (``scale``).
         """
@@ -588,7 +594,7 @@ class PosteriorAudit:
         return pd.DataFrame({"value": self.values, "pit": self.pit(), "tail_p": tail,
                              "flag": _bh(tail, q), "level": self.levels(alphas), "surprisal": -logf,
                              "entropy": ent, "excess": -logf - ent, "width90": hi - lo,
-                             "support": self.support, "coherence": self.coherence(),
+                             "support": self.support, "coherence": self.coherence(), "shift": self.shift(),
                              "weight": self.weights() if self._cells is not None else np.nan})
 
     def coherence(self, k=8):
@@ -627,6 +633,42 @@ class PosteriorAudit:
                 out[i] = float(np.mean(side[nb] == side[i]))
         return out
 
+    def shift(self, k=8):
+        r"""For each datum, the mean signed position of its ``k`` nearest other data in their laws,
+        :math:`\frac1k \sum_{j} (2u_j - 1)`, between -1 and 1.
+
+        Read together with the datum's own position, it tells an isolated error from a part of the
+        domain the laws do not represent. An erroneous value pulls the laws of its neighbours towards
+        it, so they fall on the other side: a datum far above its law with a negative shift. Data of
+        an unrepresented part of the domain are surprised together: a datum above its law with a
+        positive shift. Clean data have a shift near 0.
+
+        Parameters
+        ----------
+        k : int, optional
+            The number of nearest other data. Default: 8.
+
+        Returns
+        -------
+        ndarray of shape (n,)
+        """
+        from scipy.spatial import cKDTree
+        pts = np.asarray(self.points, float)
+        n = len(pts)
+        k = min(int(k), n - 1)
+        if k < 1:
+            return np.full(n, np.nan)
+        pos = 2.0 * self.pit() - 1.0
+        _, idx = cKDTree(pts).query(pts, k=min(k + 1, n))
+        idx = np.reshape(idx, (n, -1))
+        out = np.full(n, np.nan)
+        for i in range(n):
+            nb = idx[i][idx[i] != i][:k]
+            nb = nb[np.isfinite(pos[nb])]
+            if nb.size:
+                out[i] = float(np.mean(pos[nb]))
+        return out
+
     def weights(self, n_probes=20000):
         """The declustering weight of each datum, read from the partitions.
 
@@ -652,7 +694,8 @@ class PosteriorAudit:
             When the audit was not built by :func:`posterior_audit`, which holds its partitions.
         """
         if self._cells is None:
-            raise SpatializeError("the declustering weights need the partitions: build the audit with posterior_audit")
+            raise SpatializeError("the declustering weights need the partitions: build the audit with "
+                                  "posterior_audit, or give PosteriorAudit its cells")
         if self._weights is None:
             data_cells, probe_cells = self._cells(int(n_probes), self.seed)
             n, T = data_cells.shape
@@ -767,9 +810,11 @@ class PosteriorAudit:
             (``observed``), its binomial standard error under calibration (``se``) and ``z`` =
             (observed − alpha)/se, and with ``calibrate`` the share before the factor
             (``before_factor``); ``spread_factor``; ``ks_p``, the p-value of the Kolmogorov–Smirnov test of the
-            positions against the uniform law; ``n``, the data with a law; ``verdict``,
+            positions against the uniform law; ``n``, the data with a law; ``verdict``, the
+            calibration of the tails, the intervals of probability 0.9 or more, which the flags read:
             ``"calibrated"``, ``"too narrow"`` or ``"too wide"`` (an interval more than 3 standard
-            errors off). A verdict other than calibrated is also logged as a warning.
+            errors off), logged as a warning when not calibrated; ``centre``, the same for the
+            intervals of probability below 0.9.
 
         Notes
         -----
@@ -794,18 +839,22 @@ class PosteriorAudit:
             cov["before_factor"] = [float(np.mean((before >= (1 - a) / 2) & (before <= (1 + a) / 2)))
                                     for a in cov["alpha"]]
         ks_p = float(stats.kstest(pit, "uniform").pvalue) if n else np.nan
-        verdict = "calibrated"
-        if n and (cov["z"] < -3).any():
-            verdict = "too narrow"
-        elif n and (cov["z"] > 3).any():
-            verdict = "too wide"
+        def judge(rows):
+            if not n or rows.empty:
+                return "calibrated"
+            if (rows["z"] < -3).any():
+                return "too narrow"
+            return "too wide" if (rows["z"] > 3).any() else "calibrated"
+        verdict = judge(cov[cov["alpha"] >= 0.9])       # the tails, which the flags read
+        centre = judge(cov[cov["alpha"] < 0.9])
         if verdict != "calibrated":
             log_message(logging.logger.warning(
-                f"the laws of the data look {verdict}: " + ", ".join(
+                f"the tails of the laws look {verdict}: " + ", ".join(
                     f"{r.alpha:g} → {r.observed:.3f}" for r in cov.itertuples()) +
                 ("; flags are inflated, consider widening or coarser partitions" if verdict == "too narrow"
                  else "; surprises may be hidden")))
-        return {"coverage": cov, "ks_p": ks_p, "n": n, "verdict": verdict, "spread_factor": self.spread_factor}
+        return {"coverage": cov, "ks_p": ks_p, "n": n, "verdict": verdict, "centre": centre,
+                "spread_factor": self.spread_factor}
 
     # ------------------------------------------------------------------ plots
     def plot_calibration(self, alphas=None, theme='alges', color=None, **figargs):
@@ -1295,8 +1344,7 @@ def posterior_audit(points, values, **kwargs):
     audit = PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"],
                            widening=kwargs["widening"], widening_knn=kwargs["widening_knn"], seed=kwargs["seed"],
                            scale=kwargs["scale"], calibrate=kwargs["calibrate"], tails=kwargs["tails"],
-                           nu=kwargs["nu"])
-    audit._cells = _cells_reader(points, kwargs)
+                           nu=kwargs["nu"], cells=_cells_reader(points, kwargs))
     weak = int(np.sum(audit.support < 0.5))
     if weak:
         log_message(logging.logger.warning(

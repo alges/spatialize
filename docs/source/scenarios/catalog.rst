@@ -120,6 +120,10 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - a score that drops undefined members leaves out the hardest data
      - **implemented**
      - —
+   * - :ref:`P12 <scenario-P12>`
+     - posterior analysis finds planted errors and declusters a preferential design
+     - **implemented**
+     - the false discovery rate on clean fields (known failure)
    * - 
      - **T3 — geostatistical scenarios**
      - 

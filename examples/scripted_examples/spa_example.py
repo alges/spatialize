@@ -1,98 +1,57 @@
+"""Posterior analysis of the data: each datum read against the law the other data give it.
+
+Run from the repository with ``python examples/scripted_examples/spa_example.py``. The figures are
+written next to the script's working directory.
+"""
+import matplotlib
+
+matplotlib.use("Agg")
 import numpy as np
-import matplotlib.pyplot as plt
 
 from spatialize import logging
 from spatialize.data import load_drill_holes_andes_2D
-from spatialize.gs.esi import esi_nongriddata, esi_hparams_search
-from spatialize.gs.spa import cv_sample_pred_posterior
+from spatialize.gs.esi import esi_hparams_search
+from spatialize.gs.spa import posterior_audit
 
-# for a more explanatory output of the spatialize functions
 logging.log.setLevel("INFO")
 
-model_dir_path = "./andes_2D"
-
-# number of simulations to generate
-n_sims = 100
-
-# the samples included in the spatialize package
-samples, locations, krig, _ = load_drill_holes_andes_2D()
-
-# input variables for non gridded estimation spatialize functions
+samples, locations, _, _ = load_drill_holes_andes_2D()
 points = samples[['x', 'y']].values
 values = samples[['cu']].values[:, 0]
 xi = locations[['x', 'y']].values
 
-fixed_esi_n_partitions = 500
-adaptive_esi_idw_n_partitions = 200
 
+def main():
+    # a cheap search for the decoder's parameters, then the audit with many partitions
+    search = esi_hparams_search(points, values, xi, local_interpolator="idw", griddata=False, k=10,
+                                exponent=[1.0, 2.0, 4.0], alpha=(0.7, 0.8, 0.9), n_partitions=[50], seed=1500)
+    audit = posterior_audit(points, values, local_interpolator="idw", n_partitions=300, seed=1500,
+                            best_params_found=search.best_result())
 
-def esi_idw(p_process, values):
-    search_result = esi_hparams_search(points, values, xi,
-                                       local_interpolator="idw", griddata=False, k=10,
-                                       p_process=p_process,
-                                       exponent=list(np.arange(1.0, 15.0, 1.0)),
-                                       alpha=(0.5, 0.6, 0.8, 0.9, 0.95, 0.98),
-                                       seed=1500)
+    # calibration first: the flags are to be read in its light
+    calibration = audit.calibration()
+    print(calibration["coverage"].round(3).to_string(index=False))
+    print(f"spread factor {calibration['spread_factor']:.2f}; tails: {calibration['verdict']}, "
+          f"centre: {calibration['centre']}")
 
-    result = esi_nongriddata(points, values, xi,
-                             local_interpolator="idw",
-                             p_process=p_process,
-                             n_partitions=fixed_esi_n_partitions,
-                             best_params_found=search_result.best_result())
+    # the readings of every datum, the most surprising first
+    table = audit.table().sort_values("tail_p")
+    print(table.head(10).round(4).to_string())
+    print(f"{int(table.flag.sum())} data flagged at a false discovery rate of 5 %")
 
-    result.quick_plot(figsize=(10, 5))
-    result.preview_esi_samples(n_imgs=9, n_cols=3)
-    return result
+    # how much of the domain each datum represents
+    print(audit.declustered().round(4).to_string())
 
+    # co-located data with different values
+    print(audit.duplicates().head(5).to_string())
 
-def adaptive_esi_idw(values):
-    search_result = esi_hparams_search(points, values, xi,
-                                       local_interpolator="adaptiveidw", griddata=False, k=10,
-                                       n_partitions=[5, 10],
-                                       alpha=(0.5, 0.8, 0.9, 0.95),
-                                       seed=1500)
-
-    result = esi_nongriddata(points, values, xi,
-                             local_interpolator="adaptiveidw",
-                             n_partitions=adaptive_esi_idw_n_partitions,
-                             best_params_found=search_result.best_result())
-
-    result.quick_plot(figsize=(10, 5))
-    result.preview_esi_samples(n_imgs=9, n_cols=3)
-    return result
-
-
-def cv_post_samples_adaptive_esi_idw():
-    result = cv_sample_pred_posterior(points, values, xi,
-                                      local_interpolator="adaptiveidw",
-                                      n_partitions=adaptive_esi_idw_n_partitions,
-                                      alpha=0.5)
-    return result
-
-
-def cv_post_samples_esi_idw(p_process):
-    search_result = esi_hparams_search(points, values, xi,
-                                       local_interpolator="idw", griddata=False, k=10,
-                                       p_process=p_process,
-                                       exponent=list(np.arange(1.0, 15.0, 1.0)),
-                                       alpha=(0.5, 0.6, 0.8, 0.9, 0.95, 0.98))
-
-    result = cv_sample_pred_posterior(points, values, xi,
-                                      local_interpolator="idw",
-                                      p_process=p_process,
-                                      n_partitions=fixed_esi_n_partitions,
-                                      best_params_found=search_result.best_result())
-
-    return result
+    for name, fig in (("calibration", audit.plot_calibration()), ("surprise_map", audit.plot_map()),
+                      ("value_vs_position", audit.plot_value_pit()),
+                      ("most_surprising", audit.plot_datum(int(table.index[0]))),
+                      ("declustered", audit.plot_declustered()),
+                      ("proportional_effect", audit.plot_proportional_effect())):
+        fig.savefig(f"spa_{name}.png", dpi=100)
 
 
 if __name__ == '__main__':
-    sample_analyzer = cv_post_samples_esi_idw("mondrian")
-    # sample_analyzer = cv_post_samples_adaptive_esi_idw()
-
-    sample_analyzer.plot_summary(figsize=(14, 5))
-    sample_analyzer.quick_plot_models(n_imgs=9, n_cols=3, figsize=(14, 10))
-
-    samples_ranking = sample_analyzer.rank_samples()
-    sample_analyzer.plot_ranking(samples_ranking)
-    plt.show()
+    main()

@@ -286,6 +286,19 @@ the runner's optional method ``loo`` (:doc:`extending`). Every estimator is run 
          The errors of the reference at the data kept and left out are compared by a
          Kolmogorov–Smirnov test (two-sample), run as a negative control.
 
+Evaluator ``posterior_audit``
+-----------------------------
+
+This evaluator reads the data against the laws the other data give (scenario P12), through the
+runner's optional methods ``loo`` and ``cells`` (:doc:`extending`), with the readings of
+:class:`~spatialize.gs.spa.PosteriorAudit`.
+
+- ``data``: ``n`` data uniform in the domain, their ``noise``, the ``patch`` (``side`` and
+  ``shift``), the ``preferential`` design (half of the data where the field exceeds ``above``), the
+  false discovery rate ``q``, ``fields`` (per mode) and ``generator_seed``.
+- per check, ``kind`` (``errors_found``, ``clean_flags``, ``shift_patch``, ``shift_error``,
+  ``declustering``, ``weights``), ``estimator`` and, for the one-sided kinds on shares, ``bound``.
+
 Evaluator ``draw_laws``
 -----------------------
 

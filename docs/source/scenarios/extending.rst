@@ -56,7 +56,7 @@ them skipped. Spatialize's runner reads the cells with ``lib_spatialize_facade.c
 
 A runner may also give leave-one-out ensembles, through a method
 ``loo(est, samples, values, *, n_members, seed)`` returning an array of shape
-``(n_samples, n_members)``, each datum predicted from the other data. Scenario P11 needs it.
+``(n_samples, n_members)``, each datum predicted from the other data. Scenarios P11 and P12 need it, P12 together with ``cells``.
 
 Testing a new spatialize decoder
 ================================

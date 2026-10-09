@@ -1086,9 +1086,154 @@ def eval_cv_selection(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _audit_fields(s, k):
+    """The data of field ``k`` of a posterior_audit scenario, drawn from ``data.generator_seed + k``:
+    ``clean``, ``planted`` (three planted errors), ``patch`` (a raised square of data plus one
+    isolated error) and ``preferential`` (half of the data where the field is high), with the indices
+    of the planted errors, the mask of the patch and the field's mean over the domain."""
+    d = s["data"]
+    rng = np.random.default_rng(int(d["generator_seed"]) + k)
+    box = np.asarray(s["domain"]["box"], float)
+    lo, hi = box[:, 0], box[:, 1]
+    n, noise = int(d["n"]), float(d["noise"])
+
+    def field(p):
+        u = (p - lo) / (hi - lo)
+        return np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1])
+
+    def uniform(m):
+        return lo + rng.random((m, len(box))) * (hi - lo)
+
+    pts = uniform(n)
+    clean = field(pts) + noise * rng.standard_normal(n)
+    sd = float(np.std(clean))
+    bad = rng.choice(n, 3, replace=False)
+    planted = clean.copy()
+    planted[bad[0]] *= 10
+    planted[bad[1]] += 3 * sd
+    planted[bad[2]] -= 2.5
+    half = float(d["patch"]["side"]) / 2
+    centre = lo + half + rng.random(len(box)) * (hi - lo - 2 * half)
+    patch = np.all(np.abs(pts - centre) < half, axis=1)
+    patched = clean.copy()
+    patched[patch] += float(d["patch"]["shift"])
+    lone = int(rng.choice(np.flatnonzero(~patch)))
+    patched[lone] += 2.5
+    pool = uniform(50 * n)
+    hot = pool[field(pool) > float(d["preferential"]["above"])][: n // 2]
+    pref = np.vstack([uniform(n - len(hot)), hot])
+    pref_values = field(pref) + noise * rng.standard_normal(len(pref))
+    mean = float(np.mean(field(uniform(200000))))
+    return {"points": pts.astype(np.float32), "clean": clean.astype(np.float32),
+            "planted": planted.astype(np.float32), "bad": bad, "patched": patched.astype(np.float32),
+            "patch": patch, "lone": lone, "pref_points": pref.astype(np.float32),
+            "pref_values": pref_values.astype(np.float32), "mean": mean}
+
+
+def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
+                         save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``posterior_audit``: quality control of the data by their own laws (P12).
+
+    Each replicate field gives four sets of data: clean, with three planted errors, with a raised
+    patch plus one isolated error, and preferentially sampled. The leave-one-out ensembles come from
+    the runner's optional method ``loo`` and the cells from ``cells``; the readings are those of
+    :class:`~spatialize.gs.spa.PosteriorAudit` with its defaults (widening, one spread factor,
+    Student-t tails), flags at false discovery rate ``data.q``. Kinds (key ``kind``):
+
+    - ``errors_found`` (one-sided) — the share of the planted errors flagged exceeds ``bound``;
+    - ``clean_flags`` (one-sided) — the share of clean fields with any flag stays below ``bound``;
+    - ``shift_patch`` (paired-relation) — the mean shift (:meth:`PosteriorAudit.shift
+      <spatialize.gs.spa.PosteriorAudit.shift>`) of the patch's data exceeds that of the other data;
+    - ``shift_error`` (one-sided) — the shift at the isolated error is negative, its neighbours'
+      laws being pulled towards it;
+    - ``declustering`` (paired-relation) — the declustered mean is closer to the field's mean than
+      the plain mean, under the preferential design;
+    - ``weights`` (almost-sure) — the declustering weights are positive and sum to 1.
+
+    Reads ``data.n``, ``data.noise``, ``data.patch``, ``data.preferential``, ``data.q``,
+    ``data.fields`` (per mode), ``data.generator_seed`` and ``estimators_T``.
+    """
+    from spatialize.gs.spa import PosteriorAudit
+    s = sc.spec
+    K = int(_mode_value(s["data"]["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    q = float(s["data"]["q"])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def audit(est, pts, vals, key):
+        if key not in cache:
+            members = np.asarray(runner.loo(est, pts, vals, n_members=T, seed=seed), float)
+            box = np.asarray(est.domain, float)
+
+            def cells(n_probes, probe_seed):
+                rng = np.random.default_rng(probe_seed)
+                probes = (box[:, 0] + rng.random((n_probes, len(box))) * (box[:, 1] - box[:, 0])).astype(np.float32)
+                lab = np.asarray(runner.cells(est, pts, np.vstack([pts, probes]), n_members=T, seed=seed))
+                return lab[: len(pts)], lab[len(pts):]
+            cache[key] = PosteriorAudit(members, pts, vals, seed=seed, cells=cells)
+        return cache[key]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+        cid, title = check["id"], f"{check['title']} [{profile}]"
+        if not runner.supports(est) or not hasattr(runner, "loo") or not hasattr(runner, "cells"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no leave-one-out ensembles or cells for {est.encoder}/{est.decoder}"))
+            continue
+        x, y, bad_w, n_w = [], [], 0, 0
+        for k in range(K):
+            f = _audit_fields(s, k)
+            if kind == "errors_found":
+                a = audit(est, f["points"], f["planted"], ("planted", est.id, k))
+                x.append(float(np.mean(a.flags(q)[f["bad"]])))
+            elif kind == "clean_flags":
+                a = audit(est, f["points"], f["clean"], ("clean", est.id, k))
+                x.append(float(a.flags(q).any()))
+            elif kind == "shift_patch":
+                a = audit(est, f["points"], f["patched"], ("patch", est.id, k))
+                sh = a.shift()
+                x.append(float(np.nanmean(sh[f["patch"]])))
+                y.append(float(np.nanmean(sh[~f["patch"]])))
+            elif kind == "shift_error":
+                a = audit(est, f["points"], f["patched"], ("patch", est.id, k))
+                x.append(float(a.shift()[f["lone"]]))
+            elif kind == "declustering":
+                a = audit(est, f["pref_points"], f["pref_values"], ("pref", est.id, k))
+                d = a.declustered()
+                x.append(abs(d.loc["mean", "declustered"] - f["mean"]))
+                y.append(abs(d.loc["mean", "naive"] - f["mean"]))
+            elif kind == "weights":
+                a = audit(est, f["pref_points"], f["pref_values"], ("pref", est.id, k))
+                w = a.weights()
+                bad_w += int(np.sum(~(w > 0)) + (abs(w.sum() - 1) > 1e-9))
+                n_w += len(w) + 1
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+        if kind == "errors_found":
+            r = families.mean_greater(x, float(check["bound"]))
+        elif kind == "clean_flags":
+            r = families.mean_less(x, float(check["bound"]))
+        elif kind == "shift_patch":
+            r = families.paired_relation(x, y, better="greater")
+        elif kind == "shift_error":
+            r = families.mean_less(x, 0.0)
+        elif kind == "declustering":
+            r = families.paired_relation(x, y, better="less")
+        else:
+            r = families.almost_sure(bad_w, n_w)
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                known_failure=check.get("known_failure", "")))
+    return out
+
+
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
-              "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection}
+              "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
+              "posterior_audit": eval_posterior_audit}
 
 
 # ----------------------------------------------------------------------------- run

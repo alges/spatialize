@@ -225,8 +225,12 @@ The calibration is read on the data themselves, through the coverage of the cent
 
 compared with the probability :math:`\alpha` through its binomial standard error, and through the
 Kolmogorov–Smirnov distance of the positions :math:`u_i` from the uniform law. Spatialize reports
-:math:`\hat C(\alpha)` before and after the factor, and calls the laws too narrow when some
-:math:`z(\alpha) < -3`, too wide when some :math:`z(\alpha) > 3`.
+:math:`\hat C(\alpha)` before and after the factor, and calls the tails of the laws too narrow when
+:math:`z(\alpha) < -3` for some :math:`\alpha \ge 0.9`, too wide when :math:`z(\alpha) > 3`. The
+tails govern the flags, so they carry the verdict. The centre, the intervals of smaller probability,
+is judged apart, since a law may be too wide in its centre with tails of the right weight, as on
+the drill holes of the Andes data bundled with Spatialize, whose 50 % intervals held 68 % of the
+data and whose 90 % and 99 % intervals held 90.5 % and 98.5 %.
 
 What the corrections achieve
 ----------------------------
@@ -298,21 +302,37 @@ decimal point misplaced, or it may record a part of the domain the other data do
 thin seam or a stream that only runs in flood. Nothing in the number tells the two apart, since the
 difference lies in the provenance of the datum.
 
-The neighbours of a surprising datum give some evidence. Its *coherence* is the share of its
-:math:`k` nearest other data (8 by default) that lie on the same side of their own laws,
+The neighbours of a surprising datum give some evidence, through their own positions
+:math:`u_j`. Its *shift* is their mean signed position,
 
 .. math::
 
-   \kappa_i = \frac1k \sum_{j \in N_k(i)} \mathbf 1\big\{\operatorname{sign}(u_j - \tfrac12) = \operatorname{sign}(u_i - \tfrac12)\big\}.
+   \sigma_i = \frac1k \sum_{j \in N_k(i)} (2u_j - 1) \in [-1,\ 1],
 
-When the neighbours are drawn from their laws, independently of the datum, each lies on either side
-with probability one half, so :math:`k\kappa_i` follows a binomial law of :math:`k` trials of
-probability :math:`\tfrac12`, of mean :math:`k/2`. Around an isolated error the coherence stays near
-one half. Data of a part of the domain the laws do not represent are surprised together, a coherence
-near 1. On a field with a planted patch of 15 data raised above their surroundings, the patch had a
-mean coherence of 0.74 against 0.56 for the other data, and an isolated error 0.50. Posterior
-analysis gives the evidence and an order, from the most to the least surprising datum. The analyst,
-who knows the provenance, decides.
+over its :math:`k` nearest other data (8 by default), near 0 when the neighbours are drawn from their
+laws. An erroneous value takes part in the laws of its neighbours, pulling them towards it, so the
+neighbours fall on the other side, which gives a datum far above its law a negative shift. Data of a part of
+the domain the laws do not represent are surprised together, a datum above its law having a positive
+shift. Inside such a part, a datum's law is built from neighbours of the same part, so the datum
+itself is hardly surprised while its neighbourhood is. The shift and the datum's own position,
+read together, tell the two cases apart.
+
+On replicate fields of 300 data with a raised square of about 12 data and one isolated error
+(scenario :ref:`scenario-P12`), the shift of the square's data exceeded that of the other data by
+0.22 (standard deviation 0.12 over 20 fields), while the isolated error, always in the far upper
+tail of its law, had a shift of -0.35 (standard deviation 0.19).
+
+The *coherence*, the share of the neighbours on the same side as the datum,
+
+.. math::
+
+   \kappa_i = \frac1k \sum_{j \in N_k(i)} \mathbf 1\big\{\operatorname{sign}(u_j - \tfrac12) = \operatorname{sign}(u_i - \tfrac12)\big\},
+
+follows a binomial law of :math:`k` trials of probability :math:`\tfrac12`, divided by :math:`k`, when
+the neighbours are drawn from their laws independently of the datum. It is a weaker reading of the
+same evidence, the square's data exceeding the others by 0.06 to 0.10 only, since the data of the
+square are themselves hardly surprised. Posterior analysis gives the evidence and an order, from the
+most to the least surprising datum. The analyst, who knows the provenance, decides.
 
 How much of the domain each datum represents
 ============================================

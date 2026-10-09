@@ -372,3 +372,17 @@ def test_posterior_audit_declustering_and_neighbours():
     bare = PosteriorAudit(audit.members, s, v)
     with pytest.raises(SpatializeError):
         bare.weights()
+
+
+def test_posterior_audit_shift_is_the_neighbours_mean_signed_position():
+    """The shift of a datum is the mean of 2u - 1 over its k nearest other data, within [-1, 1]."""
+    from scipy.spatial import cKDTree
+    from spatialize.gs.spa import posterior_audit
+    s, v, _ = DATA["2d"]
+    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED,
+                            callback=lambda *a, **k: None)
+    u = audit.pit()
+    _, idx = cKDTree(np.asarray(s, float)).query(np.asarray(s, float), k=4)
+    expected = np.array([np.mean(2 * u[[j for j in row if j != i][:3]] - 1) for i, row in enumerate(idx)])
+    sh = audit.shift(k=3)
+    assert np.allclose(sh, expected) and np.all(np.abs(sh) <= 1)

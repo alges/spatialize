@@ -1,5 +1,5 @@
 id: P2-weighted-draw
-version: 2
+version: 3
 tier: T2
 evaluator: draw_laws
 book:
@@ -57,3 +57,4 @@ provenance:
     T. Their variance identities were tried and removed before release: they failed on every seed
     because reading the dispersion as reference(z²) − reference(z)² refits the value-dependent weights
     on z², which tests the reading, not the decoder. Support and mean identities kept.
+  v3: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

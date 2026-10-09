@@ -1,5 +1,5 @@
 id: E2-mondrian-pair-cooccurrence
-version: 3
+version: 4
 tier: T1
 evaluator: pair_cooccurrence
 book:
@@ -16,7 +16,7 @@ data:
   directions: [[1, 0], [1, 1]]      # along an axis and along the diagonal (ℓ1-normalised steps)
   displacements: [0.05, 0.1, 0.2, 0.3]
 estimators:
-  - {id: idw, encoder: mondrian, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  - {id: idw, encoder: mondrian-legacy, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
   - {id: idw-theory, encoder: mondrian-theory, rate: 3.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
 checks:
   - id: c1
@@ -30,7 +30,8 @@ checks:
       # Negative control: spatialize's default Mondrian draws the cut axis uniformly and always
       # splits the root (not the book's Mondrian process); measured co-occurrence is 4–21 % below the closed form on
       # the unit square. The test must reject it — that proves its power.
-      mondrian: reject
+      mondrian-legacy: reject
 provenance:
   v2: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"
   v3: "2026-10-06: estimator idw-theory on the theory's Mondrian process (spatialize's p_process='mondrian-raw'); c1 now reads both estimators, the default Mondrian remaining the negative control"
+  v4: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."

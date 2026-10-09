@@ -163,24 +163,24 @@ namespace registry {
   inline const std::vector<PartitionSpec> &partitions(){
     static const std::vector<PartitionSpec> specs = {
       {"mondrian",
-       "Spatialize's Mondrian partition: the root box is always split, the cut axis drawn uniformly.",
+       "The Mondrian process of the theory: the root draws its split time Exp(mu(H)), the cut axis is chosen with probability proportional to its side.",
        "normalised granularity in [0, 1): lifetime lambda = 1/(mu(H)(1 - alpha)), mu(H) the sum of the box's sides",
        1, ANY,
        [](std::vector<std::vector<float>> &smp, std::vector<float> &val, std::vector<std::vector<float>> &bbox,
           float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
          float lambda = sptlz::bbox_sum_interval(bbox);
          lambda = 1/(lambda-alpha*lambda);
-         return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, false));
+         return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, true));
        }},
-      {"mondrian-raw",
-       "The theory's Mondrian process: the root draws its split time Exp(mu(H)), the cut axis is chosen with probability proportional to its side.",
+      {"mondrian-legacy",
+       "The Mondrian partition of Spatialize 1.2 and earlier: the root box is always split, the cut axis drawn uniformly.",
        "as for 'mondrian'",
        1, ANY,
        [](std::vector<std::vector<float>> &smp, std::vector<float> &val, std::vector<std::vector<float>> &bbox,
           float alpha, int forest_size, int seed, std::function<int(std::string)> visitor)->sptlz::Ensemble*{
          float lambda = sptlz::bbox_sum_interval(bbox);
          lambda = 1/(lambda-alpha*lambda);
-         return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, true));
+         return(new sptlz::ESI(smp, val, lambda, forest_size, bbox, visitor, seed, false));
        }},
       {"voronoi",
        "Voronoi partition with max(1, Poisson(0.5 n |alpha|)) nuclei, at most n.",

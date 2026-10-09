@@ -7,10 +7,10 @@ T1 — Encoder law
 Scenarios of tier T1 test the law of the partition process itself, through the probability that
 locations share a cell, the law of the partition of a few points and the joint moments of block-mark
 fields built on it. Their targets are closed forms of the theory's processes. Spatialize's default
-Mondrian partition differs from the theory's process (:doc:`encoders`), so on it the Mondrian
-scenarios are *negative controls*, tests expected to reject, which show that the test can see a
-deviation of that size. On Spatialize's opt-in partition ``"mondrian-raw"``, which implements the
-theory's process, they are ordinary checks.
+Mondrian partition, ``"mondrian"``, implements the theory's process since version 1.3, so on it
+they are ordinary checks. The Mondrian partition of version 1.2, ``"mondrian-legacy"``, differs from
+the theory's process (:doc:`encoders`), so on it the Mondrian scenarios are *negative controls*,
+tests expected to reject, which show that the test can see a deviation of that size.
 
 Every target value below follows from the definitions, independently of the examples in the theory,
 which is still a draft.
@@ -79,12 +79,12 @@ The seven other set partitions of four points (e.g. {1,3}{2,4}) are impossible.
 :math:`1/n_C` when the point shares :math:`a`'s cell :math:`C` and 0 otherwise. Four runs with one seed
 see the same partitions, so they give, partition by partition, which points share a cell.
 
-**Results.** On seeds 1 to 3 the theory's process passes (p between 0.2 and 0.97) while the default
-Mondrian rejects with :math:`\chi^2` near 500 on 7 degrees of freedom. Both only ever group the
+**Results.** On seeds 1 to 3 the theory's process passes (p between 0.2 and 0.97) while the Mondrian
+partition of version 1.2 rejects with :math:`\chi^2` near 500 on 7 degrees of freedom. Both only ever group the
 points into intervals.
 
-**Profiles.** The scenario is an ordinary check on ``"mondrian-raw"``, the theory's process. On
-Spatialize's default Mondrian partition, whose root cell is always split, it is a negative control.
+**Profiles.** The scenario is an ordinary check on ``"mondrian"``, the theory's process. On
+the Mondrian partition of Spatialize 1.2 (``"mondrian-legacy"``), whose root cell is always split, it is a negative control.
 
 .. _scenario-E2:
 
@@ -117,11 +117,11 @@ form. It uses :math:`N = 3\,100` members in ``ci`` (:math:`\delta = 0.05`) and :
 ``full`` (:math:`\delta = 0.02`), which give power 0.9 at :math:`\delta` for up to 50 tests under Holm.
 
 **Estimators.** The check reads two estimators with the IDW decoder, ``idw-theory`` on the
-theory's Mondrian process (Spatialize's ``"mondrian-raw"``) and ``idw`` on Spatialize's default
-Mondrian partition.
+theory's Mondrian process (Spatialize's default ``"mondrian"``) and ``idw`` on the Mondrian partition
+of Spatialize 1.2 (``"mondrian-legacy"``).
 
-**Expectation per profile.** The theory's process should pass, while Spatialize's default Mondrian
-partition should reject, making that outcome a negative control. The default partition deviates
+**Expectation per profile.** The theory's process should pass, while the partition of Spatialize 1.2
+should reject, making that outcome a negative control. That partition deviates
 from the theory's process by design (:doc:`encoders`), by 4–21 % on the unit square. The
 test sees the deviation with :math:`p \approx 10^{-87}` in ``ci``, its largest :math:`|z| = 9.6`
 falling at displacement 0.2 along the diagonal (:math:`\hat p = 0.463` against :math:`0.549`), and
@@ -153,11 +153,11 @@ form, which reduces to E2 for two points.
   combined as :math:`\sum_i z_i^2 \sim \chi^2_5`, with :math:`N = 4\,000` partitions in ``ci`` and
   :math:`16\,000` in ``full``. The cells are read as in E1.
 
-**Results.** On seeds 1 to 3 the theory's process passes (p between 0.24 and 0.58) while the default
-Mondrian rejects with :math:`|z|` up to 11.6, on the collinear triples above all.
+**Results.** On seeds 1 to 3 the theory's process passes (p between 0.24 and 0.58) while the Mondrian
+partition of version 1.2 rejects with :math:`|z|` up to 11.6, on the collinear triples above all.
 
-Beyond E2, it tests the process on sets of more than two locations, on ``"mondrian-raw"`` as an
-ordinary check and on the default Mondrian partition as a negative control.
+Beyond E2, it tests the process on sets of more than two locations, on ``"mondrian"`` as an
+ordinary check and on the Mondrian partition of version 1.2 as a negative control.
 
 .. _scenario-E4:
 
@@ -222,11 +222,11 @@ which is largest, :math:`27/128`, at :math:`s = \log(4/3)`.
 with an independent standard Gaussian mark, which makes the four values a block-mark field built on
 the estimator's partitions.
 
-**Results.** With :math:`N = 20\,000` the control on the default Mondrian rejected on two seeds out of
+**Results.** With :math:`N = 20\,000` the control on the Mondrian partition of version 1.2 rejected on two seeds out of
 three, its cumulant differing from the closed form by 0.05 to 0.06 at the two larger spacings and by
 about 0.016 at the smaller ones. :math:`N` was raised to :math:`80\,000` before the scenario was
-released. On seeds 1 to 4 the theory's process then passes (p between 0.45 and 0.95) while the default
-Mondrian rejects with p at most :math:`10^{-9}`.
+released. On seeds 1 to 4 the theory's process then passes (p between 0.45 and 0.95) while the Mondrian
+partition of version 1.2 rejects with p at most :math:`10^{-9}`.
 
 .. _scenario-E6:
 

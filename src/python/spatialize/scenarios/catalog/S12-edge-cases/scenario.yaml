@@ -1,5 +1,5 @@
 id: S12-edge-cases
-version: 5
+version: 6
 tier: T3
 evaluator: edge_cases
 book:
@@ -102,3 +102,4 @@ provenance:
     2026-10-07: the decoders of phase 2 (cell mean, uniform and weighted draws, sharpened adaptive IDW) on
     the Mondrian and the uniform Voronoi partitions, in every check that applies to them, with the
     tolerances unchanged; fixed before their first run.
+  v6: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

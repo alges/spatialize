@@ -11,7 +11,7 @@ LIB = sl.load_lib()
 DATA = cases.datasets()
 
 
-@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.6), ("mondrian-raw", 0.6), ("voronoi", 0.5), ("voronoi", -0.5)])
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.6), ("mondrian-legacy", 0.6), ("voronoi", 0.5), ("voronoi", -0.5)])
 def test_cells_agree_with_the_estimators_partitions(partition, alpha):
     """libspatialize.cells labels the partitions run draws: two locations share a cell exactly when
     the cell mean of the indicator of one is positive at the other, under the same seed."""

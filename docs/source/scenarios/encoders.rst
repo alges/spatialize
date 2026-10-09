@@ -20,15 +20,16 @@ the theory from the processes actually implemented.
        exceeds the remaining budget the box becomes a cell. Otherwise it cuts an axis chosen with
        probability proportional to its side length, at a uniform position, recursing with budget
        :math:`\lambda - E`. Its co-occurrence is
-       :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`. Spatialize implements it as the
-       opt-in partition ``p_process="mondrian-raw"``, on the same box as its default Mondrian
-       partition (profile ``mondrian-theory`` in the scenario files).
-   * - Spatialize's Mondrian partition
-     - Spatialize's default Mondrian partition (``p_process="mondrian"``). It always splits the root
+       :math:`e(S) = \exp(-\lambda \sum_c \mathrm{range}_c(S))`. Spatialize implements it as its
+       default partition, ``p_process="mondrian"`` since version 1.3 (profiles ``mondrian`` and
+       ``mondrian-theory`` in the scenario files). The box is the bounding box of samples and
+       queries, or the session domain when one is set (:doc:`../reference/session`).
+   * - the Mondrian partition of Spatialize 1.2
+     - The default Mondrian partition of Spatialize up to version 1.2, now
+       ``p_process="mondrian-legacy"`` (profile ``mondrian-legacy``). It always splits the root
        box, choosing the cut axis uniformly among the dimensions. A child's time is its parent's plus
        :math:`\mathrm{Exp}(\mu(\text{child}))`, with splitting continuing while the time stays
-       below :math:`\lambda`. The box is the bounding box of samples and queries, or the session
-       domain when one is set (:doc:`../reference/session`).
+       below :math:`\lambda`.
    * - the theory's Poisson–Voronoi partition
      - The Poisson–Voronoi partition of intensity :math:`\lambda_V`, as defined in the theory. Its
        generators form a homogeneous Poisson process of intensity :math:`\lambda_V` per unit volume,
@@ -84,8 +85,8 @@ means the same partition law whatever the number of samples. Spatialize accepts 
 error otherwise. For :math:`N` to stay close to Poisson, :math:`\lambda_V |H|` should also remain
 well below :math:`n`, where the truncation at :math:`n` would act.
 
-Measured deviation of Spatialize's Mondrian partition
-=====================================================
+Measured deviation of the Mondrian partition of version 1.2
+===========================================================
 
 The table gives the probability that a location at displacement :math:`h` from the centre of the
 box shares the centre's cell, estimated from 20 000 trees with :math:`\alpha = 0.8`.
@@ -131,8 +132,7 @@ box shares the centre's cell, estimated from 20 000 trees with :math:`\alpha = 0
 
 On a square the co-occurrence lies 4–21 % below the closed form, depending on the direction beyond
 the :math:`\ell_1` distance. On an elongated box the uniform choice of axis makes the partition
-strongly anisotropic. Closed-form scenarios therefore target the theory's Mondrian process, serving
-as negative controls (:doc:`statistics`) when run on Spatialize's default Mondrian partition.
-Changing the default would change every existing result, so it stays. The theory's process is
-available instead as the opt-in partition ``"mondrian-raw"``, whose co-occurrence matches the closed
-form in the same measurement on both boxes, in every direction (:math:`|z| < 2` over 20 000 trees).
+strongly anisotropic. The theory's process, the default since version 1.3, matches the closed form
+in the same measurement on both boxes, in every direction (:math:`|z| < 2` over 20 000 trees). The
+closed-form scenarios target it, and serve as negative controls (:doc:`statistics`) on the
+partition of version 1.2, profile ``mondrian-legacy``.

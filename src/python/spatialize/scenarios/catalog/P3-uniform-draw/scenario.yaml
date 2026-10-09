@@ -1,5 +1,5 @@
 id: P3-uniform-draw
-version: 1
+version: 2
 tier: T2
 evaluator: draw_laws
 book:
@@ -28,3 +28,4 @@ checks:
      kind: frequencies, family: gof-closed, estimator: wdraw-idw, reference: cellmean, expect: {mondrian: reject}}
 provenance:
   v1: "2026-10-07: first version, with the draw decoders of phase 2; T fixed before the first run"
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

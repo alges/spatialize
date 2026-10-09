@@ -1,5 +1,5 @@
 id: E5-block-mark-fourth-cumulant
-version: 1
+version: 2
 tier: T1
 evaluator: partition_law
 book:
@@ -17,7 +17,7 @@ data:
   spacings: [0.1, 0.2877, 0.5, 0.8]   # 0.2877 = log(4/3), where the cumulant peaks at λ = 1
 estimators:
   - {id: cm-theory, encoder: mondrian-theory, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
-  - {id: cm, encoder: mondrian, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cm, encoder: mondrian-legacy, rate: 1.0, decoder: cellmean, params: {}, empty_cells: nan}
 checks:
   - id: k4
     title: "fourth joint cumulant = 2q³(1 − q)"
@@ -27,6 +27,7 @@ checks:
     n_members: {ci: 80000, full: 320000}   # 20000 left the control without power (failed 1 seed in 3)
     expect:
       mondrian-theory: pass
-      mondrian: reject   # negative control: the default Mondrian cuts the whole box once
+      mondrian-legacy: reject   # negative control: the default Mondrian cuts the whole box once
 provenance:
   v1: "2026-10-07: first version, with the cell-mean decoder and mondrian-raw (phase 2); sizes fixed before the first run"
+  v2: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."

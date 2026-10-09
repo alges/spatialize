@@ -39,7 +39,7 @@ std::vector<std::vector<std::vector<float>>> get_partitions_using_esi(py::array_
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
 
-    sptlz::ESI* esi = new sptlz::ESI(smp, {}, lambda, forest_size, bbox, _visitor, seed);
+    sptlz::ESI* esi = new sptlz::ESI(smp, {}, lambda, forest_size, bbox, _visitor, seed, true);
     auto r = esi->get_partitions();
 
     delete esi;
@@ -70,7 +70,7 @@ py::array_t<int> get_leaf_for_samples_using_esi(py::array_t<float> samples, int 
     float lambda = sptlz::bbox_sum_interval(bbox);
     lambda = 1/(lambda-alpha*lambda);
 
-    sptlz::ESI* esi = new sptlz::ESI(smp, {}, lambda, forest_size, bbox, _visitor, seed);
+    sptlz::ESI* esi = new sptlz::ESI(smp, {}, lambda, forest_size, bbox, _visitor, seed, true);
     auto r = esi->get_leaf_for_samples();
 
     delete esi;

@@ -155,7 +155,9 @@ P6 — Locality
 
 **Setup.** 150 data on the unit square carry the field of P2. The location :math:`v = (0.5, 0.5)` is
 estimated twice with one seed, together with 20 other queries, then together with 400. The estimators
-use IDW on the default Mondrian, the theory's Mondrian and the Voronoi partition with uniform nuclei,
+use IDW on the default Mondrian under its two profile names (the theory's process since version
+1.3; before, the default was the partition now called ``mondrian-legacy``) and the Voronoi partition
+with uniform nuclei,
 with :math:`T = 3\,000` members in ``ci`` and :math:`12\,000` in ``full``.
 
 **Checks.**

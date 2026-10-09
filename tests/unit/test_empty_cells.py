@@ -11,7 +11,7 @@ LIB = sl.load_lib()
 DATA = cases.datasets()
 
 
-@pytest.mark.parametrize("p_process,alpha,data_cond", [("mondrian", 0.9, True), ("mondrian-raw", 0.9, True),
+@pytest.mark.parametrize("p_process,alpha,data_cond", [("mondrian", 0.9, True), ("mondrian-legacy", 0.9, True),
                                                        ("voronoi", 0.8, True), ("voronoi", 0.8, False)])
 @pytest.mark.parametrize("griddata", [False, True])
 def test_empty_cell_fraction_is_the_share_of_nan_members(p_process, alpha, data_cond, griddata):
@@ -34,7 +34,7 @@ def test_empty_cell_fraction_is_the_share_of_nan_members(p_process, alpha, data_
     assert np.array_equal(share, fraction)
 
 
-@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("mondrian-raw", 0.9), ("voronoi", -0.8)])
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("mondrian-legacy", 0.9), ("voronoi", -0.8)])
 @pytest.mark.parametrize("mark_source", ["local", "cells", "data"])
 @pytest.mark.parametrize("decoder,params", [("idw", {"exponent": 2.0}), ("draw", {})])
 @pytest.mark.parametrize("mark_value", ["decoder", "datum"])
@@ -72,7 +72,7 @@ def test_mark_fills_each_empty_cell_with_one_value(partition, alpha, mark_source
         assert not np.isnan(run("mark", method, queries=s)).any()
 
 
-@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("mondrian-raw", 0.9), ("voronoi", -0.8)])
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("mondrian-legacy", 0.9), ("voronoi", -0.8)])
 @pytest.mark.parametrize("decoder,params", [("cellmean", {}), ("idw", {"exponent": 2.0}), ("adaptiveidw", {}),
                                             ("sharpidw", {}), ("wdraw_adaptiveidw", {}), ("draw", {})])
 def test_coarsen_predicts_empty_cells_from_a_coarser_cell(partition, alpha, decoder, params):

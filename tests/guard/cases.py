@@ -104,6 +104,9 @@ def cases(lib):
     krig = dict(model=m, nugget=n_, range=r_, sill=s_)
     for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
         add(f"{pre}_esi_idw", "2d", run("mondrian", ALPHA, T, "idw", {"exponent": EXP}, method))
+        # the Mondrian partition of Spatialize 1.2, kept as "mondrian-legacy": its snapshots are those
+        # the default partition gave before it became the theory's process (2026-10-09)
+        add(f"{pre}_esi_idw_legacy", "2d", run("mondrian-legacy", ALPHA, T, "idw", {"exponent": EXP}, method))
         for d in ("2d", "3d"):
             add(f"{pre}_esi_kriging_{d}", d, run("mondrian", ALPHA, T, "kriging", krig, method))
         for tag, a in (("dc", 0.5), ("nodc", -0.5)):      # data-conditioned / not (sign of alpha)

@@ -37,7 +37,7 @@ class ESIGridSearchResult(GridSearchResult):
         ``local_interpolator`` column.
     p_process : str
         Partitioning process used during the search, ``"mondrian"``,
-        ``"mondrian-raw"`` or ``"voronoi"``.
+        ``"mondrian-legacy"`` or ``"voronoi"``.
 
     Attributes
     ----------
@@ -134,7 +134,7 @@ class ESIParetoResult(Summarised):
             :func:`esi_pareto_hparams_search`.
         p_process : str
             Partitioning process used during optimisation, ``"mondrian"``,
-            ``"mondrian-raw"`` or ``"voronoi"``.
+            ``"mondrian-legacy"`` or ``"voronoi"``.
         local_interpolator : str
             Local interpolator used during optimisation, ``"idw"``,
             ``"kriging"``, or ``"adaptiveidw"``.
@@ -891,7 +891,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
     griddata : bool, optional
         Whether `xi` is grid-shaped (see `xi` above). Default: ``False``.
     p_process : str, optional
-        Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
+        Partitioning process: ``"mondrian"`` (default), ``"mondrian-legacy"``
         or ``"voronoi"`` (see :func:`esi_griddata`).
     data_cond : list of bool, optional
         Whether to condition the partitioning process on the data samples;
@@ -1037,7 +1037,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
         for name in decoder_callables(kwargs["local_interpolator"]):   # a custom decoder's functions
             param_set[name] = kwargs.get(name)
 
-        if kwargs["p_process"] == partitioning_process.MONDRIAN:
+        if kwargs["p_process"] in (partitioning_process.MONDRIAN, partitioning_process.MONDRIAN_LEGACY):
             param_set["data_cond"] = True
 
         l_args = build_arg_list(points, values, p_xi, param_set)
@@ -1125,14 +1125,16 @@ def esi_griddata(points, values, xi, **kwargs):
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
          Number of spatial partitions in the ensemble. Default: ``500``.
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, optional
          Spatial partitioning process used to build the ensemble. Default:
-         ``"mondrian"``. ``"mondrian-raw"`` is the Mondrian process of the
-         theory. Unlike ``"mondrian"``, it may leave the whole box as a single
-         cell, choosing the axis of each cut with probability proportional to
-         its side length. Its partitions follow the closed-form laws of the
-         theory for the same ``alpha``, e.g. two locations share a cell with
-         probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
+         ``"mondrian"``, the Mondrian process of the theory: it may leave the
+         whole box as a single cell, choosing the axis of each cut with
+         probability proportional to its side length, so its partitions follow
+         the closed-form laws of the theory, e.g. two locations share a cell
+         with probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
+         ``"mondrian-legacy"`` is the Mondrian partition of Spatialize 1.2 and
+         earlier, which always cuts the whole box and draws the cut axis
+         uniformly, kept to reproduce earlier results.
     data_cond : bool, optional
          Whether to condition the partitioning process on the sample
          points. Valid only when ``p_process="voronoi"``. Default: ``True``.
@@ -1306,14 +1308,16 @@ def esi_nongriddata(points, values, xi, **kwargs):
          accepted. Default: ``"idw"``.
     n_partitions : int, optional
          Number of spatial partitions in the ensemble. Default: ``500``.
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, optional
          Spatial partitioning process used to build the ensemble. Default:
-         ``"mondrian"``. ``"mondrian-raw"`` is the Mondrian process of the
-         theory. Unlike ``"mondrian"``, it may leave the whole box as a single
-         cell, choosing the axis of each cut with probability proportional to
-         its side length. Its partitions follow the closed-form laws of the
-         theory for the same ``alpha``, e.g. two locations share a cell with
-         probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
+         ``"mondrian"``, the Mondrian process of the theory: it may leave the
+         whole box as a single cell, choosing the axis of each cut with
+         probability proportional to its side length, so its partitions follow
+         the closed-form laws of the theory, e.g. two locations share a cell
+         with probability :math:`\\exp(-\\lambda \\lVert x-y \\rVert_1)`.
+         ``"mondrian-legacy"`` is the Mondrian partition of Spatialize 1.2 and
+         earlier, which always cuts the whole box and draws the cut axis
+         uniformly, kept to reproduce earlier results.
     data_cond : bool, optional
          Whether to condition the partitioning process on the sample
          points. Valid only when ``p_process="voronoi"``. Default: ``True``.
@@ -1473,7 +1477,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         ``post_creation``, ``loo``, ``kfold``) are given as single values,
         the same for every configuration searched.
     p_process : str, optional
-        Partitioning process: ``"mondrian"`` (default), ``"mondrian-raw"``
+        Partitioning process: ``"mondrian"`` (default), ``"mondrian-legacy"``
         or ``"voronoi"``. Both errors, ε̂ and R_CV, are computed on its
         partitions.
     data_cond : bool, optional

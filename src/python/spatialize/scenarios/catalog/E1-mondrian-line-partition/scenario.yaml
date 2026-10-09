@@ -1,5 +1,5 @@
 id: E1-mondrian-line-partition
-version: 1
+version: 2
 tier: T1
 evaluator: partition_law
 book:
@@ -16,7 +16,7 @@ data:
   points: [[0.2], [0.5], [0.8], [1.3]]
 estimators:
   - {id: cm-theory, encoder: mondrian-theory, rate: 2.0, decoder: cellmean, params: {}, empty_cells: nan}
-  - {id: cm, encoder: mondrian, rate: 2.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cm, encoder: mondrian-legacy, rate: 2.0, decoder: cellmean, params: {}, empty_cells: nan}
 checks:
   - id: groupings
     title: "frequencies of the eight interval groupings = their Poisson-cut probabilities"
@@ -28,7 +28,7 @@ checks:
       mondrian-theory: pass
       # Negative control: Spatialize's default Mondrian always cuts the whole box once, so on a line it
       # cuts more often than the Poisson process of the same rate.
-      mondrian: reject
+      mondrian-legacy: reject
   - id: intervals
     title: "only intervals of consecutive points share a cell"
     kind: interval_only
@@ -37,3 +37,4 @@ checks:
     n_members: {ci: 5000, full: 20000}
 provenance:
   v1: "2026-10-07: first version, with the cell-mean decoder and mondrian-raw (phase 2); sizes fixed before the first run"
+  v2: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."

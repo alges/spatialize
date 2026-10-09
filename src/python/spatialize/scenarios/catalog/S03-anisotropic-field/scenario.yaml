@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 11
+version: 12
 tier: T3
 evaluator: map_visual
 book:
@@ -246,3 +246,4 @@ provenance:
     sharpened map is 0.001 worse than the adaptive one) and is recorded as a known failure: on ten
     fields the residual boost alone improves the RMSE by 0.004 while the raised exponent alone worsens
     it by 0.003.
+  v12: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

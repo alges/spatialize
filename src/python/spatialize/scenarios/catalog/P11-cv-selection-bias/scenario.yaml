@@ -1,5 +1,5 @@
 id: P11-cv-selection-bias
-version: 1
+version: 2
 tier: T2
 evaluator: cv_selection
 book:
@@ -62,3 +62,4 @@ provenance:
     Design chosen on probes before the first run: with noise 0.05 and rate 24 the control's p-values
     (1e-4 to 1e-7) were too close to its Holm level; with noise 0.02 and rate 32 the largest p over
     eight seeds was 2.4e-11.
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

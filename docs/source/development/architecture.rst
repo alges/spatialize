@@ -123,10 +123,10 @@ Every partition works with every decoder, in the dimensions both support.
      - Role
    * - ``mondrian``
      - 1 or more
-     - Spatialize's Mondrian partition (the default)
-   * - ``mondrian-raw``
+     - the theory's Mondrian process (the default since version 1.3)
+   * - ``mondrian-legacy``
      - 1 or more
-     - the theory's Mondrian process (opt-in)
+     - the Mondrian partition of Spatialize 1.2, to reproduce earlier results
    * - ``voronoi``
      - 1 or more
      - Voronoi partition, nuclei among the samples or uniform in the box

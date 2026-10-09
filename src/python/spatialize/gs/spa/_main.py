@@ -539,7 +539,8 @@ class PosteriorAudit(Summarised):
             number. NaN for a datum without defined members.
         """
         _, _, below, above = self._kde()
-        return np.minimum(1.0, 2.0 * np.minimum(below, above))
+        # a probability below the smallest float (a datum hundreds of spreads away) is kept positive
+        return np.clip(2.0 * np.minimum(below, above), np.finfo(float).tiny, 1.0)
 
     def flags(self, q=0.05):
         """The data whose surprise survives the Benjamini–Hochberg procedure at false discovery
@@ -617,7 +618,7 @@ class PosteriorAudit(Summarised):
             (``scale``).
         """
         logf, ent, below, above = self._kde()
-        tail = np.minimum(1.0, 2.0 * np.minimum(below, above))
+        tail = np.clip(2.0 * np.minimum(below, above), np.finfo(float).tiny, 1.0)
         q5 = np.array([np.percentile(self.law(i), 5) if self.law(i).size else np.nan for i in range(len(self.values))])
         q95 = np.array([np.percentile(self.law(i), 95) if self.law(i).size else np.nan for i in range(len(self.values))])
         lo, hi = self._inv(q5), self._inv(q95)
@@ -1330,7 +1331,7 @@ def posterior_audit(points, values, **kwargs):
         parameters as keyword arguments. Default: ``"idw"``.
     k : int, optional
         ``-1`` (or n) for leave-one-out, otherwise the number of folds. Default: -1.
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, optional
         The partition process. Default: ``"mondrian"``.
     data_cond : bool, optional
         Voronoi only: nuclei among the data (True) or uniform in the box. Default: True.

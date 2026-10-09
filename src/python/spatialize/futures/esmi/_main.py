@@ -40,7 +40,7 @@ def _get_esi_estimates(points, values, xi, T, alpha_t, **kwargs):
     local_interpolator : str, default="idw"
         Local interpolator type: "idw", "kriging", or "adaptiveidw".
     p_process : str, default="mondrian"
-        Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+        Partition process of the spatial ensemble: "mondrian" (the theory's process), "mondrian-legacy" (that of Spatialize 1.2) or "voronoi".
     data_cond : bool, default=True
         For "voronoi", whether the nuclei are drawn among the data or uniformly.
     seed : int, default=0
@@ -251,7 +251,7 @@ class SpatialEntropy:
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
         p_process : str, default="mondrian"
-            Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+            Partition process of the spatial ensemble: "mondrian" (the theory's process), "mondrian-legacy" (that of Spatialize 1.2) or "voronoi".
             The value range is always partitioned with Mondrian trees, whose boxes give the
             cell sizes of the density estimate.
         data_cond : bool, default=True
@@ -487,7 +487,7 @@ class SpatialMutualInformation:
         local_interpolator : str, default="idw"
             Local interpolator for ESI sampling: "idw", "kriging", or "adaptiveidw".
         p_process : str, default="mondrian"
-            Partition process of the spatial ensemble: "mondrian", "mondrian-raw" or "voronoi".
+            Partition process of the spatial ensemble: "mondrian" (the theory's process), "mondrian-legacy" (that of Spatialize 1.2) or "voronoi".
             The value range is always partitioned with Mondrian trees, whose boxes give the
             cell sizes of the density estimate.
         data_cond : bool, default=True

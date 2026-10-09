@@ -18,8 +18,9 @@ from ..protocol import EstimatorSpec
 
 #: Encoder profiles this runner implements: profile -> (spatialize's ``p_process``, ``data_cond``).
 PROFILES = {
-    "mondrian": ("mondrian", True),        # Spatialize's Mondrian partition
-    "mondrian-theory": ("mondrian-raw", True),  # the theory's Mondrian process (p_process="mondrian-raw")
+    "mondrian": ("mondrian", True),        # Spatialize's default Mondrian, the theory's process since 1.3
+    "mondrian-theory": ("mondrian", True),  # the theory's Mondrian process, named for the shared suite
+    "mondrian-legacy": ("mondrian-legacy", True),  # the Mondrian partition of Spatialize 1.2
     "voronoi": ("voronoi", False),         # Spatialize's Voronoi, nuclei uniform in the box (alpha < 0)
     "voronoi-data": ("voronoi", True),     # Spatialize's Voronoi, nuclei among the samples (alpha >= 0)
 }

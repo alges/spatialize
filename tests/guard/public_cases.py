@@ -51,7 +51,7 @@ def public_cases():
     add("esi_nongriddata_kriging_3d", "3d", nongrid("kriging", **KRIG))
     add("esi_nongriddata_voronoi_dc", "2d", nongrid("idw", exponent=EXP, p_process="voronoi", data_cond=True))
     add("esi_nongriddata_voronoi_nodc", "2d", nongrid("idw", exponent=EXP, p_process="voronoi", data_cond=False))
-    add("esi_nongriddata_mondrian_raw", "2d", nongrid("idw", exponent=EXP, p_process="mondrian-raw"))
+    add("esi_nongriddata_mondrian_legacy", "2d", nongrid("idw", exponent=EXP, p_process="mondrian-legacy"))
 
     def with_marks(source, value="decoder"):
         def fn(s, v, q):
@@ -151,7 +151,7 @@ def public_cases():
     add("cat_esi_nongriddata", "2d", cat)
 
     from spatialize.gs.partitions import cell_labels
-    for proc, a in (("mondrian", ALPHA), ("mondrian-raw", ALPHA), ("voronoi", 0.5)):
+    for proc, a in (("mondrian", ALPHA), ("mondrian-legacy", ALPHA), ("voronoi", 0.5)):
         add(f"cell_labels_{proc}", "2d", lambda s, v, q, proc=proc, a=a: {
             "labels": cell_labels(s, q[:30], p_process=proc, alpha=a, n_partitions=T, seed=SEED).astype(np.int64)})
 

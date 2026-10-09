@@ -1,5 +1,5 @@
 id: E3-mondrian-triple-cooccurrence
-version: 1
+version: 2
 tier: T1
 evaluator: partition_law
 book:
@@ -20,7 +20,7 @@ data:
     - [[0.50, 0.50], [0.55, 0.50], [0.50, 0.58]]   # small right angle
 estimators:
   - {id: cm-theory, encoder: mondrian-theory, rate: 3.0, decoder: cellmean, params: {}, empty_cells: nan}
-  - {id: cm, encoder: mondrian, rate: 3.0, decoder: cellmean, params: {}, empty_cells: nan}
+  - {id: cm, encoder: mondrian-legacy, rate: 3.0, decoder: cellmean, params: {}, empty_cells: nan}
 checks:
   - id: c1
     title: "triple co-occurrence = exp(−λ Σ range)"
@@ -30,6 +30,7 @@ checks:
     n_members: {ci: 4000, full: 16000}
     expect:
       mondrian-theory: pass
-      mondrian: reject   # negative control, as in E2
+      mondrian-legacy: reject   # negative control, as in E2
 provenance:
   v1: "2026-10-07: first version, with the cell-mean decoder and mondrian-raw (phase 2); sizes fixed before the first run"
+  v2: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."

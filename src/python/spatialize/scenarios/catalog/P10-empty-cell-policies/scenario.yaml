@@ -1,5 +1,5 @@
 id: P10-empty-cell-policies
-version: 1
+version: 2
 tier: T2
 evaluator: empty_cells
 book:
@@ -111,3 +111,4 @@ provenance:
     2026-10-08: first version, with the empty-cell policies of phase 3; the almost-sure checks,
     sizes and tolerances fixed before their first run. The check data-law was added the same day,
     after the first runs of the almost-sure checks and before its own first run.
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

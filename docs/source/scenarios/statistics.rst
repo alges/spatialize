@@ -192,8 +192,9 @@ Every family must be shown able to fail. Each tier includes checks *expected to 
 ``expect: reject`` in the scenario file for a given encoder profile. A negative control passes when
 its test rejects. If it does not, the test lacks power, so its passes elsewhere cannot be trusted.
 The first control of the catalogue, :ref:`E2 <scenario-E2>`, tests the closed-form co-occurrence of
-the theory's Mondrian process on Spatialize's default Mondrian, which deviates from it by design
-(:doc:`encoders`), while the same check passes on the opt-in partition ``"mondrian-raw"``. The test rejects with :math:`p \approx 10^{-87}` at :math:`N = 3\,100`.
+the theory's Mondrian process on the Mondrian partition of Spatialize 1.2 (``mondrian-legacy``),
+which deviates from it by design (:doc:`encoders`), while the same check passes on the theory's
+process, Spatialize's default since version 1.3. The test rejects with :math:`p \approx 10^{-87}` at :math:`N = 3\,100`.
 
 A failed power check says something about the test, not about the estimator. The first functional
 tried for criterion V4 failed its check that eight members show more axis artefacts than a hundred,

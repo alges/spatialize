@@ -87,8 +87,9 @@ Estimators
      - Name of the estimator inside the scenario; checks refer to it.
    * - ``encoder``
      - Partition profile (:doc:`encoders`), one of ``mondrian`` (Spatialize's default Mondrian
-       partition), ``mondrian-theory`` (the theory's Mondrian process, Spatialize's
-       ``"mondrian-raw"``), ``voronoi`` (Spatialize's Voronoi partition with uniform nuclei) or
+       partition, the theory's process since version 1.3), ``mondrian-theory`` (the theory's Mondrian
+       process), ``mondrian-legacy`` (the Mondrian partition of Spatialize 1.2,
+       ``"mondrian-legacy"``), ``voronoi`` (Spatialize's Voronoi partition with uniform nuclei) or
        ``voronoi-data`` (Spatialize's Voronoi partition with nuclei at the data).
    * - ``rate``
      - Mondrian rate :math:`\lambda`, or Voronoi intensity :math:`\lambda_V` per unit volume, on the
@@ -136,9 +137,9 @@ The following keys are common to every evaluator.
      - The estimator the check reads, or a list of them (one outcome each).
    * - ``expect``
      - Optional, per encoder profile, ``pass`` (default) or ``reject`` for a negative control, e.g.
-       ``{mondrian-theory: pass, mondrian: reject}``. The profiles ``mondrian-theory`` and
-       ``voronoi-theory`` name the theory's processes. Spatialize provides the first as
-       ``"mondrian-raw"``.
+       ``{mondrian-theory: pass, mondrian-legacy: reject}``. The profiles ``mondrian-theory`` and
+       ``voronoi-theory`` name the theory's processes. Spatialize provides the first as its default
+       ``"mondrian"``.
    * - ``known_failure``
      - Optional reason: the check records a known defect. It is reported ``KNOWN`` while it fails
        and ``XPASS`` — failing the run — once it passes (:doc:`statistics`).

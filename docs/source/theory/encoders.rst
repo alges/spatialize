@@ -56,33 +56,39 @@ form
 with :math:`\operatorname{range}_c(S)` the extent of :math:`S` along axis :math:`c`. Distance is
 measured axis by axis, so the level curves of :math:`e(\{0, h\})` are diamonds and not circles.
 
-``mondrian-raw`` is this process exactly. Prefer it on elongated domains, and whenever the
-partition law itself matters, for instance when the estimate is compared with these closed forms or
-used to study the latent geometry of a field.
+``mondrian``, the default, is this process exactly. Its partitions follow the closed forms above,
+which makes the estimate comparable with them and with the latent geometry of a field. Each
+member shows rectangular blocks, which the ensemble averages away, so that a few hundred partitions
+leave only a faint trace of the axes in the averaged map.
 
-Spatialize's Mondrian
----------------------
+The Mondrian partition of version 1.2
+-------------------------------------
 
-The default ``mondrian`` departs from the recursion in two details. The whole box is always cut,
-as if :math:`E = 0` at the root. The axis is chosen uniformly, with probability :math:`1/d`,
-whatever the sides. Each child still waits :math:`\operatorname{Exp}\big(\sum_c \ell_c\big)` for its
-own cut. On a square domain the difference is modest, the co-occurrence lying somewhat below
-:math:`e(\{x,y\})` above. On an elongated domain the uniform choice of axis makes the cells
-elongated too, so locations along the long side are coupled more strongly than across it.
+Up to version 1.2 the default Mondrian partition departed from the recursion in two details. The
+whole box was always cut, as if :math:`E = 0` at the root. The axis was chosen uniformly, with
+probability :math:`1/d`, whatever the sides. Each child still waited
+:math:`\operatorname{Exp}\big(\sum_c \ell_c\big)` for its own cut. It remains available as
+``"mondrian-legacy"``, to reproduce earlier results.
 
-At fine granularities the uniform choice of axis also multiplies the cells. A thin cell keeps its
-long side, so it still waits little for its next cut, which half of the time falls across its short
-side and makes it thinner. The number of cells then grows much faster than the theory's
+On a square domain the difference is modest at coarse granularities, the co-occurrence lying
+somewhat below :math:`e(\{x,y\})`, and the partition holding about twice as many cells for the same
+``alpha``. On an elongated domain the uniform choice of axis makes the cells elongated too, so
+locations along the long side are coupled more strongly than across it.
+
+At fine granularities the uniform choice of axis multiplies the cells. A thin cell keeps its long
+side, so it still waits little for its next cut, which half of the time falls across its short side
+and makes it thinner. The number of cells then grows much faster than the theory's
 :math:`(1 + \lambda)^2` on the unit square. With 120 data on the unit square, at ``alpha`` = 0.979
-(:math:`\lambda = 24`) a partition has at least 4 500 cells, against about 600 for
-``"mondrian-raw"``. At ``alpha`` = 0.990 (:math:`\lambda = 48`) it has at least 92 000, against
-about 2 400, most of them slivers holding no datum. Time and memory follow, one partition taking
-1.7 s and 0.9 GB at ``alpha`` = 0.993 and 20 s and 9 GB at ``alpha`` = 0.995.
+(:math:`\lambda = 24`) a partition has at least 4 500 cells, against about 600 for the theory's
+process. At ``alpha`` = 0.990 (:math:`\lambda = 48`) it has at least 92 000, against about 2 400,
+most of them slivers holding no datum. Time and memory follow, one partition taking 1.7 s and
+0.9 GB at ``alpha`` = 0.993 and 20 s and 9 GB at ``alpha`` = 0.995.
 
-Prefer it as the general default at the usual granularities. It is fast there, it works in any
-dimension, and Spatialize's published results were obtained with it. Close to ``alpha`` = 1,
-``"mondrian-raw"`` keeps the number of cells, and with it the cost, under control. Each member shows rectangular blocks, which the ensemble averages
-away, so that a few hundred partitions leave only a faint trace of the axes in the averaged map.
+On the drill holes of the Andes bundled with Spatialize (a box of 400 by 600), with the same
+``alpha`` the partition of version 1.2, being the finer one, gave the lower leave-one-out error
+of IDW up to ``alpha`` = 0.9, and the theory's process from ``alpha`` = 0.95, with adaptive IDW from
+0.9. At ``alpha`` = 0.98 it held 5 357 cells against 615, for ten times the time. Since a search chooses ``alpha``,
+the theory's process became the default in version 1.3.
 
 The Voronoi processes
 =====================
@@ -136,11 +142,11 @@ Summary
      - co-occurrence of two locations
      - prefer it for
    * - ``mondrian``
-     - close to :math:`e^{-\lambda \lVert x-y\rVert_1}`
-     - a fast default in any dimension
-   * - ``mondrian-raw``
      - exactly :math:`e^{-\lambda \lVert x-y\rVert_1}`
-     - elongated domains, the partition law itself
+     - the default, in any dimension
+   * - ``mondrian-legacy``
+     - close to :math:`e^{-\lambda \lVert x-y\rVert_1}`
+     - reproducing the results of version 1.2
    * - ``voronoi``, ``alpha < 0``
      - a function of :math:`\lVert x-y \rVert`
      - oblique or unknown anisotropy, maps read by eye

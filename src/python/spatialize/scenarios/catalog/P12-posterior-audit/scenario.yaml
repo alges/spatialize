@@ -1,5 +1,5 @@
 id: P12-posterior-audit
-version: 1
+version: 2
 tier: T2
 evaluator: posterior_audit
 book:
@@ -83,3 +83,4 @@ provenance:
     pulls its neighbours' laws towards it. User decision (2026-10-08): add the shift reading, check
     it in P12, keep the coherence as a descriptive reading. Sized for an effect of 1.75 standard
     deviations, K ≈ (4.06 + 1.28)² / 1.75² ≈ 9.3, giving 20 fields in ci and 40 in full.
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

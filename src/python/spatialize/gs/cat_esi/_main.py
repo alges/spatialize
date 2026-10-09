@@ -755,7 +755,7 @@ def cat_esi_griddata(points, values, xi, **kwargs) -> CatESIResult:
     agg_function : callable, default aggregate_with_mv
     n_partitions : int, default 300
     alpha : float, default 0.8
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, default "mondrian"
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, default "mondrian"
         Partition process, as in :func:`~spatialize.gs.esi.esi_griddata`.
     data_cond : bool, default True
         For ``"voronoi"``, whether the nuclei are drawn among the data or
@@ -829,7 +829,7 @@ def cat_esi_nongriddata(points, values, xi, **kwargs) -> CatESIResult:
     agg_function : callable, default aggregate_with_mv
     n_partitions : int, default 300
     alpha : float, default 0.8
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, default "mondrian"
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, default "mondrian"
         Partition process, as in :func:`~spatialize.gs.esi.esi_griddata`.
     data_cond : bool, default True
         For ``"voronoi"``, whether the nuclei are drawn among the data or

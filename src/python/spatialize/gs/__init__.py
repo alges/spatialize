@@ -48,7 +48,7 @@ class local_interpolator:
 
 class partitioning_process:
     MONDRIAN, VORONOI = "mondrian", "voronoi"
-    MONDRIAN_RAW = "mondrian-raw"  # the theory's Mondrian process (opt-in)
+    MONDRIAN_LEGACY = "mondrian-legacy"  # the Mondrian partition of Spatialize 1.2 and earlier
 
 
 #: plain (non-ensemble) IDW, a separate engine outside the catalogue

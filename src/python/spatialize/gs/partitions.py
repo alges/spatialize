@@ -12,7 +12,7 @@ Examples
 >>> from spatialize.gs.partitions import co_occurrence, mondrian_co_occurrence
 >>> pts = np.random.default_rng(0).random((50, 2))
 >>> pair = [np.array([[0.40, 0.50], [0.50, 0.50]])]
->>> p_hat = co_occurrence(pts, pair, p_process="mondrian-raw", alpha=0.8, n_partitions=4000, seed=1)
+>>> p_hat = co_occurrence(pts, pair, p_process="mondrian", alpha=0.8, n_partitions=4000, seed=1)
 >>> bool(abs(p_hat[0] - mondrian_co_occurrence(pair, rate=2.5)[0]) < 0.05)
 True
 """
@@ -43,7 +43,7 @@ def cell_labels(points, xi, p_process="mondrian", alpha=0.8, n_partitions=500, s
         partition, the candidate nuclei.
     xi : array_like of shape (m, d)
         The locations to label.
-    p_process : {"mondrian", "mondrian-raw", "voronoi"}, optional
+    p_process : {"mondrian", "mondrian-legacy", "voronoi"}, optional
         The partition process. Default: ``"mondrian"``.
     alpha : float, optional
         The granularity, as in :func:`~spatialize.gs.esi.esi_griddata`. Default: ``0.8``.

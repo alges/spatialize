@@ -96,7 +96,7 @@ namespace sptlz{
 					}
 
 					for(int i=0; i<forest_size; i++){
-						mondrian_forest.push_back(new sptlz::MondrianTree(&coords, lambda, bbox, uni_int(my_rand)));
+						mondrian_forest.push_back(new sptlz::MondrianTree(&coords, lambda, bbox, uni_int(my_rand), true));
 					}
 			}
 

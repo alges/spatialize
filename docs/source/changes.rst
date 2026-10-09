@@ -26,7 +26,7 @@ New
   ``data_cond``. Their search cross-validates on the cells of one ensemble by default, as the
   continuous search does (``cv="engine"``), or by training the ensemble again for each fold
   (``cv="refit"``, the previous behaviour, which can select differently).
-- **Partitions.** The theory's Mondrian process, ``p_process="mondrian-raw"``. Every partition now works in any dimension, adaptive IDW, the sharpened decoder and their draws in one, two and three dimensions (on a line only the exponent is fitted).
+- **Partitions.** Every partition now works in any dimension, adaptive IDW, the sharpened decoder and their draws in one, two and three dimensions (on a line only the exponent is fitted).
 - **Session settings** (:mod:`spatialize.session`). A fixed partition ``domain``; ``parallel`` and
   ``num_threads`` for every parallel computation; ``empty_cells``, with ``mark_source``,
   ``mark_knn`` and ``mark_value``, for the cells that hold no datum.
@@ -93,6 +93,17 @@ warns once per session when first used.
 
 Results that change
 -------------------
+
+- **The default Mondrian partition is the theory's Mondrian process.** ``p_process="mondrian"``, the
+  default, now draws the Mondrian process of the theory. The whole box may stay one cell. Each cut
+  chooses its axis with probability proportional to its side, so the partitions follow the closed
+  forms of the theory. Up to version 1.2 the default always cut the whole box and drew the
+  axis uniformly, which near ``alpha`` = 1 multiplied the cells into slivers (at least 92 000 against
+  2 400 on the unit square at ``alpha`` = 0.99, up to 9 GB for one partition). That partition remains
+  as ``p_process="mondrian-legacy"`` and reproduces the results of version 1.2 exactly. For the same
+  ``alpha`` the new default holds about half as many cells, so its partitions are coarser. A search
+  of hyperparameters chooses ``alpha`` again (:doc:`theory/encoders`). The spatial entropy and
+  co-estimation of :mod:`spatialize.futures` use the theory's process as well.
 
 - **Adaptive IDW and the sharpened decoder.** Their weights were :math:`1/(10^{-10} + d^p)`, which
   gave many nearby data the same weight with large exponents and vanished for large coordinates,

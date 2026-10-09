@@ -1,5 +1,5 @@
 id: P6-locality
-version: 1
+version: 2
 tier: T2
 evaluator: locality
 book:
@@ -44,3 +44,4 @@ checks:
       voronoi: reject
 provenance:
   v1: "2026-10-07: first version (phase 2), with the session domain that makes the box fixed; sizes fixed before the first run"
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."

@@ -36,7 +36,20 @@ output looks like this.
 While it runs, the command prints its progress on the error stream: each scenario as it starts,
 each estimator of a map scenario with the field it has reached, and the p-value of each check as soon
 as it is computed. The decisions come at the end, once Holm's procedure has set the levels.
-``--quiet`` turns the progress off.
+``--quiet`` turns the progress off. The report itself goes to the output stream, styled in a terminal
+and as plain text when the output is redirected, so that ``python -m spatialize.scenarios | tee
+report.txt`` keeps the report while the progress stays on the screen. ``--report FILE`` writes it to
+a file as plain text as well. The report ends with the time each scenario took, its share of the
+run and the total, which the summary line repeats. These times exclude any sleep of the computer.
+When the wall clock ran much longer, the report gives it too, with the time the computer slept or the
+run was paused.
+
+.. note::
+
+   macOS puts an idle computer to sleep even while a run uses every core, which stops the run until
+   it wakes. A catalogue run of 35 minutes once took two hours that way. ``caffeinate -i`` keeps the
+   computer awake for the length of a command, for instance
+   ``caffeinate -i python -m spatialize.scenarios --report report.txt``.
 
 The command exits with status **0** when every check passed (recorded known failures included, see
 :doc:`statistics`) and **1** when any check failed, so it can be used directly in scripts and
@@ -74,8 +87,8 @@ From the command line
 .. code-block:: text
 
    python -m spatialize.scenarios [--mode {ci,full}] [--seed N] [--tier {T1,T2,T3}]
-                                  [--id SCENARIO ...] [--alpha A] [--save-maps DIR] [--quiet]
-                                  [--list] [--version]
+                                  [--id SCENARIO ...] [--alpha A] [--save-maps DIR]
+                                  [--report FILE] [--quiet] [--list] [--version]
 
 .. list-table::
    :header-rows: 1
@@ -85,7 +98,8 @@ From the command line
      - Meaning
    * - ``--mode ci``
      - Default. Each check is sized to detect a deviation of about 0.05 with power 0.9; the whole
-       catalogue runs in about thirty minutes on a multi-core machine. Use it on every change.
+       catalogue computed for about 35 minutes on a multi-core machine on 2026-10-09, 31 of them in
+       S03. Use it before a commit that changes the estimators.
    * - ``--mode full``
      - Each check is sized to detect about 0.02 (larger ensembles, more members). Slow; use it
        before a release or to certify an implementation. Only a ``full`` pass supports claims at
@@ -104,6 +118,8 @@ From the command line
    * - ``--save-maps DIR``
      - Save the maps computed by the run (arrays and figures) under ``DIR`` for human review; see
        :ref:`scenarios-maps`. Does not change any decision.
+   * - ``--report FILE``
+     - Also write the report to ``FILE`` as plain text.
    * - ``--quiet``
      - Print only the report, without the progress of the run.
    * - ``--list``

@@ -205,7 +205,11 @@ at most one nucleus. The runner's method ``cells`` gives the cells instead, with
 uniform in the domain (200 on the line, 400 in the plane), so that the partition can reach its
 intensity.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the line passes, :math:`p = 0.091`, its largest
+deviation :math:`|z| = 2.8` at :math:`h = 0.05` (:math:`\hat p = 0.262` against 0.271). The isotropy
+passes with :math:`p = 0.61`, largest :math:`|z| = 1.0`. Both Mondrian controls reject, the line
+with :math:`|z| = 64` at :math:`h = 0.2` (:math:`\hat p = 0.020` against 0.0017) and the isotropy
+with :math:`|z| = 38`.
 
 .. _scenario-E5:
 
@@ -298,4 +302,7 @@ Both closed forms were checked against a direct simulation, 400 000 draws each (
 
 **Reading.** Which of the three locations share a cell is read through the estimator, as in E1.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the Mondrian process gives :math:`\hat D = -0.0013`,
+:math:`p = 0.40` against 0, and the partition of version 1.2 gives :math:`\hat D = -0.0782`,
+:math:`p = 0.40` against :math:`-0.0773`. Each rejects the other's closed form, with :math:`|z|` of
+50 and 69.

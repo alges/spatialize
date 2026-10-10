@@ -44,7 +44,8 @@ A dependence between the members, such as a stream of random numbers shared by t
 would flatten the slope. The field is the smooth one of P10, not a block-mark field, the claim
 holding for any field.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the slope is :math:`-0.482` with IDW
+(:math:`p = 0.016`) and :math:`-0.491` with kriging (:math:`p = 0.25`), both passing.
 
 .. _scenario-P2:
 
@@ -154,7 +155,8 @@ cumulative distribution function then failed to build. Next to that sharp step A
 interpolation also took values near :math:`-10^{-248}`, below 0. Both are corrected, the
 cumulative distribution function and its inverse being now interpolated monotonically (PCHIP).
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the twelve checks pass, with no violation in the
+12 000 values of each reading.
 
 .. _scenario-P5:
 
@@ -204,7 +206,10 @@ count of each datum at a location is :math:`\sum_t p_t(i)`.
 - *negative control* (``control-law``). The marks drawn among the data, tested against the
   cell-weighted law, must be rejected. The cluster makes the two laws differ.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the member laws pass, :math:`p` between 0.097 and 1
+with marks from the cells and between 0.51 and 0.98 with marks from the data. The weights sum to
+one at the six locations. The residual weight at :math:`(1, 1)` exceeds that at :math:`(0.3, 0.3)`
+by 0.95 on average. The control rejects, :math:`\chi^2 = 2\,516` on 354 degrees of freedom.
 
 .. _scenario-P6:
 
@@ -242,8 +247,11 @@ over the larger box. A session domain removes the dependence for every partition
 
 **Results.** Before version 3 of the scenario, the rate came from the box of data and queries. On
 seeds 1 to 3 the law at :math:`v` was then the same with any other queries inside the domain (p = 1
-for every estimator), while queries beyond it changed it (p at most :math:`10^{-6}`). Version 3 has
-not been run yet.
+for every estimator), while queries beyond it changed it (p at most :math:`10^{-6}`). On seed 1 in
+``ci`` (2026-10-09) version 3 gives :math:`p = 1` inside the domain for all four estimators. Beyond
+it the theory's Mondrian under both profile names passes with :math:`p = 0.77`, while the partition
+of version 1.2 and the Voronoi partition reject with :math:`p = 1.8 \times 10^{-9}` and
+:math:`2.5 \times 10^{-22}`.
 
 .. _scenario-P7:
 
@@ -291,7 +299,9 @@ distance, within two standard errors, before the scenario was added.
 - *negative control* (``control-legacy``). The Mondrian partition of version 1.2 always cuts the
   root, so its cells are smaller, and the test must reject.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the cell mean passes, :math:`p = 0.034`, largest
+:math:`|z| = 1.85`, and the partition of version 1.2 rejects, :math:`p = 1.6 \times 10^{-11}`,
+largest :math:`|z| = 6.6`.
 
 .. _scenario-P8:
 
@@ -333,7 +343,9 @@ members. Averaging over the partitions gives the covariance of the claim.
 The marks of distinct empty cells are independent draws, as in the block-mark model. Distinct
 sources within a partition would make them negatively correlated, which this check would detect.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the product matches its expectation, :math:`p` of
+0.28 and 0.93 on the Mondrian partition (marks from the cells and from the data) and 0.36 on the
+Voronoi partition. The control rejects, :math:`p = 6.7 \times 10^{-262}`.
 
 .. _scenario-P9:
 
@@ -363,7 +375,9 @@ One vote per cell is unbiased only approximately. Cells straddling the central q
 data more often, and cells without data take no vote. The check is therefore a paired relation, not
 a goodness of fit to the true mark law.
 
-**Results.** Not run yet.
+**Results.** On seed 1 in ``ci`` (2026-10-09) the relation passes, :math:`p = 4.1 \times 10^{-22}`,
+the error of the data-drawn marks exceeding that of the cell-drawn ones by 0.58 on average over the
+20 fields.
 
 .. _scenario-P10:
 

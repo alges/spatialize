@@ -1682,12 +1682,22 @@ class Report:
         One outcome per check, with its p-value, Holm level and decision.
     alpha : float
         Family-wise error rate of the run.
+    durations : dict of str to float
+        Seconds each scenario took, by scenario id, in the order run, on a monotonic clock. On macOS
+        that clock stops while the computer sleeps, so the durations measure the computation.
+    total : float
+        Seconds of the whole run on the same clock.
+    wall : float
+        Seconds of the whole run on the wall clock, which keeps counting while the computer sleeps.
     """
     runner: str
     mode: str
     seed: int
     outcomes: List[CheckOutcome] = field(default_factory=list)
     alpha: float = budget.ALPHA_SUITE
+    durations: Dict[str, float] = field(default_factory=dict)
+    total: float = 0.0
+    wall: float = 0.0
 
     @property
     def passed(self):
@@ -1708,7 +1718,40 @@ class Report:
             res = o.status
             level = "exact" if o.result.family == "almost-sure" else f"{o.level:9.2g}"
             lines.append(f"{name:{w}s}  {o.result.family:12s} {o.result.p_value:10.3g} {level:>9s}  {o.expect:6s} {res}  — {o.result.detail}")
+        if self.durations:
+            lines += ["", self.timing()]
         return "\n".join(lines)
+
+    def timing(self):
+        """Plain-text table of the time each scenario took, and the total."""
+        w = max([len("scenario")] + [len(k) for k in self.durations])
+        lines = [f"{'scenario':{w}s}  {'time':>12s}  share"]
+        for k, t in self.durations.items():
+            share = t / self.total if self.total > 0 else 0.0
+            lines.append(f"{k:{w}s}  {duration(t):>12s}  {100 * share:4.1f} %")
+        lines.append(f"{'total':{w}s}  {duration(self.total):>12s}")
+        if self.paused() > 0:
+            lines.append(f"{'wall clock':{w}s}  {duration(self.wall):>12s}  "
+                         f"(the computer slept or the run was paused for {duration(self.paused())})")
+        return "\n".join(lines)
+
+    def paused(self):
+        """Seconds the wall clock ran beyond the run's own clock, when more than a minute and 5 % of
+        the run (the computer slept or the process was suspended), else 0."""
+        gap = self.wall - self.total
+        return gap if gap > max(60.0, 0.05 * self.total) else 0.0
+
+
+def duration(seconds):
+    """A duration as ``"0.4 s"``, ``"12 s"``, ``"31 min 24 s"`` or ``"2 h 05 min"``."""
+    if seconds < 10:
+        return f"{seconds:.1f} s"
+    s = int(round(seconds))
+    h, rest = divmod(s, 3600)
+    m, sec = divmod(rest, 60)
+    if h:
+        return f"{h} h {m:02d} min"
+    return f"{m} min {sec:02d} s" if m else f"{s} s"
 
 
 def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE, save_maps=None,
@@ -1752,15 +1795,19 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
     rep = Report(runner.name, mode, seed, alpha=alpha)
     global _progress
     _progress = progress
+    start, start_wall = time.monotonic(), time.time()
     try:
         for i, sc in enumerate(scenarios, 1):
             _say(f"[{i}/{len(scenarios)}] {sc.id} (v{sc.spec.get('version', '?')}, {sc.spec['evaluator']}): "
                  f"{len(sc.spec.get('estimators', []))} estimators, {len(sc.spec['checks'])} checks")
             t0 = time.monotonic()
             rep.outcomes += EVALUATORS[sc.spec["evaluator"]](sc, runner, mode, seed, save_maps=save_maps)
-            _say(f"  {sc.id} done in {time.monotonic() - t0:.0f} s")
+            rep.durations[sc.id] = time.monotonic() - t0
+            _say(f"  {sc.id} done in {rep.durations[sc.id]:.0f} s")
     finally:
         _progress = None
+        rep.total = time.monotonic() - start
+        rep.wall = time.time() - start_wall
     # Almost-sure checks are decided exactly (a correct implementation cannot violate them), so they
     # spend none of the error budget: Holm applies to the statistical tests only.
     for o in rep.outcomes:

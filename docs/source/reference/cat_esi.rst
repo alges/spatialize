@@ -4,7 +4,7 @@
 Categorical ESI
 ***************
 
-Estimation of a categorical variable with a classifier fitted inside each cell, returning the share of each category among the members at each location (:doc:`../theory/other`).
+Estimation of a categorical variable with a classifier fitted inside each cell, returning the share of each category among the members at each location (:doc:`../theory/categorical`).
 
 .. currentmodule:: spatialize.gs.cat_esi
 

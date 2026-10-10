@@ -5,44 +5,8 @@ Further readings
 #################
 
 The ensemble supports other readings, each with its own module. The analysis of the data against
-the laws the other data give has its own page (:doc:`posterior`).
-
-Categorical variables
-=====================
-
-A categorical variable :math:`Z(v) \in \{1, \dots, K\}`, a rock type or a land use, is estimated
-with the same partitions and a classifier :math:`g` as decoder, fitted inside each cell. The members are categories, whose shares estimate the probability of each category,
-
-.. math::
-
-   \hat\pi_k(v) = \frac1T \sum_{t=1}^T \mathbf 1\{\hat z^{(t)}(v) = k\},
-   \qquad \sum_k \hat\pi_k(v) = 1,
-
-the reported category being the most frequent one (the majority vote, the default). A
-nearest-neighbour classifier with an anisotropic metric is built in, and any classifier with the
-scikit-learn interface can take its place. An ordinal variable reports the median category instead.
-
-The majority vote weighs every partition alike. When the reliability of each partition is known, for
-instance from a validation score, the weighted majority vote reports the category of largest total
-weight. The Dawid–Skene model, a third alternative, learns the reliabilities from the members by
-treating the partitions as annotators of unequal reliability. Partition :math:`t` reports category :math:`l`
-when the true one is :math:`k` with probability :math:`\theta^{(t)}_{kl}`, its confusion matrix, and
-the true categories have prior shares :math:`\pi_k`. EM alternates the posterior of the true category
-at each location,
-
-.. math::
-
-   P(z(v) = k \mid \text{members}) \propto \pi_k \prod_{t=1}^T \theta^{(t)}_{k\,\hat z^{(t)}(v)},
-
-with new estimates of :math:`\pi` and of the confusion matrices, until the log-likelihood settles.
-Partitions that agree with the consensus get matrices close to the identity and weigh more, so a
-group of partitions biased towards one category is discounted where the majority vote would follow
-it. A binary variable is the case :math:`K = 2`, each matrix holding a sensitivity and a specificity.
-An ordinal variable adds pseudo-counts that favour confusions between neighbouring categories. On a
-grid, a spatial variant keeps apart categories that may not touch, by mean field. At each iteration a
-category loses, at a location, a factor times its neighbours' current probabilities of a category
-forbidden next to it, so the penalty follows the neighbours' state. The factor is set by the user. Members of cells without data take no part. EM reaches a local maximum from a
-seeded random start, so a fixed seed makes the result reproducible.
+the laws the other data give has its own page (:doc:`posterior`), and so do categorical variables
+(:doc:`categorical`).
 
 Information measures
 ====================
@@ -79,7 +43,6 @@ when both of its members are valid.
 In Spatialize
 =============
 
-Categorical estimation is the functions of
-:doc:`../reference/cat_esi`, and the entropy and mutual information the estimators of
+The entropy and mutual information are the estimators of
 :doc:`../reference/futures`, where they are experimental: their interface and results may still
 change.

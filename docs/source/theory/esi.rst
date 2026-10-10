@@ -64,7 +64,7 @@ Variables
 =========
 
 The same construction handles continuous variables in any dimension the decoder supports, and
-categorical variables, whose decoders are classifiers fitted inside each cell (:doc:`other`).
+categorical variables, whose decoders are classifiers fitted inside each cell (:doc:`categorical`).
 
 In Spatialize
 =============

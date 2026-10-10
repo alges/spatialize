@@ -150,6 +150,15 @@ def public_cases():
                 "samples": np.asarray(r.esi_samples(raw=True)).astype(str)}
     add("cat_esi_nongriddata", "2d", cat)
 
+    def cat_btd(s, v, q):
+        from spatialize.gs.cat_esi.agg_functions import aggregate_with_btd
+        cats = np.where(v > np.median(v), "high", "low")
+        r = cat_esi_nongriddata(s, cats, q, n_partitions=T, alpha=ALPHA, seed=SEED, **NULL)
+        est, prob, ll = aggregate_with_btd(r.esi_samples(raw=True), categories_list=["high", "low"], seed=SEED)
+        return {"estimation": np.asarray(est).astype(str), "probabilities": np.asarray(prob),
+                "log_likelihood": np.array([ll])}
+    add("cat_esi_dawid_skene", "2d", cat_btd)
+
     from spatialize.gs.partitions import cell_labels
     for proc, a in (("mondrian", ALPHA), ("mondrian-legacy", ALPHA), ("voronoi", 0.5)):
         add(f"cell_labels_{proc}", "2d", lambda s, v, q, proc=proc, a=a: {

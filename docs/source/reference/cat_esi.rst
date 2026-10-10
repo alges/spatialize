@@ -39,6 +39,10 @@ Aggregation functions
 
 .. autofunction:: aggregate_with_ordinal_mv
 
+.. autofunction:: aggregate_with_btd
+
+.. autofunction:: optimize_btd_spatial_penalty
+
 .. autofunction:: categorical_feature_precision
 
 .. autofunction:: categorical_precision_cube

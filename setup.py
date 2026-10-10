@@ -94,6 +94,14 @@ libspatialize_extensions = [
         extra_link_args=extra_link_args,
         define_macros=macros,
     ),
+    # Dawid-Skene EM aggregation of categorical ensembles (spatialize.gs.cat_esi)
+    Pybind11Extension(
+        "spatialize.gs.cat_esi._dawid_skene",
+        sources=[os.path.join('src', 'c++', 'dawid_skene.cpp')],
+        include_dirs=[os.path.join('.', 'include')],
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
+    ),
 ]
 
 if __name__ == '__main__':

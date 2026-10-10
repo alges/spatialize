@@ -22,6 +22,14 @@ New
   (``estimation``, and optionally ``post_creation``, ``loo`` and ``kfold``) in the estimation
   functions and the searches, on any partition and in any dimension. Leave-one-out and k-fold are
   derived from ``estimation`` when not given.
+- **Dawid–Skene aggregation of categorical ensembles**, an alternative to the majority vote, which
+  stays the default: :func:`~spatialize.gs.cat_esi.aggregate_with_btd`, with ``re_estimate('btd')``
+  on a result, weighs the partitions by their reliability, for nominal, ordinal and binary variables,
+  with a spatial variant for forbidden adjacencies (:func:`~spatialize.gs.cat_esi.optimize_btd_spatial_penalty`
+  chooses its penalty). It is compiled with Spatialize, runs on the session's threads with the same
+  result for any number of them, reports its progress and messages like the other functions, and
+  stops on Ctrl-C between iterations. ``CatESIResult.class_probabilities`` gives the probability of
+  each category read from the members.
 - **Categorical estimation on every partition.** The categorical functions take ``p_process`` and
   ``data_cond``. Their search cross-validates on the cells of one ensemble by default, as the
   continuous search does (``cv="engine"``), or by training the ensemble again for each fold

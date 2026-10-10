@@ -18,9 +18,28 @@ with the same partitions and a classifier :math:`g` as decoder, fitted inside ea
    \hat\pi_k(v) = \frac1T \sum_{t=1}^T \mathbf 1\{\hat z^{(t)}(v) = k\},
    \qquad \sum_k \hat\pi_k(v) = 1,
 
-the reported category being the most frequent one. A nearest-neighbour classifier with an
-anisotropic metric is built in, and any classifier with the scikit-learn interface can take its
-place.
+the reported category being the most frequent one (the majority vote, the default). A
+nearest-neighbour classifier with an anisotropic metric is built in, and any classifier with the
+scikit-learn interface can take its place. An ordinal variable reports the median category instead.
+
+The majority vote weighs every partition alike. The Dawid–Skene model, an alternative to it, treats
+the partitions as annotators of unequal reliability. Partition :math:`t` reports category :math:`l`
+when the true one is :math:`k` with probability :math:`\theta^{(t)}_{kl}`, its confusion matrix, and
+the true categories have prior shares :math:`\pi_k`. EM alternates the posterior of the true category
+at each location,
+
+.. math::
+
+   P(z(v) = k \mid \text{members}) \propto \pi_k \prod_{t=1}^T \theta^{(t)}_{k\,\hat z^{(t)}(v)},
+
+with new estimates of :math:`\pi` and of the confusion matrices, until the log-likelihood settles.
+Partitions that agree with the consensus get matrices close to the identity and weigh more, so a
+group of partitions biased towards one category is discounted where the majority vote would follow
+it. A binary variable is the case :math:`K = 2`, each matrix holding a sensitivity and a specificity.
+An ordinal variable adds pseudo-counts that favour confusions between neighbouring categories. On a
+grid, a spatial variant penalises categories that may not touch, with a penalty chosen by the
+marginal likelihood. Members of cells without data take no part. EM reaches a local maximum from a
+seeded random start, so a fixed seed makes the result reproducible.
 
 Information measures
 ====================

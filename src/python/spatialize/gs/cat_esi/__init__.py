@@ -8,6 +8,9 @@ from ._main import (
 from .agg_functions import (
     aggregate_with_mv,
     aggregate_with_ordinal_mv,
+    aggregate_with_btd,
+    objective_function_for_spatial_penalty,
+    optimize_btd_spatial_penalty,
     categorical_feature_precision,
     categorical_precision_cube,
 )
@@ -30,6 +33,9 @@ __all__ = [
     "CatESIGridSearchResult",
     "aggregate_with_mv",
     "aggregate_with_ordinal_mv",
+    "aggregate_with_btd",
+    "objective_function_for_spatial_penalty",
+    "optimize_btd_spatial_penalty",
     "categorical_feature_precision",
     "categorical_precision_cube",
     "accuracy",
@@ -41,18 +47,3 @@ __all__ = [
     "cohen_kappa",
     "SCORING_OPTIONS",
 ]
-
-# Optional BTD functions (require compiled dawid_skene_em_cpp module)
-try:
-    from .agg_functions import (
-        aggregate_with_btd,
-        objective_function_for_spatial_penalty,
-        optimize_btd_spatial_penalty,
-    )
-    __all__ += [
-        "aggregate_with_btd",
-        "objective_function_for_spatial_penalty",
-        "optimize_btd_spatial_penalty",
-    ]
-except ImportError:
-    pass

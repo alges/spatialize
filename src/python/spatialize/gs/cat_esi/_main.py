@@ -255,6 +255,42 @@ class CatESIResult(EstimationResult):
 
     # ── ordinal order ─────────────────────────────────────────
 
+    def class_probabilities(self, categories=None):
+        """
+        Probability of each category at each location, read from the members.
+
+        The share of the partitions whose member is the category, among the members that are
+        defined (a member of an empty cell, ``None``, takes no part). It is the law the majority
+        vote reads its mode from; :func:`~spatialize.gs.cat_esi.agg_functions.aggregate_with_btd`
+        gives the Dawid-Skene alternative, which weighs the partitions by their reliability.
+
+        Parameters
+        ----------
+        categories : sequence, optional
+            The categories, in the order of the columns. Default: the sorted categories found among
+            the members.
+
+        Returns
+        -------
+        categories : list
+            The categories of the columns.
+        probabilities : np.ndarray, shape (p, K)
+            Rows sum to one where at least one member is defined, and are NaN elsewhere. For
+            gridded results the shape is the grid's followed by ``K``.
+        """
+        samples = self._esi_samples
+        defined = np.array([[x is not None and not (isinstance(x, float) and np.isnan(x)) for x in row]
+                            for row in samples])
+        if categories is None:
+            categories = sorted({x for x in samples[defined]}, key=str)
+        counts = np.stack([((samples == c) & defined).sum(axis=1) for c in categories], axis=1).astype(float)
+        n = defined.sum(axis=1, keepdims=True).astype(float)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            probabilities = np.where(n > 0, counts / n, np.nan)
+        if self.griddata:
+            probabilities = probabilities.reshape(tuple(self.original_shape) + (len(categories),))
+        return list(categories), probabilities
+
     def set_ordinal_order(self, ordinal_order):
         """
         Set the ordinal category order (dict mapping category → integer rank).
@@ -318,7 +354,7 @@ class CatESIResult(EstimationResult):
 
     def _make_btd_fn(self, **kwargs):
         """Build a BTD aggregation callable, inferring metadata from the result."""
-        from .agg_functions import aggregate_with_btd  # may not be available
+        from .agg_functions import aggregate_with_btd
 
         # Infer categories from samples
         all_vals = [s for s in self._esi_samples.ravel() if s is not None]

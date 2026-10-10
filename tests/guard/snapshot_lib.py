@@ -18,7 +18,16 @@ def _check_fresh_build():
     so = glob.glob(os.path.join(REPO, "libspatialize*.so")) + glob.glob(os.path.join(REPO, "libspatialize*.pyd"))
     if not so:
         raise RuntimeError("no in-place build of libspatialize; run: python setup.py build_ext --inplace --force")
-    sources = glob.glob(os.path.join(REPO, "src", "c++", "*.cpp")) + glob.glob(os.path.join(REPO, "include", "spatialize", "**", "*.hpp"), recursive=True)
+    # each compiled module against its own sources: libspatialize, and the Dawid-Skene module of
+    # categorical ESI (src/c++/dawid_skene.cpp, built in place under spatialize/gs/cat_esi)
+    ds_src = os.path.join(REPO, "src", "c++", "dawid_skene.cpp")
+    sources = [f for f in glob.glob(os.path.join(REPO, "src", "c++", "*.cpp")) if f != ds_src] + \
+        glob.glob(os.path.join(REPO, "include", "spatialize", "**", "*.hpp"), recursive=True)
+    ds_so = glob.glob(os.path.join(REPO, "src", "python", "spatialize", "gs", "cat_esi", "_dawid_skene*.so")) + \
+        glob.glob(os.path.join(REPO, "src", "python", "spatialize", "gs", "cat_esi", "_dawid_skene*.pyd"))
+    if os.path.exists(ds_src) and (not ds_so or os.path.getmtime(ds_src) > max(os.path.getmtime(f) for f in ds_so)):
+        raise RuntimeError("the Dawid-Skene module is missing or older than src/c++/dawid_skene.cpp; rebuild "
+                           "with: python setup.py build_ext --inplace --force")
     newest = max(sources, key=os.path.getmtime)
     if os.path.getmtime(newest) > max(os.path.getmtime(f) for f in so):
         raise RuntimeError(f"libspatialize is older than {os.path.relpath(newest, REPO)}; rebuild with: "

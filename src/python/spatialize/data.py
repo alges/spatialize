@@ -416,3 +416,107 @@ def load_simulated_anisotropic_data():
             (input_samples_5perc, kriging_5perc),
             (input_samples_reduced, kriging_reduced),
             ground_truth)
+
+
+#: lithologies and eras of :func:`load_lithology_golden`, eras in stratigraphic (ordinal) order
+LITHOLOGIES_GOLDEN = ("gneiss", "granite", "sandstone", "shale", "basalt", "alluvium")
+ERAS_GOLDEN = ("Proterozoic", "Paleozoic", "Mesozoic", "Cenozoic")
+
+
+def load_lithology_golden(n_samples=300, seed=20261010):
+    """
+    Load the lithology of the Front Range foothills near Golden, Colorado: a real geologic map as the
+    truth, and samples drawn from it.
+
+    A 120 × 120 grid (21.3 km × 27.5 km) of the map units of the U.S. Geological Survey's State
+    Geologic Map Compilation, grouped into six lithologies (Proterozoic gneiss and granite, the
+    sandstones and shales of the Paleozoic to Paleogene cover, the basalt flows near Golden, and the
+    Quaternary alluvium) and four eras, an ordinal variable. The whole grid is the truth against which
+    a categorical estimate can be checked; the samples are grid cells drawn uniformly, water excluded.
+
+    Parameters
+    ----------
+    n_samples : int, default 300
+        Number of samples, drawn without replacement among the cells with a lithology.
+    seed : int, default 20261010
+        Seed of the draw of the samples.
+
+    Returns
+    -------
+    samples : pandas.DataFrame of shape (n_samples, 6)
+        Columns ``'x'``, ``'y'`` (km), ``'unit'`` (map unit id), ``'lithology'``, ``'era'`` and
+        ``'age_ma'`` (mid-age of the unit's interval, Ma).
+    grid : pandas.DataFrame of shape (14400, 6)
+        The same columns for every cell centre, row-major with rows along y (water: empty lithology
+        and era).
+    units : pandas.DataFrame of shape (53, 9)
+        The map units: name, generalised lithology, era, interval, ages, lithology description and
+        original map source.
+
+    Notes
+    -----
+    Source: Horton, J.D., San Juan, C.A., and Stoeser, D.B., 2017, The State Geologic Map Compilation
+    (SGMC) geodatabase of the conterminous United States, U.S. Geological Survey Data Series 1052
+    (public domain), here from Green (1992), the digital geologic map of Colorado, retrieved through
+    Macrostrat (CC-BY 4.0; Peters, Husson and Czaplewski, 2018). The eras are ordered as
+    :data:`ERAS_GOLDEN` for ordinal estimation.
+
+    Examples
+    --------
+    >>> from spatialize.data import load_lithology_golden
+    >>> samples, grid, units = load_lithology_golden()
+    >>> points = samples[['x', 'y']].values
+    >>> values = samples['lithology'].values
+    >>> xi = grid[['x', 'y']].values
+    """
+    base = os.path.join(str(rs.files(data)), "lithology_golden")
+    grid = pd.read_csv(os.path.join(base, "grid.csv"), keep_default_na=False, na_values={"age_ma": [""]})
+    units = pd.read_csv(os.path.join(base, "units.csv"), keep_default_na=False)
+    rock = grid[grid["lithology"] != ""]
+    rng = np.random.default_rng(seed)
+    samples = rock.iloc[np.sort(rng.choice(len(rock), size=int(n_samples), replace=False))].reset_index(drop=True)
+    return samples, grid, units
+
+
+def load_facies_pyrcz(biased=False):
+    """
+    Load a synthetic well data set with two facies and continuous properties (GeoDataSets, M. J. Pyrcz).
+
+    Parameters
+    ----------
+    biased : bool, default False
+        ``False``: 450 wells over 10 km × 10 km (``spatial_nonlinear_MV_facies_v5``). ``True``: 368
+        wells over 1 km × 1 km sampled preferentially (``sample_data_MV_biased``).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``'x'``, ``'y'`` (m), ``'facies'`` (0 shale, 1 sand), ``'porosity'``,
+        ``'permeability'`` (mD) and ``'acoustic_impedance'``; porosity in % for the unbiased set and
+        as a fraction for the biased one, as in the source files.
+
+    Notes
+    -----
+    From https://github.com/GeostatsGuy/GeoDataSets, MIT licence, Copyright (c) 2018 Michael Pyrcz; the
+    licence ships with the files (``resources/data/facies_pyrcz/LICENSE``). A binary categorical
+    variable with continuous covariates, for estimating within facies and for preferential sampling.
+
+    Examples
+    --------
+    >>> from spatialize.data import load_facies_pyrcz
+    >>> wells = load_facies_pyrcz()
+    >>> points = wells[['x', 'y']].values
+    >>> values = wells['facies'].values
+    """
+    base = os.path.join(str(rs.files(data)), "facies_pyrcz")
+    if biased:
+        df = pd.read_csv(os.path.join(base, "sample_data_MV_biased.csv"), index_col=0)
+        names = {"X": "x", "Y": "y", "Facies": "facies", "Porosity": "porosity", "Perm": "permeability",
+                 "AI": "acoustic_impedance"}
+    else:
+        df = pd.read_csv(os.path.join(base, "spatial_nonlinear_MV_facies_v5.csv")).drop(columns=["Well"])
+        names = {"X": "x", "Y": "y", "Facies": "facies", "Por": "porosity", "Perm": "permeability",
+                 "AI": "acoustic_impedance"}
+    df = df.rename(columns=names)[["x", "y", "facies", "porosity", "permeability", "acoustic_impedance"]]
+    df["facies"] = df["facies"].astype(int)
+    return df

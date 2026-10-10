@@ -22,6 +22,11 @@ New
   (``estimation``, and optionally ``post_creation``, ``loo`` and ``kfold``) in the estimation
   functions and the searches, on any partition and in any dimension. Leave-one-out and k-fold are
   derived from ``estimation`` when not given.
+- **Two categorical data sets.** :func:`~spatialize.data.load_lithology_golden`, the lithology of a
+  real geologic map near Golden, Colorado (USGS State Geologic Map Compilation, public domain), with six
+  lithologies, four ordered eras and the whole map as the truth; and
+  :func:`~spatialize.data.load_facies_pyrcz`, synthetic wells with two facies and continuous properties
+  (GeoDataSets by M. J. Pyrcz, MIT licence, shipped with the files), one set sampled preferentially.
 - **Dawid–Skene aggregation of categorical ensembles**, an alternative to the majority vote, which
   stays the default: :func:`~spatialize.gs.cat_esi.aggregate_with_btd`, with ``re_estimate('btd')``
   on a result, weighs the partitions by their reliability, for nominal, ordinal and binary variables,

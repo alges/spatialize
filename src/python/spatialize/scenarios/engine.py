@@ -326,6 +326,17 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
       field, above ``min_value`` (V4 power check);
     - ``contrast_ratio_reference`` — standard deviation of the map over that of simple kriging with
       the true covariance, above ``min_ratio`` (V5);
+    - ``coherence_ratio_members`` — coherence of single members over that of the truth, mean over
+      the first ``members_checked`` members of each field without NaN, within ``±margin`` of 1 (V3);
+    - ``range_ratio_members`` — log of the directional range ratio
+      (:func:`~spatialize.scenarios.stats.maps.range_ratio`, along ``truth.theta_deg``) of single
+      members over that of the truth, within ``±margin`` (V3);
+    - ``roughness_reference`` — roughness of the map
+      (:func:`~spatialize.scenarios.stats.maps.roughness`) over that of simple kriging with the true
+      covariance, below ``max_value`` or above ``min_value`` (V9);
+    - ``roughness_local_reference`` — roughness of simple kriging from the ``k`` nearest data over
+      that of global simple kriging, above ``min_value``: the functional sees the jumps of a cropped
+      neighbourhood (V9 control, independent of the estimator);
     - ``paired_relation`` — the estimator beats ``against`` field by field on ``metric``, either
       ``coverage`` (share of the grid inside the members' 90 % interval) or ``rmse`` (error of the
       median map), in the direction ``better`` (paired t-test).
@@ -388,9 +399,11 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
             coverage = float(np.mean((tv[ok] >= lo90[ok]) & (tv[ok] <= hi90[ok])))
             rmse = float(np.sqrt(np.nanmean((point.ravel() - tv) ** 2)))
             (th, c), (th_t, c_t) = maps.orientation_coherence(point), maps.orientation_coherence(truth)
+            finite = [j for j in range(mem.shape[1]) if np.isfinite(mem[:, j]).all()][:keep_members]
             rows.append(dict(point=point, truth=truth, theta=th, coherence=c, theta_truth=th_t,
                              coherence_truth=c_t, samples=np.asarray(f["samples"]), coverage=coverage, rmse=rmse,
-                             members=[np.asarray(mem)[:, j].reshape(m_grid, m_grid) for j in range(keep_members)]))
+                             members=[np.asarray(mem)[:, j].reshape(m_grid, m_grid) for j in range(keep_members)],
+                             finite_members=[mem[:, j].reshape(m_grid, m_grid) for j in finite]))
         _say(f"    {what}: done in {time.monotonic() - t0:.0f} s")
         return rows
 
@@ -448,6 +461,29 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
             metric = check["metric"]
             r = families.paired_relation([row[metric] for row in rows], [row[metric] for row in est_cache[other.id]],
                                          better=check["better"])
+        elif fn in ("coherence_ratio_members", "range_ratio_members"):
+            j = int(check["members_checked"])
+            if fn == "coherence_ratio_members":
+                x = [float(np.mean([maps.orientation_coherence(z)[1] for z in r["finite_members"][:j]]))
+                     / r["coherence_truth"] for r in rows if r["finite_members"]]
+                r = families.tost_mean(x, 1.0 - check["margin"], 1.0 + check["margin"])
+            else:
+                th_t = float(t["theta_deg"])
+                x = [float(np.mean([np.log(maps.range_ratio(z, th_t)) for z in r["finite_members"][:j]]))
+                     - np.log(maps.range_ratio(r["truth"], th_t)) for r in rows if r["finite_members"]]
+                r = families.tost_mean(x, -check["margin"], check["margin"])
+        elif fn in ("roughness_reference", "roughness_local_reference"):
+            if fn == "roughness_reference":
+                ratio = [maps.roughness(r["point"]) / maps.roughness(reference(k)) for k, r in enumerate(rows)]
+            else:
+                ratio = []
+                for k in range(len(rows)):
+                    f = sc.field(k)
+                    local = generators.fields.simple_kriging_exponential_local(
+                        f["samples"], f["values"], queries, int(check["k"]), t["a1"], t["a2"], t["theta_deg"])
+                    ratio.append(maps.roughness(local.reshape(m_grid, m_grid)) / maps.roughness(reference(k)))
+            r = (families.mean_less(ratio, check["max_value"]) if "max_value" in check
+                 else families.mean_greater(ratio, check["min_value"]))
         elif fn == "contrast_ratio_reference":
             ratio = [float(np.nanstd(r["point"]) / np.std(reference(k))) for k, r in enumerate(rows)]
             r = families.mean_greater(ratio, check["min_ratio"])
@@ -1754,8 +1790,40 @@ def duration(seconds):
     return f"{m} min {sec:02d} s" if m else f"{s} s"
 
 
+def select_checks(sc, checks):
+    """The scenario restricted to some of its checks, or None when none of them is selected.
+
+    Parameters
+    ----------
+    sc : Scenario
+    checks : collection of str
+        Check identifiers (the ``id`` of a check) or outcome identifiers (``<check>-<estimator>``,
+        see :func:`check_ids`), which keep one estimator of a check that lists several.
+
+    Returns
+    -------
+    Scenario or None
+        A copy whose ``spec["checks"]`` holds the selected checks only. The evaluators compute an
+        estimator only for the checks that need it, so the run computes less.
+    """
+    import copy
+    kept = []
+    for c in sc.spec["checks"]:
+        if c["id"] in checks:
+            kept.append(c)
+        elif "estimators" in c:
+            ests = [e for e in c["estimators"] if f"{c['id']}-{e}" in checks]
+            if ests:
+                kept.append({**c, "estimators": ests})
+    if not kept:
+        return None
+    spec = copy.copy(sc.spec)
+    spec["checks"] = kept
+    return Scenario(sc.id, sc.path, spec)
+
+
 def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUITE, save_maps=None,
-        progress=None) -> Report:
+        progress=None, checks=None) -> Report:
     """Evaluate scenarios with a runner and decide every check under one Holm budget.
 
     Parameters
@@ -1775,6 +1843,10 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
         Directory where the maps computed by the run are saved for human review: per scenario,
         estimator and field, the arrays (``.npy``) and a figure of truth and map; plus a summary
         figure. Needs matplotlib. Maps never enter the decisions.
+    checks : sequence of str, optional
+        Run only these checks (:func:`select_checks`), for instance to calibrate or to try new ones.
+        Holm's procedure then spreads the budget over fewer tests, so the levels are less strict
+        than in a run of the whole catalogue.
     progress : callable, optional
         Called with one line of text as the run advances: each scenario, each estimator's maps and
         each check's p-value before the Holm decision. The command line prints these lines.
@@ -1792,6 +1864,8 @@ def run(scenarios, runner: Runner, mode="ci", seed=None, alpha=budget.ALPHA_SUIT
         scenarios = [scenarios]
     elif isinstance(scenarios, dict):
         scenarios = list(scenarios.values())
+    if checks:
+        scenarios = [x for x in (select_checks(sc, set(checks)) for sc in scenarios) if x is not None]
     rep = Report(runner.name, mode, seed, alpha=alpha)
     global _progress
     _progress = progress

@@ -36,6 +36,11 @@ def _report_styled(styled):
     return Console(file=sys.stdout, highlight=False, soft_wrap=False, theme=_display._theme()), styled[1]
 
 
+def check_ids_of(c):
+    """The outcome identifiers of one check: ``<check>-<estimator>`` for each of its ``estimators``."""
+    return [f"{c['id']}-{e}" for e in c.get("estimators", [])]
+
+
 def _progress_printer(styled):
     if styled is None:
         return lambda msg: print(msg, file=sys.stderr, flush=True)
@@ -125,6 +130,9 @@ def main(argv=None):
                         help="run only the scenarios of this tier")
     parser.add_argument("--id", dest="ids", action="append", default=None, metavar="SCENARIO",
                         help="run only this scenario (repeatable)")
+    parser.add_argument("--check", dest="checks", action="append", default=None, metavar="CHECK",
+                        help="run only this check, by check or outcome id (repeatable); Holm's levels "
+                             "are then those of the checks run")
     parser.add_argument("--alpha", type=float, default=ALPHA_SUITE,
                         help=f"family-wise error rate of the run (default {ALPHA_SUITE:g})")
     parser.add_argument("--save-maps", metavar="DIR", default=None,
@@ -150,6 +158,11 @@ def main(argv=None):
         return 0
     if not selected:
         parser.error("no scenario selected")
+    if args.checks:
+        known = {i for sc in selected.values() for c in sc.spec["checks"] for i in [c["id"], *check_ids_of(c)]}
+        unknown = sorted(set(args.checks) - known)
+        if unknown:
+            parser.error(f"unknown check(s) in the selected scenarios: {', '.join(unknown)}")
 
     from .runners.spatialize import SpatializeRunner  # loads the compiled library
     styled = _styled()
@@ -161,7 +174,8 @@ def main(argv=None):
         else:
             styled[0].print(f"[bold {styled[1]['brand']}]spatialize[/] [dim]· conformance · {start}[/]")
     report = run(selected, SpatializeRunner(), mode=args.mode, seed=args.seed, alpha=args.alpha,
-                 save_maps=args.save_maps, progress=None if args.quiet else _progress_printer(styled))
+                 save_maps=args.save_maps, progress=None if args.quiet else _progress_printer(styled),
+                 checks=args.checks)
     out = _report_styled(styled)
     _print_report(report, out)
     count = {k: sum(1 for o in report.outcomes if o.status == k) for k in ("PASS", "FAIL", "KNOWN", "XPASS", "SKIPPED")}

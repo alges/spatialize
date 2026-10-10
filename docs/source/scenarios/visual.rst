@@ -60,9 +60,17 @@ Map functionals
    * - level-set IoU (:func:`level_set_iou`)
      - intersection over union of a thresholded map and the true region
      - shapes of plumes, dry regions, exceeded areas
+   * - directional range ratio (:func:`range_ratio`)
+     - correlation length along a direction over that across it, each the lag at which the map's
+       correlation with its shifted copy falls below :math:`e^{-1}` (:func:`directional_range`)
+     - the elongation of a texture, in single members (criterion V3)
+   * - roughness (:func:`roughness`)
+     - mean squared difference between neighbouring pixels over four times the map's variance, 1 for
+       white noise
+     - maps rougher or smoother than a reference (criterion V9)
    * - planned
-     - directional range ratio, roughness, edge sharpness, connectivity (components and Euler
-       characteristic over thresholds), halo index, level-curve shape of an estimated covariance
+     - edge sharpness, connectivity (components and Euler characteristic over thresholds), halo index,
+       level-curve shape of an estimated covariance
      - see the catalogue
 
 The axis-artefact index is confounded with smoothing. Maps of rotation-invariant (Voronoi) estimators

@@ -147,3 +147,29 @@ def vbm(rng, n_cells, mark_sampler, dim=2):
         d = ((np.asarray(x)[:, None, :] - centres[None, :, :]) ** 2).sum(axis=2)
         return marks[np.argmin(d, axis=1)]
     return field
+
+
+def simple_kriging_exponential_local(samples, values, queries, k, a1, a2=None, theta_deg=0.0, jitter=1e-8):
+    r"""Simple kriging as :func:`simple_kriging_exponential`, each query from its ``k`` nearest data.
+
+    The cropped neighbourhood changes from one query to the next, so the map jumps where it does:
+    the rough reference of criterion V9 in scenario S03.
+
+    Parameters
+    ----------
+    samples, values, queries, a1, a2, theta_deg, jitter
+        As for :func:`simple_kriging_exponential`.
+    k : int
+        Number of nearest data (Euclidean) each query uses.
+
+    Returns
+    -------
+    ndarray of shape (q,)
+    """
+    from scipy.spatial import cKDTree
+    s, v, q = np.asarray(samples, float), np.asarray(values, float), np.asarray(queries, float)
+    _, idx = cKDTree(s).query(q, k=min(int(k), len(s)))
+    idx = np.reshape(idx, (len(q), -1))
+    return np.array([simple_kriging_exponential(s[i], v[i], q[j:j + 1], a1, a2, theta_deg, jitter)[0]
+                     for j, i in enumerate(idx)])
+

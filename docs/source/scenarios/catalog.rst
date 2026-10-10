@@ -194,8 +194,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - ordinary-kriging baseline with a fitted isotropic variogram, writable in NumPy
    * - V3
      - anisotropy in members and simulations (S03)
-     - ready · priority 1
-     - directional range ratio; simulated fields (S01)
+     - **implemented** on members · priority 1 for simulated fields
+     - simulated fields (S01)
    * - V4
      - Mondrian blocks averaged away (S03); S11
      - **implemented** on S03 · priority 4 on S11
@@ -218,9 +218,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - ready · priority 7
      - pre-set IoU level (with S07)
    * - V9
-     - roughness against a global simple-kriging reference
-     - ready · priority 2
-     - roughness functional; cropped-neighbourhood kriging control
+     - roughness against a global simple-kriging reference (S03)
+     - **implemented**
+     - —
    * - V10
      - connectivity of high-value bodies (S13)
      - ready · priority 10

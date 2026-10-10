@@ -87,8 +87,9 @@ From the command line
 .. code-block:: text
 
    python -m spatialize.scenarios [--mode {ci,full}] [--seed N] [--tier {T1,T2,T3}]
-                                  [--id SCENARIO ...] [--alpha A] [--save-maps DIR]
-                                  [--report FILE] [--quiet] [--list] [--version]
+                                  [--id SCENARIO ...] [--check CHECK ...] [--alpha A]
+                                  [--save-maps DIR] [--report FILE] [--quiet] [--list]
+                                  [--version]
 
 .. list-table::
    :header-rows: 1
@@ -112,6 +113,12 @@ From the command line
        ``T3`` geostatistical scenarios).
    * - ``--id SCENARIO``
      - Run only this scenario; repeat the option for several. ``--list`` shows the identifiers.
+   * - ``--check CHECK``
+     - Run only this check, by the ``id`` of a check or by the identifier of one outcome
+       (``<check>-<estimator>``); repeat the option for several. The estimators that no selected check
+       needs are not computed, so trying or calibrating new checks takes a fraction of the run.
+       Holm's procedure then spreads the budget over the checks run, so their levels are less strict
+       than in a run of the whole catalogue, whose results are the ones to report.
    * - ``--alpha A``
      - Family-wise error rate of the run (default :math:`10^{-3}`). Changing it is meant for
        studying the suite, not for making a run pass.

@@ -604,8 +604,28 @@ they need become available.
   intervals.
 - visual **V2**: the coherence of the ensemble map exceeds that of ordinary kriging with a fitted
   isotropic variogram, which blurs the short axis (needs the kriging baseline).
-- visual **V3**: the anisotropy is present in single members and simulated fields, not only in the
-  median map (coherence equivalent to the truth's).
+- visual **V3** on simulated fields, which waits for the runner method for simulated fields of S01.
+
+**Visual criteria V3 and V9 (version 13).** V3 reads the anisotropy in single members, the first
+five members of each field without empty cells. Their coherence over the truth's must lie within
+:math:`\pm 0.25` of 1, and the log of their directional range ratio over the truth's within
+:math:`\pm \log 1.5`, by equivalence over the 80 fields. On seed 1 the adaptive and sharpened decoders
+pass both (coherence ratios 0.83 and 0.84, log range ratios :math:`-0.12` and :math:`-0.09`).
+Kriging and Voronoi IDW pass the ranges but keep only 0.62 and 0.52 of the coherence, and Mondrian
+IDW keeps 0.50 of it, its range ratio (log :math:`-0.38`) lying too close to the margin. These four
+outcomes are recorded as known failures.
+
+V9 compares the roughness of the median map with that of simple kriging with the true covariance.
+The averaging decoders give smoother maps, IDW 0.75, kriging 0.64 and Voronoi IDW 0.73 times the
+reference's roughness. The adaptive ones fit a high exponent, raised further by the sharpened one, so
+their maps are rougher by design, 1.14 and 1.29 times. The control, simple kriging from the 8 nearest
+data, is 1.012 times as rough as the global one, which shows the functional sees the jumps of a
+cropped neighbourhood. These results come from a run of the 16 new checks alone (``--check``), whose
+Holm levels are less strict than those of a run of the catalogue.
+
+A pilot on fields 0–4 had suggested that every member lost the anisotropy. It averaged members with
+empty cells, whose NaN gave a coherence of 0, and was set aside once the run measured the members
+without them.
 
 .. _scenario-S04:
 

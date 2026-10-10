@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 12
+version: 13
 tier: T3
 evaluator: map_visual
 book:
@@ -186,6 +186,52 @@ checks:
   - {id: order-rmse-sharp, title: "error: sharpened map below adaptive", estimator: sharp, against: aidw,
      family: paired-relation, functional: paired_relation, metric: rmse, better: less,
      known_failure: "with exact adaptive weights the gradient-raised exponent costs more than the residual boost gains (RMSE 0.438 against 0.437); the advantage measured in v10 came from the saturated weights of bug #22"}
+  # V3 on single members (the simulated fields wait for a runner method for simulations, as S01),
+  # read on the first five members of each field without empty cells. Margins fixed before the first
+  # run: coherence ratio within ±0.25 of 1, log range ratio within ±log 1.5. The first run (seed 1)
+  # passes the adaptive and sharpened decoders on both, kriging and Voronoi IDW on the ranges; the
+  # other four outcomes are recorded as known failures with the values it measured.
+  - {id: v3a-idw, title: "V3 single members keep the anisotropy's strength (idw)", estimator: idw,
+     family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25,
+     known_failure: "single members of IDW are smoother across the cut lines than the truth: their coherence is 0.50 of the truth's (seed 1, members without empty cells), below the margin 0.75"}
+  - {id: v3b-idw, title: "V3 single members keep the anisotropy's ranges (idw)", estimator: idw,
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405,
+     known_failure: "the members' range ratio is 0.68 of the truth's (log −0.38, seed 1), inside the margin ±log 1.5 but too close to it for the equivalence to be significant"}
+  - {id: v3a-aidw, title: "V3 single members keep the anisotropy's strength (aidw)", estimator: aidw,
+     family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25}
+  - {id: v3b-aidw, title: "V3 single members keep the anisotropy's ranges (aidw)", estimator: aidw,
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+  - {id: v3a-krig, title: "V3 single members keep the anisotropy's strength (krig)", estimator: krig,
+     family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25,
+     known_failure: "single members of kriging keep 0.62 of the truth's coherence (seed 1, members without empty cells), below the margin 0.75"}
+  - {id: v3b-krig, title: "V3 single members keep the anisotropy's ranges (krig)", estimator: krig,
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+  - {id: v3a-vor-uniform-idw, title: "V3 single members keep the anisotropy's strength (vor-uniform-idw)", estimator: vor-uniform-idw,
+     family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25,
+     known_failure: "single members of Voronoi IDW keep 0.52 of the truth's coherence (seed 1, members without empty cells), below the margin 0.75"}
+  - {id: v3b-vor-uniform-idw, title: "V3 single members keep the anisotropy's ranges (vor-uniform-idw)", estimator: vor-uniform-idw,
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+  - {id: v3a-sharp, title: "V3 single members keep the anisotropy's strength (sharp)", estimator: sharp,
+     family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25}
+  - {id: v3b-sharp, title: "V3 single members keep the anisotropy's ranges (sharp)", estimator: sharp,
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+  # V9 roughness against global simple kriging with the true covariance (roughness: mean squared
+  # neighbour difference over 4 × variance). Averaging decoders give smoother maps than the reference;
+  # the adaptive ones fit a high exponent and the sharpened one raises it further, so their maps are
+  # rougher by design. Pilot (fields 0–4): idw 0.81, krig 0.65, vor-uniform-idw 0.77, aidw 1.17,
+  # sharp 1.30; simple kriging from the 8 nearest data 1.024 (16: 1.009, 32: 1.005).
+  - {id: v9-idw, title: "V9 the map is no rougher than global simple kriging (idw)", estimator: idw,
+     family: one-sided, functional: roughness_reference, map: point, max_value: 1.0}
+  - {id: v9-krig, title: "V9 the map is no rougher than global simple kriging (krig)", estimator: krig,
+     family: one-sided, functional: roughness_reference, map: point, max_value: 1.0}
+  - {id: v9-vor-uniform-idw, title: "V9 the map is no rougher than global simple kriging (vor-uniform-idw)", estimator: vor-uniform-idw,
+     family: one-sided, functional: roughness_reference, map: point, max_value: 1.0}
+  - {id: v9-aidw, title: "V9 the adaptive map is rougher than global simple kriging, by design (aidw)", estimator: aidw,
+     family: one-sided, functional: roughness_reference, map: point, min_value: 1.0}
+  - {id: v9-sharp, title: "V9 the adaptive map is rougher than global simple kriging, by design (sharp)", estimator: sharp,
+     family: one-sided, functional: roughness_reference, map: point, min_value: 1.0}
+  - {id: v9-control, title: "V9 control: simple kriging from the 8 nearest data is rougher than global simple kriging",
+     estimator: idw, family: one-sided, functional: roughness_local_reference, map: reference, k: 8, min_value: 1.0}
 provenance:
   calibration: "truth fields: θ = 26–29°, coherence 0.70–0.76; isotropic control coherence 0.05–0.09"
   v1: "idw only, K = 6; v1b p ≈ 4e-4 with 3 checks in the catalogue"
@@ -247,3 +293,13 @@ provenance:
     fields the residual boost alone improves the RMSE by 0.004 while the raised exponent alone worsens
     it by 0.003.
   v12: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."
+  v13: >
+    2026-10-09: V3 on single members (coherence and directional range ratio, equivalence to the
+    truth's) for idw, aidw, krig, vor-uniform-idw and sharp. A pilot on fields 0–4 suggested every
+    member far from the truth, but it averaged members with empty cells, whose NaN gave a coherence
+    of 0. The evaluator reads only members without empty cells. On the first run (seed 1, the 16 new
+    checks alone) six outcomes passed, so their known failures were removed, and the four others keep
+    one with the values measured. V9 roughness against global simple kriging with the true
+    covariance, below it for the averaging decoders and above it, by design, for the adaptive ones,
+    with a control by simple kriging from the 8 nearest data. Margins and bounds fixed before the
+    first run; earlier checks, sizes and thresholds unchanged.

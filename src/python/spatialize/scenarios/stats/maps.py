@@ -176,3 +176,85 @@ def level_set_iou(a_mask, b_mask):
     a, b = np.asarray(a_mask, bool), np.asarray(b_mask, bool)
     union = np.logical_or(a, b).sum()
     return float(np.logical_and(a, b).sum() / union) if union else 1.0
+
+
+def directional_range(z, theta_deg, max_lag=None):
+    r"""Correlation length of a map along a direction, in pixels.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+        The map, indexed ``[y, x]``.
+    theta_deg : float
+        Direction in degrees, counter-clockwise from the x axis (the convention of
+        :func:`orientation_coherence`).
+    max_lag : float, optional
+        Largest lag tried, in pixels. Default: half the side of the map.
+
+    Returns
+    -------
+    float
+        The lag at which the correlation between the map and its copy shifted along the direction
+        first falls below :math:`e^{-1}`, linearly interpolated between half-pixel lags; ``max_lag``
+        when it never does.
+
+    Notes
+    -----
+    The shifted copy is read by bilinear interpolation, over the pixels whose shifted position lies
+    inside the map.
+    """
+    from scipy.ndimage import map_coordinates
+    z = np.asarray(z, float)
+    m = z.shape[0]
+    max_lag = m / 2 if max_lag is None else float(max_lag)
+    u = np.array([np.sin(np.radians(theta_deg)), np.cos(np.radians(theta_deg))])   # (dy, dx)
+    yy, xx = np.mgrid[0:m, 0:m].astype(float)
+    prev_h, prev_r = 0.0, 1.0
+    for h in np.arange(0.5, max_lag + 1e-9, 0.5):
+        y2, x2 = yy + h * u[0], xx + h * u[1]
+        inside = (y2 >= 0) & (y2 <= m - 1) & (x2 >= 0) & (x2 <= m - 1)
+        if inside.sum() < 10:
+            break
+        shifted = map_coordinates(z, [y2[inside], x2[inside]], order=1)
+        a = z[inside]
+        r = float(np.corrcoef(a, shifted)[0, 1]) if a.std() > 0 and shifted.std() > 0 else 0.0
+        if r < np.exp(-1):
+            return float(prev_h + (prev_r - np.exp(-1)) / (prev_r - r) * (h - prev_h))
+        prev_h, prev_r = h, r
+    return max_lag
+
+
+def range_ratio(z, theta_deg):
+    """Correlation length along ``theta_deg`` over that across it (:func:`directional_range`).
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+    theta_deg : float
+
+    Returns
+    -------
+    float
+        Above 1 for a map elongated along ``theta_deg``.
+    """
+    return directional_range(z, theta_deg) / directional_range(z, theta_deg + 90.0)
+
+
+def roughness(z):
+    r"""Roughness of a map: the mean squared difference between neighbouring pixels.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+
+    Returns
+    -------
+    float
+        :math:`\big(\overline{(\Delta_x z)^2} + \overline{(\Delta_y z)^2}\big) / (4\, \mathrm{var}\, z)`,
+        1 for white noise, near 0 for a smooth map, larger where the map jumps between pixels.
+    """
+    z = np.asarray(z, float)
+    v = np.nanvar(z)
+    if v == 0:
+        return 0.0
+    return float((np.nanmean(np.diff(z, axis=1) ** 2) + np.nanmean(np.diff(z, axis=0) ** 2)) / (4 * v))

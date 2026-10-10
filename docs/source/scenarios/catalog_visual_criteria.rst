@@ -31,7 +31,7 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - the anisotropy is in the fields, not only in the mean
      - :ref:`S03 <scenario-S03>`
      - coherence and range ratio of members and simulated fields equivalent to the truth's
-     - ready · priority 1
+     - **implemented** on members (adaptive decoders pass, four known failures); simulated fields · priority 1
    * - V4
      - Mondrian blocks averaged away
      - :ref:`S03 <scenario-S03>`, :ref:`S11 <scenario-S11>`
@@ -59,9 +59,9 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - ready · priority 7
    * - V9
      - roughness
-     - S12 design
-     - ensemble roughness at most that of a global simple-kriging reference; cropped-neighbourhood kriging rougher (control)
-     - ready · priority 2
+     - :ref:`S03 <scenario-S03>`
+     - map roughness at most that of global simple kriging for the averaging decoders, above it by design for the adaptive ones; simple kriging from the 8 nearest data rougher (control)
+     - **implemented**
    * - V10
      - connectivity of high-value bodies
      - :ref:`S13 <scenario-S13>`
@@ -80,23 +80,11 @@ The order puts first the criteria of scenarios already implemented, S03 and S12,
 evaluators exist. The others follow the priority of their scenario (:doc:`catalog_geostatistical`),
 the criteria needing a kriging baseline coming last but one.
 
-#. **V3** (S03), the anisotropy in members and simulated fields.
+#. **V3** (S03), the anisotropy in simulated fields. The part on single members is implemented
+   (:ref:`scenario-S03`).
 
-   - The coherence of single members, read with the existing ``orientation_coherence``, against the
-     truth's, by equivalence (TOST) with a margin fixed before the first run.
-   - A directional range ratio functional, the ratio of the ranges of the empirical variogram along
-     and across the anisotropy's direction, computed on the grid in NumPy.
-   - The simulated fields wait for the runner method for simulated fields of S01. The members' part
-     can be added first.
-
-#. **V9** (S12), roughness.
-
-   - A roughness functional, for instance the mean squared difference between neighbouring grid
-     cells relative to the map's variance.
-   - The global simple-kriging reference, which the suite computes
-     (``simple_kriging_exponential``).
-   - The control, a simple kriging restricted to a cropped neighbourhood of each location, written in
-     NumPy, which must come out rougher.
+   - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, which
+     wait for the runner method for simulated fields of S01.
 
 #. **V6** (S04), sharp dry-region boundaries, with S04.
 

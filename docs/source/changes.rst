@@ -109,6 +109,12 @@ warns once per session when first used.
 Results that change
 -------------------
 
+- **The anisotropic classifier of categorical ESI** (``knn_pca``) stretched the distances along the
+  boundaries between categories instead of across them, so cross-validation always chose the isotropic
+  metric. It now stretches them across, and chooses an anisotropic metric where the categories lie in
+  bands or elongated patches (:doc:`theory/categorical`). Categorical estimates with ``knn_pca``
+  change.
+
 - **The default Mondrian partition is the theory's Mondrian process.** ``p_process="mondrian"``, the
   default, now draws the Mondrian process of the theory. The whole box may stay one cell. Each cut
   chooses its axis with probability proportional to its side, so the partitions follow the closed

@@ -240,8 +240,10 @@ def _set_cell_params_knn_pca(
     for ratio in anisotropy_ratios:
         scales = np.ones(n_dim, dtype=np.float64)
         if n_dim >= 2:
-            scales[0] = 1.0 / np.sqrt(ratio)
-            scales[1] = np.sqrt(ratio)
+            # the first PCA axis crosses the boundaries between categories (differences of unlike
+            # neighbours): stretch it, so that neighbours along the boundaries count as nearer
+            scales[0] = np.sqrt(ratio)
+            scales[1] = 1.0 / np.sqrt(ratio)
         else:
             scales[0] = 1.0 / np.sqrt(ratio)
         scales = np.maximum(scales, 1e-9)

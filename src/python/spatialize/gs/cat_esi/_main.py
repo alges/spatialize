@@ -341,9 +341,15 @@ class CatESIResult(EstimationResult):
             result.set_ordinal_order({'Low': 0, 'Medium': 1, 'High': 2})
             result.re_estimate('mv')
 
-        BTD with spatial constraints::
+        Dawid-Skene with forbidden contacts on a gridded result (the grid shape comes from the
+        result; the pairs are written as the categories are)::
 
-            result.re_estimate('btd', spatial_constraints=[('A', 'B')])
+            result.re_estimate('btd', spatial_constraints=[('water', 'urban')],
+                               spatial_penalty_factor=2.0, seed=1)
+
+        Weighted majority vote, one weight per partition::
+
+            result.re_estimate('wmv', weights=partition_scores)
         """
         if agg_function == 'btd':
             agg_fn = self._make_btd_fn(**agg_kwargs)

@@ -189,3 +189,24 @@ def test_weighted_majority_vote():
     assert np.mean(aggregate_with_weighted_mv(labels, w) == truth) > 0.95 > np.mean(aggregate_with_mv(labels) == truth)
     with pytest.raises(ValueError):
         aggregate_with_weighted_mv(labels, np.ones(24))
+
+
+def test_knn_pca_uses_the_anisotropy_of_the_categories():
+    """Bands of categories across a direction at 30°: knn_pca finds that direction, stretches the
+    distances across the bands (an anisotropic metric is chosen) and classifies better than the
+    isotropic metric. Before 2026-10-10 the stretch was inverted, so cross-validation always chose the
+    isotropic metric."""
+    from spatialize.gs.cat_esi import classifiers as C
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    normal = np.array([np.cos(np.radians(30)), np.sin(np.radians(30))])
+    bands = lambda x: (np.floor((x @ normal) * 6) % 3).astype(np.int64)
+    pts = rng.random((300, 2))
+    qry = rng.random((3000, 2))
+    params = C._set_cell_params_knn_pca(pts, bands(pts), seed=1)
+    angle = np.degrees(np.arctan2(params[1], params[0])) % 180
+    assert abs(angle - 30) < 8
+    assert params[4] > 1 > params[5]                                   # stretched across the bands
+    iso = params.copy()
+    iso[4:6] = 1.0
+    acc = lambda p: np.mean(C._knn_pca_predict(pts, bands(pts), qry, p) == bands(qry))
+    assert acc(params) > acc(iso) + 0.02

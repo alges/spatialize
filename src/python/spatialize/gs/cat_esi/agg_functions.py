@@ -270,8 +270,17 @@ def aggregate_with_btd(
     category_type : {'nominal', 'ordinal', 'binary'}
     categories_list : list of valid category strings
     ordinal_order_map : dict mapping category to rank (for ordinal type)
-    map_dimensions : tuple of ints, spatial grid shape (e.g. (200, 300))
-    spatial_constraints : list of (cat_a, cat_b) forbidden-adjacent pairs
+    map_dimensions : tuple of int, optional
+        Shape of the grid the locations lie on, in the row-major order of ``esi_samples`` (the order of
+        a ``cat_esi_griddata`` result, whose ``re_estimate('btd', ...)`` fills it in). Needed by the
+        spatial variant only; its product must equal ``p``. The neighbours of a location are the
+        adjacent grid cells along each axis.
+    spatial_constraints : list of (str, str), optional
+        The pairs of categories that may not be adjacent, written as the categories are written in
+        ``esi_samples`` (as strings). A pair forbids both orders; a category absent from the data is
+        skipped with a warning. With ``map_dimensions`` and a positive ``spatial_penalty_factor`` it
+        turns on the spatial variant. For example ``[("water", "urban"), ("water", "cropland")]``
+        keeps water away from urban areas and cropland.
     tolerance : EM convergence threshold
     max_iter : maximum EM iterations
     spatial_penalty_factor : float
@@ -304,31 +313,28 @@ def aggregate_with_btd(
 
     Examples
     --------
-    Basic usage after a ``cat_esi_nongriddata`` call::
+    Dawid-Skene instead of the majority vote, on the members of a scattered-query result::
 
-        result = cat_esi_nongriddata(points, values, xi, classifier="knn_pca")
-        samples = result.esi_samples(raw=True)
-        categories = list(np.unique(values).astype(str))
+        result = cat_esi_nongriddata(points, values, xi, classifier="knn_pca", seed=1)
+        estimation, probabilities, log_likelihood = aggregate_with_btd(
+            result.esi_samples(raw=True), categories_list=sorted(set(values)), seed=1)
 
-        estimation, probs, ll = aggregate_with_btd(
-            samples,
-            categories_list=categories,
-            map_dimensions=(200, 300),
-            spatial_constraints=[('20.0', '29.0')],
-            spatial_penalty_factor=8.9,
-        )
+    Forbidden contacts on a grid. A land-cover map estimated on a 100 × 120 grid, where water may not
+    touch urban areas or cropland directly (a shore or a riparian strip lies between them)::
 
-    Update the result object with the BTD estimation::
+        result = cat_esi_griddata(points, values, (grid_x, grid_y), classifier="knn_pca", seed=1)
+        result.re_estimate("btd", spatial_constraints=[("water", "urban"), ("water", "cropland")],
+                           spatial_penalty_factor=2.0, seed=1)   # the grid shape comes from the result
 
-        import functools
-        btd_agg = functools.partial(
-            aggregate_with_btd,
-            categories_list=categories,
-            map_dimensions=(200, 300),
-            spatial_constraints=[('20.0', '29.0')],
-            spatial_penalty_factor=8.9,
-        )
-        result.re_estimate(agg_function=btd_agg)
+    or, on the raw members, with the grid shape given explicitly::
+
+        estimation, probabilities, _ = aggregate_with_btd(
+            result.esi_samples(raw=True), categories_list=["cropland", "forest", "urban", "water"],
+            map_dimensions=(100, 120), spatial_constraints=[("water", "urban"), ("water", "cropland")],
+            spatial_penalty_factor=2.0, seed=1)
+
+    The strength ``spatial_penalty_factor`` is chosen by looking at the contacts that remain on the map
+    for a few values (0 gives the non-spatial model).
     """
     num_items = esi_samples.shape[0]
     if map_dimensions is not None and int(np.prod(map_dimensions)) != num_items:

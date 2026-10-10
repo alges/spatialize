@@ -208,6 +208,10 @@ Removed
 
 - The dependency on ``tqdm``, the progress bars being drawn with ``rich`` and, in notebooks, with
   HTML.
+- The progress classes of version 1.2 in :mod:`spatialize.logging`, ``AsyncProgressHandler``,
+  ``AsyncProgressCounter``, ``AsyncProgressBar`` and ``SingletonAsyncProgressCounter``. The session
+  settings ``display`` and ``progress`` choose how the progress is shown, and ``DisplayProgress``
+  is the callback that shows it.
 
 - The ``parallelize`` argument of the ESI functions, and ``n_jobs`` of
   :func:`~spatialize.gs.ess.ess_sample` and

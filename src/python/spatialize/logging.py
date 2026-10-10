@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 
 
 from spatialize._util import SingletonType
@@ -157,63 +156,6 @@ class LogMessage:  # callback function
 log_message = LogMessage()  # to use it in the plain python code
 
 
-class AsyncProgressHandler:  # callback function
-
-    def _done(self):
-        self.elapsed_time = time.time() - self.start_time
-
-    def __call__(self, msg):
-        try:
-            m = self._pass_protocol(msg)
-        except:
-            return
-
-        if isinstance(m[progress.prog], dict):
-            if progress.init_ in m[progress.prog]:
-                self._init(m[progress.prog][progress.init_], m[progress.prog][progress.step])
-                self._reset()
-            if progress.token in m[progress.prog]:
-                # no need to process the incoming value
-                self._increment()
-                self._update()
-        if m[progress.prog] == progress.done:
-            self._done()
-            self._reset()
-
-    def _init(self, total, step):
-        self.start_time = time.time()
-        self.total = total
-        self.step = step
-
-    def _reset(self):
-        self.count = 0
-        self.p = 0
-        self.p_prev = -1
-        self.ready_to_update = False
-
-    def _increment(self):
-        self.count += self.step
-
-    @staticmethod
-    def _pass_protocol(msg):
-        m = msg
-        if isinstance(msg, str):
-            m = json.loads(msg)
-        if isinstance(m, dict) and progress.prog in m:
-            return m
-        raise TypeError
-
-    def _update(self):
-        try:
-            self.ready_to_update = False
-            self.p = (self.count * 100) // self.total
-            if self.p > self.p_prev:
-                self.p_prev = self.p
-                self.ready_to_update = True
-        finally:
-            pass
-
-
 class DisplayProgress:  # callback function
     """Shows the progress protocol with spatialize._display, in the look of the session's
     ``display``. Progress runs may nest, a run started inside another being shown on its own. A run
@@ -256,12 +198,6 @@ class DisplayProgress:  # callback function
 
 class SingletonDisplayProgress(DisplayProgress, metaclass=SingletonType):
     pass
-
-
-# the names of earlier versions, now shown in the session's look
-AsyncProgressCounter = DisplayProgress
-AsyncProgressBar = DisplayProgress
-SingletonAsyncProgressCounter = SingletonDisplayProgress
 
 
 class SingletonNullMsgHandler(metaclass=SingletonType):

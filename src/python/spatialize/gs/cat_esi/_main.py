@@ -13,7 +13,7 @@ from spatialize import logging
 from spatialize.logging import log_message
 from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotStyle
 
-from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, categorical_feature_precision, categorical_precision_cube
+from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, aggregate_with_weighted_mv, categorical_feature_precision, categorical_precision_cube
 from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
 from .score_functions import resolve_scoring
 
@@ -313,10 +313,12 @@ class CatESIResult(EstimationResult):
 
         Parameters
         ----------
-        agg_function : ``'mv'`` | ``'btd'`` | callable, default ``'mv'``
+        agg_function : ``'mv'`` | ``'wmv'`` | ``'btd'`` | callable, default ``'mv'``
             ``'mv'``
                 Majority vote. Automatically selects the ordinal median-vote
                 variant when ``self.ordinal_order`` is set.
+            ``'wmv'``
+                Weighted majority vote; pass ``weights``, one per partition.
             ``'btd'``
                 Dawid-Skene EM aggregation. Infers ``categories_list``,
                 ``category_type``, and ``map_dimensions`` from the result;
@@ -345,6 +347,9 @@ class CatESIResult(EstimationResult):
         """
         if agg_function == 'btd':
             agg_fn = self._make_btd_fn(**agg_kwargs)
+        elif agg_function == 'wmv':
+            weights = agg_kwargs.pop('weights')
+            agg_fn = lambda s: aggregate_with_weighted_mv(s, weights)
         else:
             agg_fn = _resolve_agg_fn(agg_function, self.ordinal_order)
 

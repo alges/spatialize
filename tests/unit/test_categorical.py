@@ -116,3 +116,76 @@ def test_class_probabilities_are_the_members_shares():
     est = np.asarray(r.estimation()).astype(str)
     clear = ok & (np.abs(prob[:, 0] - prob[:, 1]) > 1e-9)
     assert np.array_equal(est[clear], np.array(names)[prob[clear].argmax(axis=1)])
+
+
+def test_spatial_dawid_skene_reads_the_neighbours():
+    """Two locations tied between A and B, each voted by its own partitions: the one next to C, which A
+    may not touch, leaves A once the penalty is strong enough; the one next to B keeps A. A penalty
+    blind to the neighbours (the earlier implementation) moved both."""
+    from spatialize.gs.cat_esi.agg_functions import aggregate_with_btd
+    from spatialize.logging import singleton_null_callback
+    row = ["C", "X1", "C", "A", "A", "B", "X2", "B", "C", "A", "B", "C"]
+    labels = np.empty((len(row), 40), dtype=object)
+    for i, c in enumerate(row):
+        labels[i] = c
+        if c == "X1":
+            labels[i] = None
+            labels[i, :10], labels[i, 10:20] = "A", "B"
+        elif c == "X2":
+            labels[i] = None
+            labels[i, 20:30], labels[i, 30:40] = "A", "B"
+    probs = {}
+    for factor in (0.0, 5.0):
+        _, p, _ = aggregate_with_btd(labels, categories_list=["A", "B", "C"], map_dimensions=(1, len(row)),
+                                     spatial_constraints=[("A", "C")], spatial_penalty_factor=factor, seed=0,
+                                     callback=singleton_null_callback)
+        probs[factor] = p
+    assert probs[0.0][1, 0] > 0.5 and probs[0.0][6, 0] > 0.5           # without penalty both take A
+    assert probs[5.0][1, 0] < 0.5 and probs[5.0][6, 0] > 0.5           # next to C leaves A, next to B keeps it
+
+
+def test_spatial_dawid_skene_does_not_depend_on_the_number_of_threads():
+    """The mean-field E-step reads the previous responsibilities only: the same bits with one thread
+    and with all, on a 30 × 30 grid."""
+    from spatialize import session
+    from spatialize.gs.cat_esi.agg_functions import aggregate_with_btd
+    from spatialize.logging import singleton_null_callback
+    _, labels = _annotators(900, [0.7] * 15, biased=5)
+    out = []
+    for threads in (1, None):
+        with session.override(num_threads=threads):
+            out.append(aggregate_with_btd(labels, categories_list=["0", "1", "2"], map_dimensions=(30, 30),
+                                          spatial_constraints=[("0", "2")], spatial_penalty_factor=1.5,
+                                          seed=4, callback=singleton_null_callback))
+    assert np.array_equal(out[0][1], out[1][1]) and out[0][2] == out[1][2]
+
+
+def test_codes_path_matches_the_claims_path():
+    """aggregate_with_btd passes the members as integer codes (no string claims); the compiled
+    module's claims path gives the same bits, spatial and with members of empty cells."""
+    from spatialize.gs.cat_esi import _dawid_skene as ds
+    from spatialize.gs.cat_esi.agg_functions import aggregate_with_btd
+    from spatialize.logging import singleton_null_callback
+    _, labels = _annotators(600, [0.8] * 10, biased=4)
+    labels[::5, 2] = None
+    dims = (20, 30)
+    coords = {f"Item_{i + 1}": (i // dims[1], i % dims[1]) for i in range(600)}
+    kw = dict(categories_list=["0", "1", "2"], spatial_constraints=[("0", "2")], spatial_penalty_factor=1.5)
+    old = ds.aggregate_with_btd_em(esi_samples=labels.tolist(), map_dimensions=dims, item_coordinates=coords,
+                                   seed=7, **kw)
+    est, prob, ll = aggregate_with_btd(labels, map_dimensions=dims, seed=7, callback=singleton_null_callback, **kw)
+    old_prob = np.array([[old[1][f"Item_{i + 1}"].get(c, 0.0) for c in ["0", "1", "2"]] for i in range(600)])
+    assert np.array_equal(old_prob, prob) and old[2] == ll and list(old[0]) == list(est)
+
+
+def test_weighted_majority_vote():
+    """Equal weights give the majority vote; weights on the reliable partitions recover the truth where
+    the majority vote follows a biased group; members of empty cells take no part."""
+    from spatialize.gs.cat_esi.agg_functions import aggregate_with_mv, aggregate_with_weighted_mv
+    truth, labels = _annotators(400, [0.9] * 10, biased=15)
+    labels[::9, 0] = None
+    assert np.array_equal(aggregate_with_weighted_mv(labels, np.ones(25)), aggregate_with_mv(labels))
+    w = np.r_[np.ones(10), np.full(15, 0.1)]
+    assert np.mean(aggregate_with_weighted_mv(labels, w) == truth) > 0.95 > np.mean(aggregate_with_mv(labels) == truth)
+    with pytest.raises(ValueError):
+        aggregate_with_weighted_mv(labels, np.ones(24))

@@ -39,9 +39,9 @@ Aggregation functions
 
 .. autofunction:: aggregate_with_ordinal_mv
 
-.. autofunction:: aggregate_with_btd
+.. autofunction:: aggregate_with_weighted_mv
 
-.. autofunction:: optimize_btd_spatial_penalty
+.. autofunction:: aggregate_with_btd
 
 .. autofunction:: categorical_feature_precision
 

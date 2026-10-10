@@ -30,8 +30,10 @@ New
 - **Dawid–Skene aggregation of categorical ensembles**, an alternative to the majority vote, which
   stays the default: :func:`~spatialize.gs.cat_esi.aggregate_with_btd`, with ``re_estimate('btd')``
   on a result, weighs the partitions by their reliability, for nominal, ordinal and binary variables,
-  with a spatial variant for forbidden adjacencies (:func:`~spatialize.gs.cat_esi.optimize_btd_spatial_penalty`
-  chooses its penalty). It is compiled with Spatialize, runs on the session's threads with the same
+  with a spatial variant that keeps forbidden adjacencies apart by mean field. The members reach the
+  compiled code as integer codes. A weighted majority vote,
+  :func:`~spatialize.gs.cat_esi.aggregate_with_weighted_mv` (``re_estimate('wmv', weights=...)``),
+  takes reliabilities known in advance. It is compiled with Spatialize, runs on the session's threads with the same
   result for any number of them, reports its progress and messages like the other functions, and
   stops on Ctrl-C between iterations. ``CatESIResult.class_probabilities`` gives the probability of
   each category read from the members.

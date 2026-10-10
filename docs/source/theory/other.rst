@@ -22,8 +22,10 @@ the reported category being the most frequent one (the majority vote, the defaul
 nearest-neighbour classifier with an anisotropic metric is built in, and any classifier with the
 scikit-learn interface can take its place. An ordinal variable reports the median category instead.
 
-The majority vote weighs every partition alike. The Dawid–Skene model, an alternative to it, treats
-the partitions as annotators of unequal reliability. Partition :math:`t` reports category :math:`l`
+The majority vote weighs every partition alike. When the reliability of each partition is known, for
+instance from a validation score, the weighted majority vote reports the category of largest total
+weight. The Dawid–Skene model, a third alternative, learns the reliabilities from the members by
+treating the partitions as annotators of unequal reliability. Partition :math:`t` reports category :math:`l`
 when the true one is :math:`k` with probability :math:`\theta^{(t)}_{kl}`, its confusion matrix, and
 the true categories have prior shares :math:`\pi_k`. EM alternates the posterior of the true category
 at each location,
@@ -37,8 +39,9 @@ Partitions that agree with the consensus get matrices close to the identity and 
 group of partitions biased towards one category is discounted where the majority vote would follow
 it. A binary variable is the case :math:`K = 2`, each matrix holding a sensitivity and a specificity.
 An ordinal variable adds pseudo-counts that favour confusions between neighbouring categories. On a
-grid, a spatial variant penalises categories that may not touch, with a penalty chosen by the
-marginal likelihood. Members of cells without data take no part. EM reaches a local maximum from a
+grid, a spatial variant keeps apart categories that may not touch, by mean field. At each iteration a
+category loses, at a location, a factor times its neighbours' current probabilities of a category
+forbidden next to it, so the penalty follows the neighbours' state. The factor is set by the user. Members of cells without data take no part. EM reaches a local maximum from a
 seeded random start, so a fixed seed makes the result reproducible.
 
 Information measures

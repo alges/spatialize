@@ -152,6 +152,123 @@ public:
     virtual ~DawidSkeneEM() = default;
 
     // Main initialization method (virtual for spatial extension)
+    // the order of each category for an ordinal variable (nominal when the map is missing or partial)
+    void init_ordinal(py::object ordinal_order_map_obj) {
+        ordinal_category_orders_.clear();
+        if (category_type_ == "ordinal") {
+            if (!ordinal_order_map_obj.is_none()) {
+                py::dict py_ordinal_map = ordinal_order_map_obj.cast<py::dict>();
+                for (auto const& [cat_str_obj, order_val_obj] : py_ordinal_map) {
+                    std::string cat_str = cat_str_obj.cast<std::string>();
+                    int order_val = order_val_obj.cast<int>();
+                    if (category_to_idx_.count(cat_str)) {
+                        ordinal_category_orders_[category_to_idx_.at(cat_str)] = order_val;
+                    } else {
+                        { std::ostringstream w_; w_ << "Warning: Ordinal category '" << cat_str << "' in order map not found in actual categories. It will be ignored."; ds_warn(w_.str()); }
+                    }
+                }
+                if (ordinal_category_orders_.size() != num_categories_) {
+                    { std::ostringstream w_; w_ << "Warning: Not all categories have an explicit order defined for ordinal type. Treating as nominal."; ds_warn(w_.str()); }
+                    category_type_ = "nominal"; 
+                }
+            } else {
+                { std::ostringstream w_; w_ << "Warning: category_type is 'ordinal' but no ordinal_order_map provided. Treating as nominal."; ds_warn(w_.str()); }
+                category_type_ = "nominal"; 
+            }
+        }
+    }
+
+    // the spatial structure: nothing for the base model (SpatialDawidSkeneEM overrides it)
+    virtual void init_spatial(py::object map_dimensions_obj, py::dict item_coordinates_obj,
+                              const std::vector<std::tuple<std::string, std::string>>& spatial_constraints_py) {}
+
+    // The same data as initialize_all_data, from a (items × sources) matrix of category codes (-1: no
+    // claim) and the names of the codes, without building string claims. Items and sources keep the
+    // order of their names ("Item_<row+1>", "Source_R<column+1>", sorted as strings) and the
+    // observations the order of the claims, so that results are those of the claims path bit for bit.
+    void initialize_from_codes(py::array_t<int, py::array::c_style | py::array::forcecast> codes_arr,
+                               const std::vector<std::string>& code_names, py::object map_dimensions_obj,
+                               const std::vector<std::tuple<std::string, std::string>>& spatial_constraints_py,
+                               py::object ordinal_order_map_obj) {
+        auto codes = codes_arr.unchecked<2>();
+        const int P = static_cast<int>(codes.shape(0)), N = static_cast<int>(codes.shape(1));
+        std::vector<char> item_has(P, 0), source_has(N, 0), code_used(code_names.size(), 0);
+        for (int r = 0; r < P; ++r) {
+            for (int c = 0; c < N; ++c) {
+                int v = codes(r, c);
+                if (v >= 0) { item_has[r] = 1; source_has[c] = 1; code_used[v] = 1; }
+            }
+        }
+        std::vector<std::string> effective_categories = user_provided_categories_raw_;
+        std::set<std::string> data_categories;
+        for (size_t v = 0; v < code_names.size(); ++v) if (code_used[v]) data_categories.insert(code_names[v]);
+        if (effective_categories.empty()) {
+            effective_categories.assign(data_categories.begin(), data_categories.end());
+        } else {
+            for (const auto& cat : data_categories) {
+                if (std::find(effective_categories.begin(), effective_categories.end(), cat) == effective_categories.end()) {
+                    { std::ostringstream w_; w_ << "Warning: Category '" << cat << "' found in data but not in provided categories. It will be added."; ds_warn(w_.str()); }
+                    effective_categories.push_back(cat);
+                }
+            }
+        }
+        std::sort(effective_categories.begin(), effective_categories.end());
+        idx_to_category_ = effective_categories;
+        category_to_idx_.clear();
+        for (int k = 0; k < (int) idx_to_category_.size(); ++k) category_to_idx_[idx_to_category_[k]] = k;
+
+        idx_to_source_id_.clear(); source_to_idx_.clear();
+        for (int c = 0; c < N; ++c) if (source_has[c]) idx_to_source_id_.push_back("Source_R" + std::to_string(c + 1));
+        std::sort(idx_to_source_id_.begin(), idx_to_source_id_.end());
+        for (int j = 0; j < (int) idx_to_source_id_.size(); ++j) source_to_idx_[idx_to_source_id_[j]] = j;
+        idx_to_statement_id_.clear(); statement_to_idx_.clear();
+        for (int r = 0; r < P; ++r) if (item_has[r]) idx_to_statement_id_.push_back("Item_" + std::to_string(r + 1));
+        std::sort(idx_to_statement_id_.begin(), idx_to_statement_id_.end());
+        for (int i = 0; i < (int) idx_to_statement_id_.size(); ++i) statement_to_idx_[idx_to_statement_id_[i]] = i;
+
+        num_sources_ = source_to_idx_.size();
+        num_items_ = statement_to_idx_.size();
+        num_categories_ = idx_to_category_.size();
+        if (num_categories_ == 0 || num_sources_ == 0 || num_items_ == 0) {
+            { std::ostringstream w_; w_ << "Warning: No valid claims or categories to initialize with. Model will not fit."; ds_warn(w_.str()); }
+            return;
+        }
+        init_ordinal(ordinal_order_map_obj);
+
+        std::vector<int> row_item(P, -1), col_source(N, -1), code_category(code_names.size(), -1);
+        for (int r = 0; r < P; ++r) if (item_has[r]) row_item[r] = statement_to_idx_.at("Item_" + std::to_string(r + 1));
+        for (int c = 0; c < N; ++c) if (source_has[c]) col_source[c] = source_to_idx_.at("Source_R" + std::to_string(c + 1));
+        for (size_t v = 0; v < code_names.size(); ++v) if (code_used[v]) code_category[v] = category_to_idx_.at(code_names[v]);
+        item_indices_obs_.clear(); annotator_indices_obs_.clear(); observed_labels_obs_.clear();
+        for (int r = 0; r < P; ++r) {
+            for (int c = 0; c < N; ++c) {
+                int v = codes(r, c);
+                if (v < 0) continue;
+                item_indices_obs_.push_back(row_item[r]);
+                annotator_indices_obs_.push_back(col_source[c]);
+                observed_labels_obs_.push_back(code_category[v]);
+            }
+        }
+
+        // grid coordinates of the items, row-major over map_dimensions (as the Python wrapper builds them)
+        py::dict item_coordinates;
+        if (!map_dimensions_obj.is_none()) {
+            std::vector<int> dims = map_dimensions_obj.cast<std::vector<int>>();
+            long total = 1;
+            for (int d : dims) total *= d;
+            if (total == P) {
+                for (int r = 0; r < P; ++r) {
+                    if (!item_has[r]) continue;
+                    std::vector<int> coords(dims.size());
+                    long remaining = r;
+                    for (int d = (int) dims.size() - 1; d >= 0; --d) { coords[d] = remaining % dims[d]; remaining /= dims[d]; }
+                    item_coordinates[py::str("Item_" + std::to_string(r + 1))] = py::cast(coords);
+                }
+            }
+        }
+        init_spatial(map_dimensions_obj, item_coordinates, spatial_constraints_py);
+    }
+
     virtual void initialize_all_data(
         const std::vector<std::tuple<std::string, std::string, std::string>>& claims,
         py::object map_dimensions_obj = py::none(), 
@@ -208,28 +325,7 @@ public:
             return;
         }
 
-        ordinal_category_orders_.clear();
-        if (category_type_ == "ordinal") {
-            if (!ordinal_order_map_obj.is_none()) {
-                py::dict py_ordinal_map = ordinal_order_map_obj.cast<py::dict>();
-                for (auto const& [cat_str_obj, order_val_obj] : py_ordinal_map) {
-                    std::string cat_str = cat_str_obj.cast<std::string>();
-                    int order_val = order_val_obj.cast<int>();
-                    if (category_to_idx_.count(cat_str)) {
-                        ordinal_category_orders_[category_to_idx_.at(cat_str)] = order_val;
-                    } else {
-                        { std::ostringstream w_; w_ << "Warning: Ordinal category '" << cat_str << "' in order map not found in actual categories. It will be ignored."; ds_warn(w_.str()); }
-                    }
-                }
-                if (ordinal_category_orders_.size() != num_categories_) {
-                    { std::ostringstream w_; w_ << "Warning: Not all categories have an explicit order defined for ordinal type. Treating as nominal."; ds_warn(w_.str()); }
-                    category_type_ = "nominal"; 
-                }
-            } else {
-                { std::ostringstream w_; w_ << "Warning: category_type is 'ordinal' but no ordinal_order_map provided. Treating as nominal."; ds_warn(w_.str()); }
-                category_type_ = "nominal"; 
-            }
-        }
+        init_ordinal(ordinal_order_map_obj);
 
         item_indices_obs_.clear();
         annotator_indices_obs_.clear();
@@ -370,7 +466,20 @@ public:
              py::object ordinal_order_map_obj = py::none()) {
 
         initialize_all_data(claims, map_dimensions_obj, item_coordinates_obj, spatial_constraints_py, ordinal_order_map_obj);
+        return run_em();
+    }
 
+    // fit from a matrix of category codes (see initialize_from_codes)
+    double fit_codes(py::array_t<int, py::array::c_style | py::array::forcecast> codes,
+                     const std::vector<std::string>& code_names, py::object map_dimensions_obj,
+                     const std::vector<std::tuple<std::string, std::string>>& spatial_constraints_py,
+                     py::object ordinal_order_map_obj) {
+        initialize_from_codes(codes, code_names, map_dimensions_obj, spatial_constraints_py, ordinal_order_map_obj);
+        return run_em();
+    }
+
+    // EM from the data set up by initialize_all_data or initialize_from_codes
+    double run_em() {
         if (num_items_ == 0 || num_sources_ == 0 || num_categories_ == 0) {
             return -std::numeric_limits<double>::infinity(); // Return neg infinity for invalid setup
         }
@@ -544,6 +653,9 @@ private:
     std::vector<int> map_dimensions_;
     bool is_spatial_active_ = false; // Flag to indicate if spatial features are truly active
     double spatial_penalty_factor_; // New member variable for configurable penalty factor
+    // Responsibilities of the previous E-step (mean field): the penalty of a category at an item reads
+    // its neighbours' current probabilities of a forbidden category; empty before the first E-step
+    std::vector<std::vector<double>> prev_resp_;
 
 public:
     SpatialDawidSkeneEM(py::object categories_obj, double tolerance, int max_iter, const std::string& category_type_str, py::object ordinal_order_map_obj, double spatial_penalty_factor)
@@ -559,6 +671,12 @@ public:
         py::object ordinal_order_map_obj = py::none() 
     ) override {
         DawidSkeneEM::initialize_all_data(claims, map_dimensions_obj, item_coordinates_obj, spatial_constraints_py_raw, ordinal_order_map_obj);
+        init_spatial(map_dimensions_obj, item_coordinates_obj, spatial_constraints_py_raw);
+    }
+
+    void init_spatial(py::object map_dimensions_obj, py::dict item_coordinates_obj,
+                      const std::vector<std::tuple<std::string, std::string>>& spatial_constraints_py_raw) override {
+        prev_resp_.clear();
 
         if (num_items_ == 0 || num_sources_ == 0 || num_categories_ == 0) {
             is_spatial_active_ = false;
@@ -705,29 +823,19 @@ public:
                     }
                 }
 
+                // Mean-field penalty (a Potts-like interaction): for each neighbour, the probability the
+                // previous E-step gave it of a category forbidden next to k_true, times the factor
                 double spatial_penalty_log_term = 0.0;
-                // Only apply spatial penalty if spatial features are active
-                if (is_spatial_active_ && !item_neighbors_.empty() && item_neighbors_.count(i)) {
-                    for (int neighbor_item_idx : item_neighbors_.at(i)) { 
-                        (void)neighbor_item_idx; // Suppress unused warning if not directly used
-
-                        for (int neighbor_k_true = 0; neighbor_k_true < num_categories_; ++neighbor_k_true) {
-                            if (spatial_constraints_idx_set_.count({k_true, neighbor_k_true})) {
-                                // spatial_penalty_factor_ is positive.
-                                // std::log(std::max(pi_[neighbor_k_true], EPSILON)) is negative (or zero).
-                                // Product will be negative or zero. Adding this negative product penalizes.
-                                spatial_penalty_log_term += std::log(std::max(pi_[neighbor_k_true], EPSILON)) * spatial_penalty_factor_;
-
-                                // For debugging, uncomment this to see individual penalty contributions:
-                                // std::cerr << "Applying penalty for item " << i << " (k_true=" << idx_to_category_[k_true]
-                                //           << ") and neighbor " << neighbor_item_idx << " (neighbor_k_true="
-                                //           << idx_to_category_[neighbor_k_true] << "). Penalty added: "
-                                //           << std::log(std::max(pi_[neighbor_k_true], EPSILON)) * spatial_penalty_factor_ << std::endl;
+                if (is_spatial_active_ && !prev_resp_.empty() && item_neighbors_.count(i)) {
+                    for (int n : item_neighbors_.at(i)) {
+                        for (int k_n = 0; k_n < num_categories_; ++k_n) {
+                            if (spatial_constraints_idx_set_.count({k_true, k_n})) {
+                                spatial_penalty_log_term -= spatial_penalty_factor_ * prev_resp_[n][k_n];
                             }
                         }
                     }
                 }
-                
+
                 unnorm_log_probs_for_item_i[k_true] = log_prob_z_prior + log_likelihood_obs_given_z + spatial_penalty_log_term;
             }
             
@@ -736,6 +844,7 @@ public:
                 responsibilities[i][k_true] = std::exp(unnorm_log_probs_for_item_i[k_true] - log_norm_const);
             }
         }
+        prev_resp_ = responsibilities;
         return responsibilities;
     }
 };
@@ -871,4 +980,48 @@ PYBIND11_MODULE(_dawid_skene, m) {
     py::arg("visitor") = py::none(),
     py::arg("num_threads") = 0
     );
+
+    // The same aggregation from a matrix of category codes (items × partitions, -1 for no claim) and
+    // the names of the codes: no string claims are built, the results are those of
+    // aggregate_with_btd_em bit for bit.
+    m.def("aggregate_codes", [](
+        py::array_t<int, py::array::c_style | py::array::forcecast> codes,
+        const std::vector<std::string>& code_names,
+        py::object categories_list_obj, double tolerance, int max_iter,
+        const std::string& category_type_str, py::object ordinal_order_map_obj, py::object map_dimensions_obj,
+        const std::vector<std::tuple<std::string, std::string>>& spatial_constraints_py,
+        double spatial_penalty_factor, unsigned int seed, py::object visitor, int num_threads
+    ) -> py::tuple {
+        if (codes.ndim() != 2) throw std::runtime_error("codes must be a 2-D array (locations × partitions)");
+        const long p_statements = codes.shape(0);
+        bool use_spatial_model = (!map_dimensions_obj.is_none() && !spatial_constraints_py.empty());
+        std::unique_ptr<DawidSkeneEM> model_ptr;
+        if (use_spatial_model) {
+            model_ptr.reset(new SpatialDawidSkeneEM(categories_list_obj, tolerance, max_iter, category_type_str, ordinal_order_map_obj, spatial_penalty_factor));
+        } else {
+            model_ptr.reset(new DawidSkeneEM(categories_list_obj, tolerance, max_iter, category_type_str, ordinal_order_map_obj));
+        }
+        model_ptr->set_seed(seed);
+        model_ptr->set_num_threads(num_threads);
+        if (!visitor.is_none()) {
+            model_ptr->set_visitor([visitor](std::string s) -> int { visitor(s); return 0; });
+        }
+        double final_log_likelihood = model_ptr->fit_codes(codes, code_names, use_spatial_model ? map_dimensions_obj : py::none(),
+                                                           spatial_constraints_py, ordinal_order_map_obj);
+        py::dict inferred_truths = model_ptr->get_final_predicted_truth();
+        py::dict statement_probabilities = model_ptr->get_statement_truths();
+        py::list esi_estimation_list;
+        for (long i = 0; i < p_statements; ++i) {
+            std::string st_id = "Item_" + std::to_string(i + 1);
+            if (inferred_truths.contains(st_id.c_str())) esi_estimation_list.append(inferred_truths[st_id.c_str()]);
+            else esi_estimation_list.append(py::none());
+        }
+        return py::make_tuple(esi_estimation_list, statement_probabilities, final_log_likelihood);
+    },
+    py::arg("codes"), py::arg("code_names"), py::arg("categories_list") = py::none(),
+    py::arg("tolerance") = 1e-4, py::arg("max_iter") = 100, py::arg("category_type") = "nominal",
+    py::arg("ordinal_order_map") = py::none(), py::arg("map_dimensions") = py::none(),
+    py::arg("spatial_constraints") = std::vector<std::tuple<std::string, std::string>>{},
+    py::arg("spatial_penalty_factor") = 1.0, py::arg("seed") = 0u, py::arg("visitor") = py::none(),
+    py::arg("num_threads") = 0);
 }

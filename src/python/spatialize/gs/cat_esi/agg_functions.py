@@ -53,6 +53,55 @@ def aggregate_with_mv(esi_samples: np.ndarray) -> np.ndarray:
 
 
 # ─────────────────────────────────────────────────────────────
+#  Weighted majority vote (nominal)
+# ─────────────────────────────────────────────────────────────
+
+def aggregate_with_weighted_mv(esi_samples: np.ndarray, weights) -> np.ndarray:
+    """
+    Aggregate ESI samples with a weighted majority vote: the category whose members carry the largest
+    total weight.
+
+    An alternative to the majority vote, which weighs every partition alike, for partitions known to
+    be of unequal reliability, for instance by a validation score of each partition. With equal
+    weights it is the majority vote. :func:`aggregate_with_btd` learns the reliabilities from the
+    members instead.
+
+    Parameters
+    ----------
+    esi_samples : np.ndarray, shape (p, n)
+        p locations × n partitions of categorical values (``None`` for a member of an empty cell,
+        which takes no part).
+    weights : array_like, shape (n,)
+        Non-negative weight of each partition.
+
+    Returns
+    -------
+    np.ndarray, shape (p,)
+        The category of largest total weight at each location (the first one met on ties, as the
+        majority vote), ``None`` where no member is defined.
+    """
+    if esi_samples.ndim != 2:
+        raise ValueError("esi_samples must be a 2D array of shape (p, n).")
+    w = np.asarray(weights, dtype=float).ravel()
+    if w.size != esi_samples.shape[1]:
+        raise ValueError(f"weights has {w.size} entries but there are {esi_samples.shape[1]} partitions.")
+    if (w < 0).any() or not np.isfinite(w).all():
+        raise ValueError("weights must be finite and non-negative.")
+    estimation = np.empty(esi_samples.shape[0], dtype=object)
+    for i, row in enumerate(esi_samples):
+        totals = {}
+        for x, wx in zip(row, w):
+            if x is not None:
+                totals[x] = totals.get(x, 0.0) + wx
+        best, best_w = None, -1.0
+        for category, total in totals.items():
+            if total > best_w:
+                best, best_w = category, total
+        estimation[i] = best
+    return estimation
+
+
+# ─────────────────────────────────────────────────────────────
 #  Median vote (ordinal)
 # ─────────────────────────────────────────────────────────────
 
@@ -225,7 +274,10 @@ def aggregate_with_btd(
     spatial_constraints : list of (cat_a, cat_b) forbidden-adjacent pairs
     tolerance : EM convergence threshold
     max_iter : maximum EM iterations
-    spatial_penalty_factor : weight for spatial constraints
+    spatial_penalty_factor : float
+        Weight of the spatial constraints (mean field): at each EM iteration a category loses, at each
+        location, the factor times its neighbours' current probabilities of a category it may not
+        touch. It is set by the user; 0 gives the non-spatial model.
     seed : int, optional
         Seed of the random initialisation of the confusion matrices; drawn at each call when
         ``None``. EM reaches a local maximum, so a fixed seed makes the result reproducible.
@@ -279,51 +331,39 @@ def aggregate_with_btd(
         result.re_estimate(agg_function=btd_agg)
     """
     num_items = esi_samples.shape[0]
-
-    # Build item → spatial coordinates mapping required by the C++ model
-    item_coordinates = {}
-    if map_dimensions is not None:
-        total_cells = int(np.prod(map_dimensions))
-        if total_cells != num_items:
-            raise ValueError(
-                f"Product of map_dimensions {map_dimensions} ({total_cells}) "
-                f"must equal number of items ({num_items})."
-            )
-        n_spatial_dims = len(map_dimensions)
-        for item_idx in range(num_items):
-            coords = [0] * n_spatial_dims
-            remaining = item_idx
-            # Decompose flat index into N-dimensional coordinates (row-major)
-            for dim in range(n_spatial_dims - 1, -1, -1):
-                coords[dim]  = remaining % map_dimensions[dim]
-                remaining   //= map_dimensions[dim]
-            item_coordinates[f"Item_{item_idx + 1}"] = tuple(coords)
+    if map_dimensions is not None and int(np.prod(map_dimensions)) != num_items:
+        raise ValueError(
+            f"Product of map_dimensions {map_dimensions} ({int(np.prod(map_dimensions))}) "
+            f"must equal number of items ({num_items})."
+        )
+    # the members as category codes (-1: a member of an empty cell, no claim): no string claims
+    import pandas as pd
+    samples = np.asarray(esi_samples, dtype=object)
+    defined = ~pd.isna(samples)
+    code_names, inverse = np.unique(samples[defined].astype(str), return_inverse=True)
+    codes = np.full(samples.shape, -1, dtype=np.int32)
+    codes[defined] = inverse
 
     spatial_constraints_safe = spatial_constraints if spatial_constraints is not None else []
-
-    # Only activate spatial model when all required inputs are present
-    use_spatial_model = bool(map_dimensions and item_coordinates and spatial_constraints_safe)
-
+    from spatialize.gs import _num_threads
+    from spatialize.logging import resolve_callback
     cpp_kwargs = dict(
-        esi_samples=esi_samples.tolist(),
+        codes=codes,
+        code_names=[str(c) for c in code_names],
         categories_list=categories_list,
         tolerance=tolerance,
         max_iter=max_iter,
         category_type=category_type,
         ordinal_order_map=ordinal_order_map,
-        map_dimensions=map_dimensions           if use_spatial_model else None,
-        item_coordinates=item_coordinates       if use_spatial_model else {},
-        spatial_constraints=spatial_constraints_safe if use_spatial_model else [],
+        map_dimensions=tuple(int(d) for d in map_dimensions) if map_dimensions is not None else None,
+        spatial_constraints=spatial_constraints_safe,
+        spatial_penalty_factor=spatial_penalty_factor,
+        seed=int(np.random.default_rng().integers(2 ** 31 - 1)) if seed is None else int(seed),
+        visitor=resolve_callback(callback),
+        num_threads=_num_threads(),
     )
-    if use_spatial_model:
-        cpp_kwargs["spatial_penalty_factor"] = spatial_penalty_factor
-    cpp_kwargs["seed"] = int(np.random.default_rng().integers(2 ** 31 - 1)) if seed is None else int(seed)
-    from spatialize.gs import _num_threads
-    from spatialize.logging import resolve_callback
-    cpp_kwargs["visitor"] = resolve_callback(callback)
-    cpp_kwargs["num_threads"] = _num_threads()
 
-    estimation, by_item, log_likelihood = _ds_cpp.aggregate_with_btd_em(**cpp_kwargs)
+    estimation, by_item, log_likelihood = _ds_cpp.aggregate_codes(**cpp_kwargs)
     cats = [str(c) for c in categories_list] if categories_list is not None else sorted(
         {str(c) for d in by_item.values() for c in d})
     probabilities = np.zeros((num_items, len(cats)))
@@ -332,162 +372,3 @@ def aggregate_with_btd(
         for k, c in enumerate(cats):
             probabilities[i, k] = d.get(c, 0.0)
     return np.array(estimation, dtype=object), probabilities, float(log_likelihood)
-
-def objective_function_for_spatial_penalty(
-    penalty_factor_array: np.ndarray,
-    esi_samples: np.ndarray,
-    categories_list: list,
-    map_dimensions: Tuple[int, ...],
-    spatial_constraints: List[Tuple[str, str]],
-    tolerance: float = 1e-4,
-    max_iter: int = 100,
-    seed: int = 0,
-) -> float:
-    """
-    Objective function for scipy optimizers: returns the negative marginal
-    log-likelihood for a given ``spatial_penalty_factor``.
-
-    Intended to be passed to ``scipy.optimize.basinhopping`` or ``minimize``
-    via the ``func`` / ``fun`` argument.
-
-    Parameters
-    ----------
-    penalty_factor_array : np.ndarray, shape (1,)
-        Current penalty factor value (wrapped in an array by scipy).
-    esi_samples : np.ndarray, shape (p, n)
-    categories_list : list of category strings
-    map_dimensions : tuple of ints, spatial grid shape
-    spatial_constraints : list of (cat_a, cat_b) forbidden-adjacent pairs
-    tolerance : EM convergence threshold
-    max_iter : maximum EM iterations
-    seed : seed of EM's initialisation, the same at every evaluation so that the objective is a
-        function of the penalty alone
-
-    Returns
-    -------
-    float – negative log-likelihood (minimise this to maximise likelihood)
-
-    Examples
-    --------
-    Use directly with ``scipy.optimize.minimize``::
-
-        from scipy.optimize import minimize
-        result = minimize(
-            objective_function_for_spatial_penalty,
-            x0=[1.0],
-            args=(samples, categories, (200, 300), [('20.0', '29.0')]),
-            method='L-BFGS-B',
-            bounds=[(1e-6, None)],
-        )
-        optimal_penalty = result.x[0]
-
-    Prefer ``optimize_btd_spatial_penalty`` for the full basin-hopping workflow.
-    """
-    penalty_factor = float(penalty_factor_array[0])
-    if penalty_factor <= 0:
-        return np.inf
-    try:
-        _, _, log_likelihood = aggregate_with_btd(
-            esi_samples=esi_samples,
-            categories_list=categories_list,
-            map_dimensions=map_dimensions,
-            spatial_constraints=spatial_constraints,
-            tolerance=tolerance,
-            max_iter=max_iter,
-            spatial_penalty_factor=penalty_factor,
-            category_type="nominal",
-            seed=seed,
-            callback=singleton_null_callback,
-        )
-        return -log_likelihood
-    except Exception:
-        return np.inf
-
-def optimize_btd_spatial_penalty(
-    esi_samples: np.ndarray,
-    categories_list: list,
-    map_dimensions: Tuple[int, ...],
-    spatial_constraints: List[Tuple[str, str]],
-    initial_penalty: float = 5.0,
-    penalty_bounds: Tuple[float, float] = (1.0, 20.0),
-    niter: int = 5,
-    T: float = 2.0,
-    stepsize: float = 1.0,
-    tolerance: float = 1e-4,
-    max_iter: int = 100,
-    seed: int = 0,
-) -> Tuple[float, float]:
-    """
-    Find the optimal ``spatial_penalty_factor`` for ``aggregate_with_btd``
-    using basin-hopping global optimisation (scipy).
-
-    Parameters
-    ----------
-    esi_samples : np.ndarray, shape (p, n)
-    categories_list : list of category strings
-    map_dimensions : tuple of ints, spatial grid shape (e.g. ``(200, 300)``)
-    spatial_constraints : list of ``(cat_a, cat_b)`` forbidden-adjacent pairs
-    initial_penalty : starting guess for the penalty factor
-    penalty_bounds : ``(low, high)`` search bounds
-    niter : number of basin-hopping iterations (more → wider search)
-    T : basin-hopping temperature (higher → more uphill moves accepted)
-    stepsize : maximum random jump size between basins
-    tolerance : EM convergence threshold passed to ``aggregate_with_btd``
-    max_iter : maximum EM iterations passed to ``aggregate_with_btd``
-    seed : seed of EM's initialisation and of the basin-hopping steps
-
-    Returns
-    -------
-    optimal_penalty_factor : float
-    optimal_log_likelihood : float
-
-    Examples
-    --------
-    Full workflow after estimation::
-
-        result = cat_esi_nongriddata(points, values, xi, classifier="knn_pca")
-        samples = result.esi_samples(raw=True)
-        categories = list(np.unique(values).astype(str))
-
-        optimal_penalty, log_ll = optimize_btd_spatial_penalty(
-            samples,
-            categories_list=categories,
-            map_dimensions=(200, 300),
-            spatial_constraints=[('20.0', '29.0')],
-        )
-
-        estimation, probs, ll = aggregate_with_btd(
-            samples,
-            categories_list=categories,
-            map_dimensions=(200, 300),
-            spatial_constraints=[('20.0', '29.0')],
-            spatial_penalty_factor=optimal_penalty,
-        )
-    """
-    from scipy.optimize import basinhopping
-
-    minimizer_kwargs = {
-        "method": "L-BFGS-B",
-        "bounds": [penalty_bounds],
-        "options": {
-            "disp": False,
-            "maxiter": 50,
-            "maxls": 20,
-            "eps": 0.05,
-            "gtol": 1e-4,
-        },
-        "args": (esi_samples, categories_list, map_dimensions,
-                 spatial_constraints, tolerance, max_iter, seed),
-    }
-
-    result = basinhopping(
-        func=objective_function_for_spatial_penalty,
-        x0=np.array([initial_penalty]),
-        niter=niter,
-        T=T,
-        stepsize=stepsize,
-        minimizer_kwargs=minimizer_kwargs,
-        seed=seed,
-    )
-
-    return float(result.x[0]), float(-result.fun)

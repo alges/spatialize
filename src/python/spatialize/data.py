@@ -520,3 +520,91 @@ def load_facies_pyrcz(biased=False):
     df = df.rename(columns=names)[["x", "y", "facies", "porosity", "permeability", "acoustic_impedance"]]
     df["facies"] = df["facies"].astype(int)
     return df
+
+
+def _sample_grid(grid, n_samples, seed):
+    rng = np.random.default_rng(seed)
+    idx = np.sort(rng.choice(len(grid), size=int(n_samples), replace=False))
+    return grid.iloc[idx].reset_index(drop=True)
+
+
+def load_elevation_walker_lake(n_samples=780, seed=20261011):
+    """
+    Load the elevation of the Walker Lake area, Nevada, an exhaustively known real field, with samples
+    drawn from it.
+
+    A 260 × 300 grid of 100 m cells (26 km × 30 km) of the U.S. Geological Survey's 3D Elevation
+    Program, covering the flat surface of the lake (about 1 194 m, a quarter of the cells), the steep
+    Wassuk Range to the west (up to 3 418 m) and lower hills to the east. The window has the size of the
+    Walker Lake data set of Isaaks and Srivastava, derived from an elevation model of the same area.
+    The values here are the elevation itself.
+
+    Parameters
+    ----------
+    n_samples : int, default 780
+        Number of samples (1 % of the cells), drawn uniformly without replacement.
+    seed : int, default 20261011
+        Seed of the draw of the samples.
+
+    Returns
+    -------
+    samples : pandas.DataFrame of shape (n_samples, 3)
+        Columns ``'x'``, ``'y'`` (km from the south-west corner) and ``'elevation'`` (m).
+    grid : pandas.DataFrame of shape (78000, 3)
+        The same columns for every cell centre, row-major with rows along y.
+
+    Notes
+    -----
+    From the U.S. Geological Survey's 3D Elevation Program, 1/3 arc-second elevation model, in UTM
+    zone 11N (public domain), built by ``tools/datasets/fetch_walker_lake_elevation.py``.
+
+    Examples
+    --------
+    >>> from spatialize.data import load_elevation_walker_lake
+    >>> samples, grid = load_elevation_walker_lake()
+    >>> points, values = samples[['x', 'y']].values, samples['elevation'].values
+    >>> xi = grid[['x', 'y']].values
+    """
+    grid = pd.read_csv(os.path.join(str(rs.files(data)), "elevation_walker_lake", "grid.csv"))
+    return _sample_grid(grid, n_samples, seed), grid
+
+
+def load_reflectance_sundarbans(n_samples=2320, seed=20261011):
+    """
+    Load the near-infrared reflectance of the Sundarbans mangrove forest, Bangladesh, an exhaustively
+    known real field with sharp, winding boundaries, with samples drawn from it.
+
+    A 400 × 580 grid of 60 m cells (24 km × 34.8 km) of a Landsat 9 scene. Water absorbs the near
+    infrared while the mangroves reflect it, so the tidal channels, from a few cells to more than a
+    kilometre wide, separate low values from high ones. The right neighbourhood therefore changes
+    from place to place.
+
+    Parameters
+    ----------
+    n_samples : int, default 2320
+        Number of samples (1 % of the cells), drawn uniformly without replacement.
+    seed : int, default 20261011
+        Seed of the draw of the samples.
+
+    Returns
+    -------
+    samples : pandas.DataFrame of shape (n_samples, 3)
+        Columns ``'x'``, ``'y'`` (km from the south-west corner) and ``'reflectance'`` (a fraction).
+    grid : pandas.DataFrame of shape (232000, 3)
+        The same columns for every cell centre, row-major with rows along y.
+
+    Notes
+    -----
+    From Landsat 9 OLI-2, Collection 2 Level-2 surface reflectance, band 5, scene
+    LC09_L2SP_138045_20221114_02_T1, U.S. Geological Survey (public domain), in UTM zone 45N, built
+    by ``tools/datasets/fetch_sundarbans_landsat.py``.
+
+    Examples
+    --------
+    >>> from spatialize.data import load_reflectance_sundarbans
+    >>> samples, grid = load_reflectance_sundarbans()
+    >>> points, values = samples[['x', 'y']].values, samples['reflectance'].values
+    >>> xi = grid[['x', 'y']].values
+    """
+    grid = pd.read_csv(os.path.join(str(rs.files(data)), "reflectance_sundarbans", "grid.csv"))
+    return _sample_grid(grid, n_samples, seed), grid

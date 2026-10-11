@@ -21,3 +21,7 @@ Saving and loading results, and the datasets bundled with Spatialize.
 .. autofunction:: load_lithology_golden
 
 .. autofunction:: load_facies_pyrcz
+
+.. autofunction:: load_elevation_walker_lake
+
+.. autofunction:: load_reflectance_sundarbans

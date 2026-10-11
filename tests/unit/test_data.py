@@ -55,3 +55,22 @@ def test_facies_pyrcz_ships_with_its_licence():
         assert d.shape == (n, 6) and set(d["facies"]) == {0, 1}
     licence = open(os.path.join(str(rs.files(data)), "facies_pyrcz", "LICENSE")).read()
     assert "Michael Pyrcz" in licence and "Permission is hereby granted" in licence
+
+
+def test_exhaustive_fields_are_truths_with_samples_drawn_from_them():
+    """The Walker Lake elevation and the Sundarbans reflectance: full grids as the truth, samples drawn
+    reproducibly from their cells, the provenance shipped with them."""
+    import importlib.resources as rs
+    from spatialize.data import load_elevation_walker_lake, load_reflectance_sundarbans
+    from spatialize.resources import data
+    for load, folder, col, shape, n in ((load_elevation_walker_lake, "elevation_walker_lake", "elevation",
+                                         (78000, 3), 780),
+                                        (load_reflectance_sundarbans, "reflectance_sundarbans", "reflectance",
+                                         (232000, 3), 2320)):
+        s, g = load()
+        assert g.shape == shape and len(s) == n and g[col].notna().all()
+        s2 = load(n_samples=100, seed=5)[0]
+        assert s2.equals(load(n_samples=100, seed=5)[0])
+        merged = s2.merge(g, on=["x", "y"], suffixes=("", "_grid"))
+        assert len(merged) == 100 and (merged[col] == merged[f"{col}_grid"]).all()
+        assert os.path.exists(os.path.join(str(rs.files(data)), folder, "README.md"))

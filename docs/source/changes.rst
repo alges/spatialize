@@ -27,6 +27,11 @@ New
   lithologies, four ordered eras and the whole map as the truth; and
   :func:`~spatialize.data.load_facies_pyrcz`, synthetic wells with two facies and continuous properties
   (GeoDataSets by M. J. Pyrcz, MIT licence, shipped with the files), one set sampled preferentially.
+- **Two exhaustive real fields.** :func:`~spatialize.data.load_elevation_walker_lake` gives the
+  elevation of the Walker Lake area, Nevada, on a 260 × 300 grid (USGS 3D Elevation Program, public
+  domain). :func:`~spatialize.data.load_reflectance_sundarbans` gives the near-infrared reflectance of the
+  Sundarbans mangrove forest on a 400 × 580 grid, its tidal channels a field of sharp, winding boundaries
+  (Landsat 9, USGS, public domain). Each returns the whole grid as the truth with samples drawn from it.
 - **Dawid–Skene aggregation of categorical ensembles**, an alternative to the majority vote, which
   stays the default: :func:`~spatialize.gs.cat_esi.aggregate_with_btd`, with ``re_estimate('btd')``
   on a result, weighs the partitions by their reliability, for nominal, ordinal and binary variables,

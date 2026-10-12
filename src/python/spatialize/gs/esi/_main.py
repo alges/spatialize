@@ -1443,6 +1443,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
         "pair_strategy":        "gaussian",
         "reference_laws":       None,
         "n_neighbours":         16,
+        "min_spread":           0.05,
         "point_model_name":     "kde",
         "nan_model_name":       "ignore",
         "support_sample_size":  500,
@@ -1514,6 +1515,10 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         none); a callable ``(points, values) -> matrix`` computes them.
     n_neighbours : int, optional
         Neighbours of the default reference laws. Default: ``16``.
+    min_spread : float, optional
+        The smallest standard deviation of a reference law, as a fraction of
+        that of the data, so that data whose neighbours are all alike (a flat
+        surface, a zero atom) still have a density. Default: ``0.05``.
     point_model_name : str, optional
         Density fitted to each reference law: ``"kde"`` (default), ``"emm"``,
         ``"vim"``.
@@ -1609,6 +1614,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         pair_strategy       = kwargs["pair_strategy"],
         reference_laws      = kwargs["reference_laws"],
         n_neighbours        = kwargs["n_neighbours"],
+        min_spread          = kwargs["min_spread"],
         point_model_name    = kwargs["point_model_name"],
         nan_model_name      = kwargs["nan_model_name"],
         support_sample_size = kwargs["support_sample_size"],

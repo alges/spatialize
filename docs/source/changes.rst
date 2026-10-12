@@ -171,7 +171,8 @@ Results that change
   floor under the second density capped every divergence at 14.73 nats. Version 1.2.0 hid most of
   this behind its wide kernels. ε̂ now compares laws fitted once for the whole search, by default
   those of each datum's 16 nearest data (``reference_laws``, ``n_neighbours``), read as kernel
-  densities that keep their mean and variance. It takes the largest divergence per partition and
+  densities that keep their mean and variance, with a floor of spread (``min_spread``, 5 % of the
+  standard deviation of the data) for data whose neighbours are all alike, such as a flat surface. It takes the largest divergence per partition and
   averages it over the partitions, the divergence being computed in log space with no floor. It no
   longer depends on the decoder or on ``n_partitions``, falling as the cells shrink. A search also
   runs faster, since ε̂ needs no leave-one-out ensemble (9 s against 3.4 s for 21 configurations on

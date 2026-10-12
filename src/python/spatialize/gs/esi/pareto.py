@@ -52,7 +52,7 @@ _INTERP_DEFAULTS = with_more_decoders({
 # EmpiricalRobustnessBound  (the empirical robustness level, per partition)
 # ===========================================================================
 
-def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name="kde",
+def reference_laws(points, values, laws=None, n_neighbours=16, min_spread=0.05, point_model_name="kde",
                    nan_model_name="ignore", seed=None) -> list:
     """The estimated conditional law at each datum, fitted once and shared by every configuration.
 
@@ -69,6 +69,12 @@ def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name=
         at datum ``i`` (NaN for none); or a function ``(points, values) -> matrix``.
     n_neighbours : int, optional
         Neighbours of the default law (16).
+    min_spread : float, optional
+        The smallest standard deviation a law may have, as a fraction of the standard deviation of
+        the data (0.05). Where the draws are all alike (a flat surface, a zero atom) the law would
+        be a point mass, whose divergence from any other law is unbounded, while the bound on the
+        encoder error assumes densities bounded above and below. The floor keeps every law a density
+        at the scale of the data, so it does not depend on the units.
     point_model_name, nan_model_name, seed
         The density fitted to each row (:class:`~spatialize.empirical.FittedModelFactory`).
 
@@ -77,8 +83,9 @@ def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name=
     list
         Per datum, ``None`` when fewer than two draws remain, else ``(model, centre, low, high,
         scale)``: the fitted density, the mean of the draws, the interval the divergence integrates
-        over and the standard deviation of the draws. With ``"kde"`` the density keeps the mean and
-        variance of the draws, its tails falling at the law's own scale.
+        over and the standard deviation of the law. With ``"kde"`` the density keeps the mean of the
+        draws and their variance, raised to the floor if smaller, its tails falling at the law's own
+        scale.
     """
     points = np.asarray(points, dtype=np.float64)
     values = np.asarray(values, dtype=np.float64)
@@ -94,6 +101,8 @@ def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name=
     if draws.ndim != 2 or draws.shape[0] != len(values):
         raise ValueError(f"the reference laws must be a matrix with one row per datum, got shape {draws.shape}")
     factory = FittedModelFactory(nan_model_name=nan_model_name, point_model_name=point_model_name, seed=seed)
+    finite = values[np.isfinite(values)]
+    floor = float(min_spread) * float(np.std(finite)) if len(finite) > 1 else 0.0
     result = []
     for row in draws:
         s = row[~np.isnan(row)]
@@ -101,24 +110,28 @@ def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name=
             result.append(None)
             continue
         centre = float(s.mean())
-        sd = float(np.std(s)) or 1e-6 * max(1.0, abs(centre))
+        own = float(np.std(s))
+        sd = max(own, floor) or 1e-6 * max(1.0, abs(centre))
         if point_model_name == "kde":
-            model = _variance_preserving_kde(s, centre, sd)
+            model = _variance_preserving_kde(s, centre, own, sd)
         else:
             model, _ = factory.create(s)
         result.append((model, centre, float(s.min()) - 6.0 * sd, float(s.max()) + 6.0 * sd, sd))
     return result
 
 
-def _variance_preserving_kde(sample, centre, sd):
-    """A Gaussian KDE with the sample's mean and variance: the draws pulled towards their mean by
-    1/√2 and a bandwidth of sd/√2, so the kernels add back the variance the pull removed. Its tails
-    fall at the scale of the law itself; the narrow kernels of a density-optimal bandwidth would make
-    a divergence read their tails instead (two laws N(0, 1) and N(8, 1) would diverge by hundreds
-    of nats where the laws diverge by 32). For a Gaussian sample the fitted law is the Gaussian."""
+def _variance_preserving_kde(sample, centre, own, sd):
+    """A Gaussian KDE with the sample's mean and the variance ``sd**2``: the draws pulled towards
+    their mean by 1/√2, whose variance is then ``own**2 / 2``, and a bandwidth adding the rest. With
+    ``sd == own`` the bandwidth is sd/√2, so the kernels add back the variance the pull removed; a
+    larger ``sd`` (a floor) widens the kernels. Its tails fall at the scale of the law itself; the
+    narrow kernels of a density-optimal bandwidth would make a divergence read their tails instead
+    (two laws N(0, 1) and N(8, 1) would diverge by hundreds of nats where the laws diverge by 32).
+    For a Gaussian sample the fitted law is the Gaussian."""
     from sklearn.neighbors import KernelDensity
     pulled = centre + (np.asarray(sample, dtype=np.float64) - centre) / np.sqrt(2.0)
-    return KernelDensity(kernel="gaussian", bandwidth=sd / np.sqrt(2.0)).fit(pulled.reshape(-1, 1))
+    bandwidth = np.sqrt(max(sd ** 2 - own ** 2 / 2.0, (sd ** 2) / 2.0))
+    return KernelDensity(kernel="gaussian", bandwidth=bandwidth).fit(pulled.reshape(-1, 1))
 
 
 class EmpiricalRobustnessBound:
@@ -263,6 +276,8 @@ class ParetoOptimizer:
         its ``n_neighbours`` nearest data.
     n_neighbours : int
         Neighbours of the default reference laws (16).
+    min_spread : float
+        Smallest standard deviation of a reference law, as a fraction of that of the data (0.05).
     point_model_name : str
         Density model fitted to each reference law: ``"kde"`` (default),
         ``"emm"``, ``"vim"``.
@@ -292,6 +307,7 @@ class ParetoOptimizer:
         pair_strategy: str    = "gaussian",
         reference_laws        = None,
         n_neighbours: int     = 16,
+        min_spread: float     = 0.05,
         point_model_name: str = "kde",
         nan_model_name: str   = "ignore",
         support_sample_size: int = 500,
@@ -309,6 +325,7 @@ class ParetoOptimizer:
         self.pair_strategy       = pair_strategy
         self.reference_laws      = reference_laws
         self.n_neighbours        = n_neighbours
+        self.min_spread          = min_spread
         self.point_model_name    = point_model_name
         self.nan_model_name      = nan_model_name
         self.support_sample_size = support_sample_size
@@ -347,7 +364,7 @@ class ParetoOptimizer:
         cv_fn = lib_spatialize_facade.get_operator(points, self.local_interpolator, method, self.p_process)
 
         # the laws the encoder error compares, the same for every configuration
-        laws = reference_laws(points, values, self.reference_laws, self.n_neighbours,
+        laws = reference_laws(points, values, self.reference_laws, self.n_neighbours, self.min_spread,
                               self.point_model_name, self.nan_model_name, self.seed)
 
         configs   = list(_iter_param_grid(self.param_grid))

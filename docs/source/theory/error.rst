@@ -148,7 +148,8 @@ In Spatialize
 :func:`~spatialize.gs.esi.esi_pareto_hparams_search` estimates :math:`\hat\varepsilon` and the risk for
 each configuration and returns the frontier. The laws :math:`\hat p_i` are by default those of the
 values of each datum's 16 nearest data (``reference_laws``, ``n_neighbours``), read as Gaussian kernel
-densities that keep the mean and variance of those values, so that the divergence compares the laws
+densities that keep the mean and variance of those values, the variance raised to a floor where the
+values are all alike, so that the divergence compares the laws
 themselves, whose tails fall at their own scale. Both are computed on the partitions of the chosen
 ``p_process``, Mondrian or Voronoi, the cells of the data being those returned by
 :func:`~spatialize.gs.partitions.cell_labels`. Its ``best_result`` reads the frontier by lowest

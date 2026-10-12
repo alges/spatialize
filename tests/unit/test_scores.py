@@ -133,3 +133,19 @@ def test_alpha_near_one_warns_only_on_the_partition_of_version_1_2():
             esi_nongriddata(s, v, q, local_interpolator="idw", exponent=cases.EXP, n_partitions=5, alpha=0.97,
                             p_process=p_process, seed=cases.SEED, callback=singleton_null_callback)
         assert any("very close to 1" in str(w.message) for w in caught) == warns, p_process
+
+
+def test_a_point_mass_law_gets_the_spread_floor():
+    """Where a datum's neighbours are all alike (a flat surface), its reference law gets the floor
+    of spread, a fraction of the data's standard deviation, so its divergence from another law is
+    that of two Gaussians at that scale and not an artefact of a vanishing bandwidth."""
+    from spatialize.gs.esi.pareto import reference_laws, _kl_from_models
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    values = rng.normal(0.0, 10.0, 200)
+    draws = np.vstack([np.full(400, 0.0), rng.normal(2.0, 0.5, 400)])
+    laws = reference_laws(np.zeros((200, 2)), values, laws=np.vstack([draws, np.zeros((198, 400))]),
+                          min_spread=0.05)
+    floor = 0.05 * np.std(values)
+    assert np.isclose(laws[0][4], floor)
+    gauss = np.log(laws[1][4] / floor) + (floor ** 2 + 4.0) / (2 * laws[1][4] ** 2) - 0.5
+    assert 0.8 * gauss < _kl_from_models(laws[0], laws[1]) < 1.2 * gauss

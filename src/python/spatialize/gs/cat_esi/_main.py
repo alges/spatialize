@@ -984,7 +984,8 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     xi : accepted for API consistency with cat_esi_griddata/cat_esi_nongriddata;
         not used during CV (held-out fold points serve as query locations)
     classifier : {'knn_pca', 'scikit-learn'}
-    k : int, number of CV folds (default 5)
+    k : int or str, number of CV folds (default 5); ``"loo"``, ``-1`` or the number of data for
+        leave-one-out
     cv : {"engine", "refit"}, default "engine"
         How the cross-validation is done. ``"engine"`` draws the partitions
         once on all the data and, in each cell, predicts the held-out data
@@ -1049,8 +1050,8 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
     k = kwargs["k"]
     n = points.shape[0]
 
-    # Support LOO: k=-1 or k==n means leave-one-out
-    if k == -1 or k == n:
+    # leave-one-out: k = "loo", -1 or the number of data
+    if k in ("loo", -1) or k == n:
         k = n
 
     def combo_for(param_set):

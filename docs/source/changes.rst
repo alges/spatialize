@@ -98,6 +98,12 @@ New
   the neighbours, which tell an isolated error from an unrepresented part of the domain, the
   proportional effect and the co-located data complete the review. Scenario P12 holds the analysis to
   planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.
+- **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
+  cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without
+  that explosion, so fine granularities such as 0.98 are ordinary values.
+- **Leave-one-out by name.** Every cross-validated search and the posterior analysis take
+  ``k="loo"`` for leave-one-out, as the Pareto search already did, besides ``-1`` and the number of
+  data.
 
 Under study
 -----------

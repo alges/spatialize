@@ -884,9 +884,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
         With ``"custom"``, the functions ``estimation`` (and optionally
         ``post_creation``, ``loo``, ``kfold``) are given as single values,
         the same for every configuration searched.
-    k : int, optional
-        Number of cross-validation folds. If `k` equals the number of
-        points or is ``-1``, leave-one-out (LOO) cross-validation is used
+    k : int or str, optional
+        Number of cross-validation folds. If `k` is ``"loo"``, ``-1`` or the
+        number of points, leave-one-out (LOO) cross-validation is used
         instead of k-fold. Default: ``10``.
     griddata : bool, optional
         Whether `xi` is grid-shaped (see `xi` above). Default: ``False``.
@@ -985,7 +985,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
     log_message(logging.logger.debug("searching best params ..."))
 
     method, k = "kfold", kwargs["k"]
-    if k == points.shape[0] or k == -1:
+    if k in ("loo", -1) or k == points.shape[0]:
         method = "loo"
 
     # get the cross validation function
@@ -1694,21 +1694,23 @@ def _call_libspatialize(points, values, xi, **kwargs):
     return estimation, esi_samples, partition
 
 
-def _validate_alpha(alpha):
-    """Raise ValueError if alpha >= 1; warn if alpha > 0.95."""
+def _validate_alpha(alpha, p_process=None):
+    """Raise ValueError if alpha >= 1. Warn if alpha > 0.95 on the partition of version 1.2
+    (``"mondrian-legacy"``), whose cells multiply near 1 (thin slivers keep being cut); the
+    theory's Mondrian process and Voronoi grow their cells with alpha without that explosion."""
     if isinstance(alpha, (list, tuple)):
         for a in alpha:
-            _validate_alpha(a)
+            _validate_alpha(a, p_process)
         return
     if alpha >= 1.0:
         raise ValueError(
             f"alpha must be < 1 (got {alpha}). "
         )
-    if alpha > 0.95:
+    if alpha > 0.95 and p_process == partitioning_process.MONDRIAN_LEGACY:
         import warnings
         warnings.warn(
-            f"alpha={alpha} is very close to 1. This produces very fine partitions "
-            "and may cause slow computation.",
+            f"alpha={alpha} is very close to 1. On 'mondrian-legacy' this produces very fine "
+            "partitions and may cause slow computation.",
             UserWarning,
             stacklevel=3,
         )
@@ -1725,7 +1727,7 @@ def build_arg_list(points, values, xi, nonpos_args):
     :return: The argument list.
     """
     alpha = nonpos_args["alpha"]
-    _validate_alpha(alpha)
+    _validate_alpha(alpha, nonpos_args["p_process"])
     if nonpos_args["p_process"] == partitioning_process.VORONOI and not nonpos_args["data_cond"]:
         alpha *= -1
 

@@ -101,3 +101,35 @@ def test_divergence_of_far_laws_has_no_ceiling():
     draws = np.vstack([rng.normal(0.0, 1.0, 4000), rng.normal(8.0, 1.0, 4000)])
     laws = reference_laws(np.zeros((2, 2)), np.zeros(2), laws=draws)
     assert 32 * 0.9 < _kl_from_models(laws[0], laws[1]) < 32 * 1.2
+
+
+def test_leave_one_out_is_named_the_same_in_every_search():
+    """Every cross-validated search takes ``k="loo"`` for leave-one-out, as ``-1`` and the number of
+    data, with the same result."""
+    from spatialize.gs.esi import esi_hparams_search
+    from spatialize.gs.idw import idw_hparams_search
+    from spatialize.logging import singleton_null_callback
+    s, v, q = DATA["2d"]
+    common = dict(griddata=False, n_partitions=[cases.T], alpha=[cases.ALPHA], exponent=[cases.EXP],
+                  seed=cases.SEED, callback=singleton_null_callback)
+    errors = [esi_hparams_search(s, v, q, k=k, **common).search_result_data["cv_error"].values
+              for k in ("loo", -1, len(v))]
+    assert np.array_equal(errors[0], errors[1]) and np.array_equal(errors[0], errors[2])
+    idw = [idw_hparams_search(s, v, q, k=k, griddata=False, exponent=[cases.EXP], callback=singleton_null_callback)
+           .search_result_data["cv_error"].values for k in ("loo", -1)]
+    assert np.array_equal(idw[0], idw[1])
+
+
+def test_alpha_near_one_warns_only_on_the_partition_of_version_1_2():
+    """Near alpha = 1 the partition of version 1.2 multiplies its cells, so it warns; the theory's
+    Mondrian process and Voronoi do not."""
+    import warnings
+    from spatialize.gs.esi import esi_nongriddata
+    from spatialize.logging import singleton_null_callback
+    s, v, q = DATA["2d"]
+    for p_process, warns in (("mondrian", False), ("voronoi", False), ("mondrian-legacy", True)):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            esi_nongriddata(s, v, q, local_interpolator="idw", exponent=cases.EXP, n_partitions=5, alpha=0.97,
+                            p_process=p_process, seed=cases.SEED, callback=singleton_null_callback)
+        assert any("very close to 1" in str(w.message) for w in caught) == warns, p_process

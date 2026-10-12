@@ -117,9 +117,9 @@ def idw_hparams_search(points, values, xi,
         $D$ components, each with the dimensions of one of the grid faces,
         as returned by ``numpy.mgrid``. If the data are not gridded, they
         are simply an $N_{x^*} \times D$ array of locations.
-    k : int, optional
-        Number of cross-validation folds. If `k` equals the number of
-        points or is ``-1``, leave-one-out (LOO) cross-validation is used
+    k : int or str, optional
+        Number of cross-validation folds. If `k` is ``"loo"``, ``-1`` or the
+        number of points, leave-one-out (LOO) cross-validation is used
         instead of k-fold. Default: ``10``.
     griddata : bool, optional
         Whether `xi` is grid-shaped (see `xi` above). Default: ``False``.
@@ -155,7 +155,7 @@ def idw_hparams_search(points, values, xi,
         folding_seed = int(np.random.randint(1000, 10000))
 
     method = "kfold"
-    if k == points.shape[0] or k == -1:
+    if k in ("loo", -1) or k == points.shape[0]:
         method = "loo"
 
     # get the cross validation function

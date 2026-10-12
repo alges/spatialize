@@ -90,7 +90,7 @@ def _cv_members(points, values, queries, kwargs):
     values = np.asarray(values, dtype=np.float32)
     n = points.shape[0]
     k = kwargs["k"]
-    method = "loo" if k in (-1, n) else "kfold"
+    method = "loo" if k in ("loo", -1, n) else "kfold"
     alpha = kwargs["alpha"]
     if alpha >= 1.0:
         raise ValueError(f"alpha must be < 1 (got {alpha})")
@@ -1329,8 +1329,8 @@ def posterior_audit(points, values, **kwargs):
     local_interpolator : str, optional
         The decoder, any of the catalogue (:func:`~spatialize.gs.esi.esi_nongriddata`), with its
         parameters as keyword arguments. Default: ``"idw"``.
-    k : int, optional
-        ``-1`` (or n) for leave-one-out, otherwise the number of folds. Default: -1.
+    k : int or str, optional
+        ``"loo"``, ``-1`` or n for leave-one-out, otherwise the number of folds. Default: -1.
     p_process : {"mondrian", "mondrian-legacy", "voronoi"}, optional
         The partition process. Default: ``"mondrian"``.
     data_cond : bool, optional

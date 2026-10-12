@@ -2,8 +2,9 @@
 
 For each parameter configuration this module jointly evaluates two objectives:
 
-    ε̂   — Encoder error: empirical robustness bound,
-            estimated via fitted continuous density models (KDE / GMM).
+    ε̂   — Encoder error: the empirical robustness level, the largest divergence between the
+            laws of two data sharing a cell, per partition, averaged over the partitions; the laws
+            are fitted once for the search (by default from each datum's nearest neighbours).
     R_CV — Decoder error: standard k-fold / LOO cross-validation score.
 
 The Pareto frontier over (ε̂, R_CV) is returned as an :class:`ESIParetoResult`,
@@ -48,171 +49,174 @@ _INTERP_DEFAULTS = with_more_decoders({
 })
 
 # ===========================================================================
-# EmpiricalRobustnessBound  (Algorithm 1 with fitted KL)
+# EmpiricalRobustnessBound  (the empirical robustness level, per partition)
 # ===========================================================================
 
-class EmpiricalRobustnessBound:
-    """Algorithm 1 using fitted continuous density models for KL estimation.
+def reference_laws(points, values, laws=None, n_neighbours=16, point_model_name="kde",
+                   nan_model_name="ignore", seed=None) -> list:
+    """The estimated conditional law at each datum, fitted once and shared by every configuration.
 
-    Computes:
-
-        ε̂ = max_{u ∈ U}  max_{i,j: η(x_i)=η(x_j)=u}  D_KL(p̂_i ‖ p̂_j)
-
-    where each p̂_i is represented by the LOO ESI sample vector at x_i and
-    KL is estimated by fitting independent KDE / GMM models to each sample
-    vector and integrating over a shared grid.
+    The empirical robustness level compares laws that do not depend on the partitions it judges.
+    By default the law at a datum is that of the values of its ``n_neighbours`` nearest data, itself
+    excluded, a local predictor whose law narrows to the location's as the data densify.
 
     Parameters
     ----------
-    n_partitions, alpha, local_interpolator, p_process, seed
-        ESI encoder parameters. ε̂ is computed on the partitions of ``p_process``.
+    points, values : array-like
+        The data.
+    laws : None, array-like of shape (n, m) or callable, optional
+        ``None`` for the nearest neighbours; a matrix whose row ``i`` holds ``m`` draws from the law
+        at datum ``i`` (NaN for none); or a function ``(points, values) -> matrix``.
+    n_neighbours : int, optional
+        Neighbours of the default law (16).
+    point_model_name, nan_model_name, seed
+        The density fitted to each row (:class:`~spatialize.empirical.FittedModelFactory`).
+
+    Returns
+    -------
+    list
+        Per datum, ``None`` when fewer than two draws remain, else ``(model, centre, low, high,
+        scale)``: the fitted density, the mean of the draws, the interval the divergence integrates
+        over and the standard deviation of the draws. With ``"kde"`` the density keeps the mean and
+        variance of the draws, its tails falling at the law's own scale.
+    """
+    points = np.asarray(points, dtype=np.float64)
+    values = np.asarray(values, dtype=np.float64)
+    if laws is None:
+        from scipy.spatial import cKDTree
+        k = min(int(n_neighbours), len(values) - 1)
+        _, nb = cKDTree(points).query(points, k=k + 1)
+        draws = values[nb[:, 1:]]
+    elif callable(laws):
+        draws = np.asarray(laws(points, values), dtype=np.float64)
+    else:
+        draws = np.asarray(laws, dtype=np.float64)
+    if draws.ndim != 2 or draws.shape[0] != len(values):
+        raise ValueError(f"the reference laws must be a matrix with one row per datum, got shape {draws.shape}")
+    factory = FittedModelFactory(nan_model_name=nan_model_name, point_model_name=point_model_name, seed=seed)
+    result = []
+    for row in draws:
+        s = row[~np.isnan(row)]
+        if len(s) < 2:
+            result.append(None)
+            continue
+        centre = float(s.mean())
+        sd = float(np.std(s)) or 1e-6 * max(1.0, abs(centre))
+        if point_model_name == "kde":
+            model = _variance_preserving_kde(s, centre, sd)
+        else:
+            model, _ = factory.create(s)
+        result.append((model, centre, float(s.min()) - 6.0 * sd, float(s.max()) + 6.0 * sd, sd))
+    return result
+
+
+def _variance_preserving_kde(sample, centre, sd):
+    """A Gaussian KDE with the sample's mean and variance: the draws pulled towards their mean by
+    1/√2 and a bandwidth of sd/√2, so the kernels add back the variance the pull removed. Its tails
+    fall at the scale of the law itself; the narrow kernels of a density-optimal bandwidth would make
+    a divergence read their tails instead (two laws N(0, 1) and N(8, 1) would diverge by hundreds
+    of nats where the laws diverge by 32). For a Gaussian sample the fitted law is the Gaussian."""
+    from sklearn.neighbors import KernelDensity
+    pulled = centre + (np.asarray(sample, dtype=np.float64) - centre) / np.sqrt(2.0)
+    return KernelDensity(kernel="gaussian", bandwidth=sd / np.sqrt(2.0)).fit(pulled.reshape(-1, 1))
+
+
+class EmpiricalRobustnessBound:
+    """The empirical robustness level of an ensemble of partitions.
+
+    For one partition, the largest divergence between the estimated laws at two data sharing a cell,
+
+        ε̂_t = max_{u}  max_{i,j: η_t(x_i)=η_t(x_j)=u}  D_KL(p̂_i ‖ p̂_j),
+
+    and for the ensemble the mean over its partitions, ε̂ = (1/T) Σ_t ε̂_t, the expected level of the
+    random partition. The laws p̂_i are given (:func:`reference_laws`), the same for every
+    configuration, so ε̂ reads the cells alone.
+
+    Parameters
+    ----------
+    n_partitions, alpha, p_process, seed
+        The partitions, those an ESI call with the same arguments draws.
+    pair_strategy : str
+        The pairs compared in each cell. ``"gaussian"`` (default), the pair whose laws, read as
+        Gaussians of their mean and standard deviation, diverge the most; ``"exhaustive"``, every
+        ordered pair, exact but quadratic in the data of a cell; ``"max_min"``, the data of largest
+        and smallest law mean, both ways, blind to laws that differ in spread.
+    support_sample_size : int
+        Points of the grid each divergence integrates over.
     data_cond : bool
         For Voronoi, whether the nuclei are drawn among the data (default) or uniformly.
-    pair_strategy : str
-        ``"max_min"`` (default) or ``"exhaustive"``.
-    point_model_name : str
-        ``"kde"`` (default), ``"emm"``, or ``"vim"``.
-    nan_model_name : str
-        ``"ignore"`` (default) or ``"replace"``.
-    support_sample_size : int
-        Number of grid points for the shared KL evaluation grid.
     """
 
     def __init__(
         self,
         n_partitions: int,
         alpha: float,
-        local_interpolator: str,
         p_process: str,
         seed: int,
-        pair_strategy: str = "max_min",
-        point_model_name: str = "kde",
-        nan_model_name: str = "ignore",
+        pair_strategy: str = "gaussian",
         support_sample_size: int = 500,
-        interp_kwargs: dict | None = None,
         data_cond: bool = True,
     ) -> None:
-        self.n_partitions       = n_partitions
-        self.alpha              = alpha
-        self.local_interpolator = local_interpolator
-        self.p_process          = p_process
-        self.data_cond          = data_cond
-        self.seed               = seed
-        self.pair_strategy      = pair_strategy
+        self.n_partitions        = n_partitions
+        self.alpha               = alpha
+        self.p_process           = p_process
+        self.data_cond           = data_cond
+        self.seed                = seed
+        self.pair_strategy       = pair_strategy
         self.support_sample_size = support_sample_size
-        self.interp_kwargs      = interp_kwargs or {}
-        self.repeated           = False   # set by ParetoOptimizer: one of several estimates in a row
-
-        self._factory = FittedModelFactory(
-            nan_model_name=nan_model_name,
-            point_model_name=point_model_name,
-            seed=seed,
-        )
+        self.repeated            = False   # set by ParetoOptimizer: one of several estimates in a row
 
         # Populated by estimate()
-        self.esi_samples:  np.ndarray | None = None
-        self.leaf_indexes: np.ndarray | None = None
-        self.epsilon_hat:  float | None      = None
+        self.leaf_indexes:  np.ndarray | None = None
+        self.per_partition: np.ndarray | None = None
+        self.epsilon_hat:   float | None      = None
 
-    def estimate(self, points: np.ndarray, values: np.ndarray) -> float:
-        """Run Algorithm 1 and return ε̂."""
+    def estimate(self, points: np.ndarray, laws: list) -> float:
+        """ε̂ of these partitions for the given laws (one entry per datum, see :func:`reference_laws`)."""
         points = np.asarray(points, dtype=np.float32)
-        values = np.asarray(values, dtype=np.float32)
+        alpha = -self.alpha if self.p_process == partitioning_process.VORONOI and not self.data_cond else self.alpha
+        self.leaf_indexes = lib_spatialize_facade.cells(points, points, self.p_process, alpha,
+                                                        self.n_partitions, self.seed)   # (n, T)
 
-        # Step 1 — LOO predictive distributions as ESI sample vectors.
-        loo_fn = lib_spatialize_facade.get_operator(
-            points, self.local_interpolator, "loo", self.p_process
-        )
-        params = self._build_params()
-        l_args = build_arg_list(points, values, points, params)
-        _, self.esi_samples = loo_fn(*l_args)          # shape (n, T)
-
-        # Step 2 — the cell of each datum in each partition of step 1 (same partition, alpha as
-        # passed to the engine, size and seed; the facade applies the session domain)
-        self.leaf_indexes = lib_spatialize_facade.cells(
-            points, points, self.p_process, l_args[3], self.n_partitions, self.seed
-        )  # shape (n, T)
-
-        # Step 3 — pre-fit one density model per training point (fit once, reuse).
-        # Each point's KDE is fitted exactly once here; the inner loop then calls
-        # _kl_from_models() which uses score_samples() directly, skipping the
-        # EmpiricalModel Akima-interpolator layer and all redundant refitting.
-        models = self._prefit_models(self.esi_samples)
-
-        # Step 4 — the pairs that share a cell in some partition, each once
-        pairs: list[tuple[int, int]] = []
-        seen: set[tuple[int, int]] = set()
+        # the pairs of each partition, and each distinct pair once
+        centres = np.array([np.nan if law is None else law[1] for law in laws])
+        scales = np.array([np.nan if law is None else law[4] for law in laws])
+        by_partition, index = [], {}
         for t in range(self.n_partitions):
             cells = self.leaf_indexes[:, t]
-            for k in np.unique(cells):
-                members = np.where(cells == k)[0]
+            mine = []
+            for k in np.unique(cells[cells >= 0]):
+                members = np.where((cells == k) & ~np.isnan(centres))[0]
                 if len(members) < 2:
                     continue
-                for (i, j) in self._select_pairs(members):
-                    if (i, j) in seen:
-                        continue
-                    seen.add((i, j))
-                    if models[i] is None or models[j] is None:
-                        continue
-                    pairs.append((i, j))
+                for pair in self._select_pairs(members, centres, scales):
+                    mine.append(index.setdefault(pair, len(index)))
+            by_partition.append(mine)
 
-        # Step 5 — the largest divergence among them. The divergences take almost all the time and
-        # are independent, so they run in parallel under the session settings; a maximum does not
-        # depend on the order, so the result is the same with any number of workers.
-        self.epsilon_hat = _max_divergence(models, pairs, self.support_sample_size, self.repeated)
+        # the divergences take almost all the time and are independent, so they run in parallel under
+        # the session settings; each is computed alone, so the result does not depend on the workers
+        pairs = list(index)
+        d = np.array(_divergences(laws, pairs, self.support_sample_size, self.repeated))
+        self.per_partition = np.array([d[mine].max() if mine else 0.0 for mine in by_partition])
+        self.epsilon_hat = float(self.per_partition.mean())
         return self.epsilon_hat
 
-    # ------------------------------------------------------------------
-
-    def _build_params(self) -> dict:
-        """Build the params dict for ``build_arg_list``."""
-        defaults = dict(_INTERP_DEFAULTS.get(self.local_interpolator, {}))
-        defaults.update(self.interp_kwargs)
-        return {
-            "n_partitions":       self.n_partitions,
-            "alpha":              self.alpha,
-            "local_interpolator": self.local_interpolator,
-            "p_process":          self.p_process,
-            "data_cond":          self.data_cond,
-            "seed":               self.seed,
-            "callback":           singleton_null_callback,
-            **defaults,
-        }
-
-    def _select_pairs(self, members: np.ndarray) -> list[tuple[int, int]]:
-        """Return ordered (i, j) pairs to evaluate for a cell.
-
-        Both directions are returned because D_KL is asymmetric.
-        """
+    def _select_pairs(self, members, centres, scales) -> list[tuple[int, int]]:
+        """Ordered (i, j) pairs to evaluate in a cell, both directions since D_KL is asymmetric."""
         if self.pair_strategy == "exhaustive":
             return list(permutations(members.tolist(), 2))
-
-        # max_min: pair the point with highest mean against lowest mean
-        means = np.nanmean(self.esi_samples[members], axis=1)
-        i_max = members[int(np.argmax(means))]
-        i_min = members[int(np.argmin(means))]
+        if self.pair_strategy == "gaussian":
+            # the pair whose laws, read as Gaussians of their mean and spread, diverge the most
+            m, sd = centres[members], scales[members]
+            g = (np.log(sd[None, :] / sd[:, None])
+                 + (sd[:, None] ** 2 + (m[:, None] - m[None, :]) ** 2) / (2.0 * sd[None, :] ** 2) - 0.5)
+            i, j = np.unravel_index(int(np.argmax(g)), g.shape)
+            return [(int(members[i]), int(members[j]))] if i != j else []
+        i_max = int(members[int(np.argmax(centres[members]))])
+        i_min = int(members[int(np.argmin(centres[members]))])
         if i_max == i_min:
             return []
         return [(i_max, i_min), (i_min, i_max)]
-
-    def _prefit_models(self, samples: np.ndarray) -> list:
-        """Fit one density model per training point; return list of (model, d_min, d_max) or None.
-
-        The factory returns an independent estimator per point, so the list can
-        be safely reused across all KL pair evaluations.
-        """
-        result = []
-        for idx in range(len(samples)):
-            s = samples[idx].astype(np.float64)
-            s = s[~np.isnan(s)]
-            if len(s) < 2:
-                result.append(None)
-                continue
-            model, _ = self._factory.create(s)   # a fresh model, its bandwidth from this sample
-            d_min, d_max = float(s.min()), float(s.max())
-            ext = (d_max - d_min) * 0.1
-            result.append((model, d_min - ext, d_max + ext))
-        return result
 
 
 # ===========================================================================
@@ -224,11 +228,9 @@ class ParetoOptimizer:
 
     For each configuration in ``param_grid``:
 
-    1. Computes ε̂ via :class:`EmpiricalRobustnessBound`.
+    1. Computes ε̂ via :class:`EmpiricalRobustnessBound`, on laws fitted once
+       for the whole search (:func:`reference_laws`).
     2. Runs LOO / k-fold cross-validation to obtain R_CV.
-
-    When the CV method is LOO, the ESI samples produced by the encoder are
-    reused for decoder scoring — no redundant C++ call is made.
 
     Parameters
     ----------
@@ -254,16 +256,21 @@ class ParetoOptimizer:
     folding_seed : int
         Secondary seed for k-fold fold assignment.
     pair_strategy : str
-        Pair-selection strategy for the robustness bound: ``"max_min"``
-        (default) or ``"exhaustive"``.
+        Pairs compared in each cell (:class:`EmpiricalRobustnessBound`):
+        ``"gaussian"`` (default), ``"exhaustive"`` or ``"max_min"``.
+    reference_laws : None, array-like or callable
+        The estimated law at each datum (:func:`reference_laws`); ``None`` for
+        its ``n_neighbours`` nearest data.
+    n_neighbours : int
+        Neighbours of the default reference laws (16).
     point_model_name : str
-        Density model for fitted KL: ``"kde"`` (default), ``"emm"``,
-        ``"vim"``.
+        Density model fitted to each reference law: ``"kde"`` (default),
+        ``"emm"``, ``"vim"``.
     nan_model_name : str
         NaN strategy for :class:`FittedModelFactory`: ``"ignore"``
         (default) or ``"replace"``.
     support_sample_size : int
-        Grid resolution for the shared KL evaluation grid (default 500).
+        Points of the grid each divergence integrates over (default 500).
     callback : callable, optional
         Where the progress and the messages go. Default: ``None``, shown as the session settings
         ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
@@ -282,7 +289,9 @@ class ParetoOptimizer:
         k                     = 5,
         seed: int             = 0,
         folding_seed: int     = 0,
-        pair_strategy: str    = "max_min",
+        pair_strategy: str    = "gaussian",
+        reference_laws        = None,
+        n_neighbours: int     = 16,
         point_model_name: str = "kde",
         nan_model_name: str   = "ignore",
         support_sample_size: int = 500,
@@ -298,6 +307,8 @@ class ParetoOptimizer:
         self.seed                = seed
         self.folding_seed        = folding_seed
         self.pair_strategy       = pair_strategy
+        self.reference_laws      = reference_laws
+        self.n_neighbours        = n_neighbours
         self.point_model_name    = point_model_name
         self.nan_model_name      = nan_model_name
         self.support_sample_size = support_sample_size
@@ -333,13 +344,11 @@ class ParetoOptimizer:
         k_val  = n if self.k in ("loo", -1) else int(self.k)
         method = "loo" if k_val == n else "kfold"
 
-        # Only needed for k-fold; LOO samples come from the encoder for free.
-        cv_fn = (
-            None if method == "loo"
-            else lib_spatialize_facade.get_operator(
-                points, self.local_interpolator, "kfold", self.p_process
-            )
-        )
+        cv_fn = lib_spatialize_facade.get_operator(points, self.local_interpolator, method, self.p_process)
+
+        # the laws the encoder error compares, the same for every configuration
+        laws = reference_laws(points, values, self.reference_laws, self.n_neighbours,
+                              self.point_model_name, self.nan_model_name, self.seed)
 
         configs   = list(_iter_param_grid(self.param_grid))
         n_configs = len(configs)
@@ -356,36 +365,26 @@ class ParetoOptimizer:
                 f"[ParetoOptimizer] evaluating config: {cfg}"
             ))
 
-            # ── 1. Encoder error ε̂ ──────────────────────────────────────
-            # Merge: fixed params first, per-config grid params override.
-            merged_interp_kw = {**self.fixed_interp_kwargs, **interp_kw}
+            # ── 1. Encoder error ε̂: the cells of these partitions, read on the fixed laws ──
             erb = EmpiricalRobustnessBound(
                 n_partitions        = n_partitions,
                 alpha               = alpha,
-                local_interpolator  = self.local_interpolator,
                 p_process           = self.p_process,
                 data_cond           = self.data_cond,
                 seed                = self.seed,
                 pair_strategy       = self.pair_strategy,
-                point_model_name    = self.point_model_name,
-                nan_model_name      = self.nan_model_name,
                 support_sample_size = self.support_sample_size,
-                interp_kwargs       = merged_interp_kw,
             )
             erb.repeated = n_configs > 1
-            eps_hat = erb.estimate(points, values)
+            eps_hat = erb.estimate(points, laws)
 
             # ── 2. Decoder error R_CV ────────────────────────────────────
-            # LOO: encoder already produced LOO ESI samples — reuse directly.
-            # k-fold: encoder uses LOO (for ε̂), decoder uses k-fold separately.
-            if method == "loo":
-                cv_samples = erb.esi_samples
-            else:
-                full_params = self._build_full_params(n_partitions, alpha, interp_kw)
-                l_args = build_arg_list(points, values, points, full_params)
+            full_params = self._build_full_params(n_partitions, alpha, interp_kw)
+            l_args = build_arg_list(points, values, points, full_params)
+            if method == "kfold":
                 l_args.insert(-2, k_val)
                 l_args.insert(-2, self.folding_seed)
-                _, cv_samples = cv_fn(*l_args)
+            _, cv_samples = cv_fn(*l_args)
 
             r_cv = float(scoring_fn(values, cv_samples))
             out, nan = sf.left_out(cv_samples, scoring_fn)
@@ -431,77 +430,53 @@ class ParetoOptimizer:
 # Private helpers
 # ===========================================================================
 
-def _max_divergence(models, pairs, support_sample_size, repeated=False) -> float:
-    """The largest D_KL(p̂_i ‖ p̂_j) over ``pairs``, on worker processes when the work repays them
-    (:func:`spatialize._parallel.map_chunks`); each worker receives only the models of its pairs."""
+def _divergences(laws, pairs, support_sample_size, repeated=False) -> list:
+    """D_KL(p̂_i ‖ p̂_j) for each pair, in order, on worker processes when the work repays them
+    (:func:`spatialize._parallel.map_chunks`); each worker receives only the laws of its pairs."""
     def chunk_data(rows):
         chunk = [pairs[r] for r in rows]
-        return chunk, {k: models[k] for pair in chunk for k in pair}
+        return chunk, {k: laws[k] for pair in chunk for k in pair}
 
     def divergences(rows, data):
-        chunk, chunk_models = data
-        return [_kl_from_models(chunk_models[i], chunk_models[j], support_sample_size) for i, j in chunk]
+        chunk, chunk_laws = data
+        return [_kl_from_models(chunk_laws[i], chunk_laws[j], support_sample_size) for i, j in chunk]
 
-    best = 0.0
-    for d in map_chunks(divergences, len(pairs), data_for=chunk_data, repeated=repeated):
-        if d > best:
-            best = d
-    return best
+    return list(map_chunks(divergences, len(pairs), data_for=chunk_data, repeated=repeated))
 
 
-def _density(model, x):
-    """The density of a fitted model at the points ``x`` (1-D). A Gaussian KDE is evaluated exactly
-    and vectorised from its data and bandwidth; scikit-learn's tree only pays off when it
-    approximates, which would make the divergence depend on the units of the variable."""
+def _log_density(model, x):
+    """The log-density of a fitted model at the points ``x`` (1-D). A Gaussian KDE is evaluated
+    exactly from its data and bandwidth, in log space, so a far tail is a finite number and never
+    an underflow to zero."""
+    from scipy.special import logsumexp
     from sklearn.neighbors import KernelDensity
     if isinstance(model, KernelDensity) and model.kernel == "gaussian":
         data = np.asarray(model.tree_.data).ravel()
         h = float(model.bandwidth_)
         z = (x[:, None] - data[None, :]) / h
-        return np.exp(-0.5 * z * z).sum(axis=1) / (len(data) * h * np.sqrt(2.0 * np.pi))
-    return np.exp(model.score_samples(x.reshape(-1, 1))).ravel()
+        return logsumexp(-0.5 * z * z, axis=1) - np.log(len(data) * h * np.sqrt(2.0 * np.pi))
+    return np.asarray(model.score_samples(x.reshape(-1, 1)), dtype=np.float64).ravel()
 
 
-def _kl_from_models(
-    model_tuple_i: tuple,
-    model_tuple_j: tuple,
-    support_sample_size: int = 500,
-) -> float:
-    """D_KL(p̂_i ‖ p̂_j) from two pre-fitted sklearn density models.
+def _kl_from_models(law_i: tuple, law_j: tuple, support_sample_size: int = 500) -> float:
+    """D_KL(p̂_i ‖ p̂_j) between two laws of :func:`reference_laws`.
 
-    Uses ``score_samples`` directly on the shared evaluation grid, bypassing
-    the :class:`EmpiricalModel` Akima-interpolator layer and avoiding redundant
-    model fitting when the same model is reused across multiple pairs.
-    Called by :meth:`EmpiricalRobustnessBound.estimate` via the model cache
-    built by :meth:`EmpiricalRobustnessBound._prefit_models`.
+    The integral runs over the interval that holds p̂_i, on ``support_sample_size`` points, with
+    both log-densities exact. Where p̂_j is far, its log-density is large and negative but finite,
+    so the divergence of two laws that barely overlap is large and finite, with no floor and no
+    ceiling, and it does not depend on the units of the variable.
     """
-    model_i, d_min_i, d_max_i = model_tuple_i
-    model_j, d_min_j, d_max_j = model_tuple_j
-
-    x_min = min(d_min_i, d_min_j)
-    x_max = max(d_max_i, d_max_j)
-    if x_max <= x_min:
+    model_i, _, low, high, _ = law_i
+    model_j = law_j[0]
+    if high <= low:
         return 0.0
-
-    x_shared, dx = np.linspace(x_min, x_max, support_sample_size, retstep=True)
-
-    p_i = np.nan_to_num(_density(model_i, x_shared), nan=0.0).clip(0.0)
-    p_j = np.nan_to_num(_density(model_j, x_shared), nan=0.0).clip(0.0)
-
-    sum_i = p_i.sum() * dx
-    sum_j = p_j.sum() * dx
-    if sum_i == 0.0 or sum_j == 0.0:
-        return 0.0
-
-    p_i /= sum_i
-    p_j /= sum_j
-
-    mask = p_i > 0.0
-    # a floor for p̂_j: the density of a uniform law on the grid carrying 1/(10 N) of the mass, a
-    # density (1/length), so the divergence does not depend on the units of the variable
-    p_j_floor = 1.0 / ((x_max - x_min) * support_sample_size * 10.0)
-    p_j_safe = np.maximum(p_j[mask], p_j_floor)
-    return max(float(np.sum(p_i[mask] * (np.log(p_i[mask]) - np.log(p_j_safe))) * dx), 0.0)
+    x, dx = np.linspace(low, high, support_sample_size, retstep=True)
+    log_i = _log_density(model_i, x)
+    log_j = _log_density(model_j, x)
+    w = np.exp(log_i - log_i.max())
+    w /= w.sum()                      # p̂_i on the grid, normalised to its mass there
+    log_norm_i = log_i.max() + np.log(np.exp(log_i - log_i.max()).sum() * dx)
+    return max(float(np.sum(w * ((log_i - log_norm_i) - log_j))), 0.0)
 
 
 def _iter_param_grid(param_grid: dict):

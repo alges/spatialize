@@ -158,8 +158,21 @@ Results that change
   simulations with ``point_model_name="kde"``, the ``neg_log_likelihood`` score and the Pareto
   encoder error depend on the units of the variable (samples with a spread of 0.01 were simulated
   44 times too wide). The bandwidth now follows Silverman's rule on each sample, the densities being evaluated exactly.
-- **Pareto encoder error.** Besides the bandwidth, two details made it depend on the units, the
-  floor under the second density and an underflow that could turn a pair's divergence into 0.
+- **Pareto encoder error.** The empirical robustness level ε̂ fitted the laws it compares again for
+  each configuration, from that configuration's own cross-validated predictions, and took the largest
+  divergence over the cells of all its partitions. It read the decoder and the size of the cells more
+  than the partition. It grew with the IDW exponent, with the rate and with ``n_partitions``, while a
+  floor under the second density capped every divergence at 14.73 nats. Version 1.2.0 hid most of
+  this behind its wide kernels. ε̂ now compares laws fitted once for the whole search, by default
+  those of each datum's 16 nearest data (``reference_laws``, ``n_neighbours``), read as kernel
+  densities that keep their mean and variance. It takes the largest divergence per partition and
+  averages it over the partitions, the divergence being computed in log space with no floor. It no
+  longer depends on the decoder or on ``n_partitions``, falling as the cells shrink. A search also
+  runs faster, since ε̂ needs no leave-one-out ensemble (9 s against 3.4 s for 21 configurations on
+  300 data). The default
+  ``pair_strategy`` is ``"gaussian"``, the pair of each cell whose laws, read as Gaussians, diverge
+  the most. The former default, ``"max_min"``, compared only the data of extreme means, missing
+  laws that differ in spread.
 - **Simulation.** ``FittedModelFactory`` now ignores the undefined members by default
   (``nan_model_name="ignore"``); it used to replace them with the median, which narrowed the local
   laws where cells are often empty.

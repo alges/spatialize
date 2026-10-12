@@ -58,16 +58,25 @@ No decoder lowers that floor, since :math:`\varepsilon` does not depend on the d
 that minimises the cross-validation risk alone picks the best decoder for each partition, while the
 encoder error of the partition stays hidden in the floor.
 
-The encoder error can be bounded from the data. Fit a law :math:`\hat p_i` to the cross-validated
-predictions at each datum, and compare the laws at pairs of data that share a cell,
+The encoder error can be bounded from the data. Give each datum an estimated law :math:`\hat p_i` of
+the field at its location, from a local predictor that does not depend on the partitions being
+judged, and compare the laws at pairs of data that share a cell. For one partition
+:math:`\Pi^{(t)}` the *empirical robustness level* is
 
 .. math::
 
-   \hat\varepsilon = \max_{t \le T}\ \max_{u \in \Pi^{(t)}}\ \max_{i, j \,:\, v_i, v_j \in u}
+   \hat\varepsilon_t = \max_{u \in \Pi^{(t)}}\ \max_{i, j \,:\, v_i, v_j \in u}
    D\big(\hat p_i \,\Vert\, \hat p_j\big),
 
-the largest divergence among data that one of the partitions puts in the same cell :math:`u`, that is,
-among neighbours the partition treats as alike. Model selection then
+the largest divergence among neighbours the partition treats as alike. It bounds the encoder error up
+to a term that vanishes as the laws become consistent. An ensemble draws its
+partitions at random, so its level is the mean over them,
+:math:`\hat\varepsilon = T^{-1} \sum_{t \le T} \hat\varepsilon_t`, which does not grow with
+:math:`T`. The laws are fitted once and shared by every configuration compared, so
+:math:`\hat\varepsilon` reads the cells alone. Laws fitted again for each configuration, from its own
+cross-validated predictions, would bring the decoder and the size of the cells into the comparison,
+since in small cells each datum is predicted from a few neighbours, a narrow law unlike the next
+datum's. Model selection then
 minimises the risk under a constraint on it,
 
 .. math::
@@ -137,7 +146,10 @@ In Spatialize
 :func:`~spatialize.gs.esi.esi_hparams_search` searches by cross-validation alone, over
 ``n_partitions``, ``alpha`` and the decoder's parameters, with k-fold or leave-one-out.
 :func:`~spatialize.gs.esi.esi_pareto_hparams_search` estimates :math:`\hat\varepsilon` and the risk for
-each configuration and returns the frontier. Both are computed on the partitions of the chosen
+each configuration and returns the frontier. The laws :math:`\hat p_i` are by default those of the
+values of each datum's 16 nearest data (``reference_laws``, ``n_neighbours``), read as Gaussian kernel
+densities that keep the mean and variance of those values, so that the divergence compares the laws
+themselves, whose tails fall at their own scale. Both are computed on the partitions of the chosen
 ``p_process``, Mondrian or Voronoi, the cells of the data being those returned by
 :func:`~spatialize.gs.partitions.cell_labels`. Its ``best_result`` reads the frontier by lowest
 decoder error (``"min_decoder"``) or by knee (``"knee"``), while ``best_for_tau`` picks the best

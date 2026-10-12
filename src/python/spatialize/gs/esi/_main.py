@@ -1440,7 +1440,9 @@ def esi_nongriddata(points, values, xi, **kwargs):
         "alpha":                list(np.flip(np.arange(0.70, 0.90, 0.05))),
         "seed":                 random_seed,
         "folding_seed":         random_seed,
-        "pair_strategy":        "max_min",
+        "pair_strategy":        "gaussian",
+        "reference_laws":       None,
+        "n_neighbours":         16,
         "point_model_name":     "kde",
         "nan_model_name":       "ignore",
         "support_sample_size":  500,
@@ -1499,15 +1501,26 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     folding_seed : int, optional
         Secondary seed for k-fold assignment.
     pair_strategy : str, optional
-        Pair-selection for the robustness bound: ``"max_min"`` (default) or
-        ``"exhaustive"``.
+        The pairs ε̂ compares in each cell: ``"gaussian"`` (default), the pair
+        whose laws, read as Gaussians, diverge the most; ``"exhaustive"``,
+        every pair, exact but quadratic in the data of a cell; ``"max_min"``,
+        the data of largest and smallest law mean, blind to laws that differ
+        in spread.
+    reference_laws : None, array-like or callable, optional
+        The estimated law at each datum that ε̂ compares, fitted once for the
+        whole search so that ε̂ reads the cells alone. ``None`` (default) takes
+        the values of each datum's ``n_neighbours`` nearest data; a matrix of
+        shape ``(n, m)`` gives ``m`` draws from the law at each datum (NaN for
+        none); a callable ``(points, values) -> matrix`` computes them.
+    n_neighbours : int, optional
+        Neighbours of the default reference laws. Default: ``16``.
     point_model_name : str, optional
-        Density model for fitted KL: ``"kde"`` (default), ``"emm"``,
+        Density fitted to each reference law: ``"kde"`` (default), ``"emm"``,
         ``"vim"``.
     nan_model_name : str, optional
         NaN strategy: ``"ignore"`` (default) or ``"replace"``.
     support_sample_size : int, optional
-        KL evaluation grid resolution (default 500).
+        Points of the grid each divergence integrates over (default 500).
     callback : callable, optional
         Where the progress and the messages go. Default: ``None``, shown as the session settings
         ``display``, ``progress`` and ``verbosity`` say (:mod:`spatialize.session`). A callable
@@ -1526,9 +1539,13 @@ def esi_pareto_hparams_search(points, values, **kwargs):
 
     Notes
     -----
-    The divergences behind ε̂ run on several processes under the session
-    settings ``parallel`` and ``num_threads`` (:mod:`spatialize.session`),
-    with the same result for any number of them.
+    The encoder error of one partition is the largest divergence between the
+    reference laws of two data sharing a cell; ε̂ is its mean over the
+    ``n_partitions`` partitions of the configuration, the expected level of
+    the random partition. It does not depend on the decoder, and it falls as
+    the cells shrink. The divergences run on several processes under the
+    session settings ``parallel`` and ``num_threads``
+    (:mod:`spatialize.session`), with the same result for any number of them.
 
     Examples
     --------
@@ -1590,6 +1607,8 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         seed                = kwargs["seed"],
         folding_seed        = kwargs["folding_seed"],
         pair_strategy       = kwargs["pair_strategy"],
+        reference_laws      = kwargs["reference_laws"],
+        n_neighbours        = kwargs["n_neighbours"],
         point_model_name    = kwargs["point_model_name"],
         nan_model_name      = kwargs["nan_model_name"],
         support_sample_size = kwargs["support_sample_size"],

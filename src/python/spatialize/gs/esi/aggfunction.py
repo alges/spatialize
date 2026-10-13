@@ -1,7 +1,19 @@
+import warnings
+
 import numpy as np
 import scipy as sci
 
 from spatialize._math_util import BilateralFilteringFusion
+
+
+def _over_members(reduce, samples, *args):
+    """``reduce(samples, *args, axis=1)`` over the members, a location without any defined member
+    giving NaN without numpy's warning about an empty or all-NaN slice (it happens under the session
+    setting ``empty_cells="nan"`` far from the data, and is reported by ``empty_cell_fraction``)."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning,
+                                message="(Mean of empty slice|All-NaN slice encountered)")
+        return reduce(samples, *args, axis=1)
 
 
 def mean(samples):
@@ -29,7 +41,7 @@ def mean(samples):
     spatialize.gs.esi.scorefunction : Cross-validation scores computed
         directly from the raw ESI samples.
     """
-    return np.nanmean(samples, axis=1)
+    return _over_members(np.nanmean, samples)
 
 
 def median(samples):
@@ -53,7 +65,7 @@ def median(samples):
     spatialize.gs.esi.scorefunction : Cross-validation scores computed
         directly from the raw ESI samples.
     """
-    return np.nanmedian(samples, axis=1)
+    return _over_members(np.nanmedian, samples)
 
 
 def MAP(samples):
@@ -127,7 +139,7 @@ class Percentile:
         ndarray, shape (n_points,)
             The per-point `q`-th percentile.
         """
-        return np.nanpercentile(samples, self.q, axis=1)
+        return _over_members(np.nanpercentile, samples, self.q)
 
     def __repr__(self):
         return f"percentile({self.q})"

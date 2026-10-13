@@ -101,6 +101,9 @@ New
 - **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
   cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without
   that explosion, so fine granularities such as 0.98 are ordinary values.
+- **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
+  defined member. The mean, median and percentile aggregations give it NaN without numpy's warning
+  about an empty slice; ``empty_cell_fraction()`` reports such locations.
 - **Leave-one-out by name.** Every cross-validated search and the posterior analysis take
   ``k="loo"`` for leave-one-out, as the Pareto search already did, besides ``-1`` and the number of
   data.

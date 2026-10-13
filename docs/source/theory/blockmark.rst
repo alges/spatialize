@@ -261,10 +261,13 @@ with :math:`C^\ast(v)` the coarser cell, which depends on the partition process.
   :math:`C^\ast(v)` is that cell. The locations of one empty cell may go to different cells, which
   amounts to the Voronoi partition of the nuclei with data.
 
-A Mondrian ancestor is not a cell of the partition, so the decoders with parameters fitted per cell
-(adaptive IDW, the sharpened decoder, their draws and the decoders written in Python) fit them on
-the ancestor's data first. The fit takes its random numbers from the seed of the run, the partition
-and the region, so the result does not depend on the number of threads. In leave-one-out, a datum
+A Mondrian ancestor is not a cell of the partition, so it has no parameters of its own. The decoders
+with parameters fitted per cell (adaptive IDW, the sharpened decoder and their draws) take those of
+the ancestor's cell with the most data, all of them usable, which were fitted with the forest.
+Fitting the ancestor itself would mean a search over its data, hundreds of them near the root of a
+tree. The decoders written in Python fit the ancestor with their ``post_creation``, taking random
+numbers from the seed of the run, the partition and the region, so the result does not depend on the
+number of threads. In leave-one-out, a datum
 alone in its cell is predicted from the coarser cell without it. In k-fold, the held-out data of a
 cell emptied by their fold are predicted from the coarser cell with the data outside the fold.
 

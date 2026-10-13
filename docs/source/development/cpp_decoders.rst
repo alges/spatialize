@@ -36,9 +36,14 @@ data of one cell at a time, through indices into the arrays of all the data.
    * - ``fit`` (optional)
      - Per-cell parameters, computed once for every cell of every partition after the forest is
        drawn, stored in ``partition->leaf_params`` and handed to the methods above as ``params``.
+   * - ``reuses_descendant_params`` (optional)
+     - Whether, under ``empty_cells="coarsen"``, a Mondrian ancestor may take the parameters already
+       fitted in its cell with the most data. ``true`` by default, which spares fitting a region that
+       can hold most of the data.
    * - ``fit_cell`` (optional)
      - The parameters of one region from given data, which ``empty_cells="coarsen"`` asks for a
-       Mondrian ancestor. A decoder that overrides ``fit`` overrides it too.
+       Mondrian ancestor when the decoder declines the reuse above. A decoder that overrides ``fit``
+       overrides it too.
    * - ``thread_safe`` (optional)
      - Whether cells may be decoded on several threads at once. ``true`` by default.
 

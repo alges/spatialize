@@ -183,11 +183,14 @@ itself.
 - Under ``"coarsen"``, ``fill_coarse`` asks the partition for the coarser cell with data,
   ``Partition::coarser`` (the nearest ancestor for ``MondrianTree``, which keeps parent pointers,
   the nearest nucleus with data for ``VoronoiTree``), and predicts there with the decoder. An
-  ancestor has no fitted parameters, so ``Decoder::fit_cell`` fits them on its data, with a seed
-  derived from the run's seed, the region and the key.
+  ancestor has no fitted parameters of its own, so it takes those of its cell with the most data,
+  all of them usable (``Partition::Coarse::donor``). A decoder that declines that reuse
+  (``Decoder::reuses_descendant_params``, false for the custom decoder) fits the ancestor with
+  ``Decoder::fit_cell``, with a seed derived from the run's seed, the region and the key.
 
 In both, the held-out data of leave-one-out and k-fold take no part. A new partition implements
-``leaf_point`` and ``coarser``, and a new decoder with per-cell parameters implements ``fit_cell``.
+``leaf_point`` and ``coarser``, which names the donor of an ancestor. A new decoder with per-cell
+parameters implements ``fit_cell``, used when it declines the reuse.
 
 The public functions offer every decoder of the catalogue, ``custom`` included, whose Python
 functions are passed as keyword arguments (:doc:`python_decoders`). Their argument lists keep the

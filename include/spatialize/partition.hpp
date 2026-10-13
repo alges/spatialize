@@ -26,13 +26,11 @@ namespace sptlz{
 			// which the nearness of cells is measured
 			virtual std::vector<float> leaf_point(int leaf) = 0;
 
-			// The coarser cell that holds data (`usable` tells which data count), for a location of
-			// an empty cell: its `samples`, an `id` (-1 if there is none), and whether it is a cell of
-			// the partition whose parameters were fitted (`fitted`) or a region to fit (an ancestor).
-			// The coarser region standing for an empty cell: its id, whether it is a cell of the
-			// partition with parameters already fitted, its usable data, and, for a region made of
-			// several cells, the cell inside it whose parameters may stand for its own (`donor`: the
-			// cell with the most data, all of them usable; -1 if none).
+			// The coarser region that holds data (`usable` tells which data count), standing for an
+			// empty cell: its `id` (-1 if there is none), whether it is a cell of the partition with
+			// parameters already fitted (`fitted`), its usable `samples`, and, for a region made of
+			// several cells (an ancestor), the cell inside it whose parameters may stand for its own
+			// (`donor`: the cell with the most data, all of them usable; -1 if none).
 			struct Coarse {
 				int id = -1;
 				bool fitted = false;

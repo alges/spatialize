@@ -124,3 +124,16 @@ def test_coarsen_reuses_the_parameters_fitted_in_the_cells():
         elapsed[policy] = time.perf_counter() - start
     assert not np.isnan(members).any()
     assert elapsed["coarsen"] < 3 * elapsed["nan"] + 1.0
+
+
+def test_a_location_without_members_aggregates_to_nan_quietly():
+    """Under "nan" a location far from the data may have no defined member. Its mean, median and
+    percentile are NaN, with no numpy warning about empty slices."""
+    import warnings
+    from spatialize.gs.esi import aggfunction as af
+    samples = np.array([[1.0, 2.0, np.nan], [np.nan, np.nan, np.nan]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for agg in (af.mean, af.median, af.Percentile(90)):
+            out = agg(samples)
+            assert np.isfinite(out[0]) and np.isnan(out[1])

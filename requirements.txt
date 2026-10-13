@@ -2,6 +2,7 @@ numpy
 pandas
 scikit-learn
 scipy
+threadpoolctl
 rich
 matplotlib
 opencv-python

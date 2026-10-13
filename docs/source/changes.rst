@@ -105,6 +105,12 @@ New
   every level of the tree, and the tree's box at every call. It now reads them in place, with the same
   results bit for bit. Estimating 40 000 locations with 200 partitions takes 0.11 s instead of 0.31 s
   with the uniform draw, and about 10 % less with the adaptive IDW.
+- **Searches no longer stall on threads.** numpy's BLAS and the engine's OpenMP each keep a pool of
+  threads that spin for a while when idle. Where Python and the engine take turns, as in a search,
+  the two pools starved each other, so a run of minutes could take tens of minutes, more often in
+  Jupyter. BLAS now runs on one thread while the engine runs, keeping all its threads outside. A
+  tutorial with a Pareto search over 90 variograms took 163 s in Jupyter, against more than 30
+  minutes before.
 - **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
   defined member. The mean, median and percentile aggregations give it NaN without numpy's warning
   about an empty slice; ``empty_cell_fraction()`` reports such locations.

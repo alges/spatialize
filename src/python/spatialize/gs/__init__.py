@@ -270,7 +270,9 @@ class lib_spatialize_facade:
             _check_inside(corners, "data", samples)
             _check_inside(corners, "queries", queries)
             queries = np.vstack([queries, corners])
-        labels = lsp.cells(samples, queries, partition, float(alpha), int(n_partitions), int(seed), _num_threads())
+        with _blas_on_one_thread():
+            labels = lsp.cells(samples, queries, partition, float(alpha), int(n_partitions), int(seed),
+                               _num_threads())
         return labels[:-2] if corners is not None else labels
 
     @classmethod
@@ -280,8 +282,31 @@ class lib_spatialize_facade:
         return choices.index(model) + 1
 
 
+_BLAS = None
+
+
+def _blas_on_one_thread():
+    """A context that keeps the BLAS of numpy and scipy on one thread while the engine runs.
+
+    The engine's OpenMP threads and the BLAS threads both spin for a while when idle, so where Python
+    and the engine take turns, as in a search, each pool can starve the other and a run of minutes
+    takes tens of minutes. Outside the engine BLAS keeps all its threads."""
+    global _BLAS
+    if _BLAS is None:
+        from threadpoolctl import ThreadpoolController
+        _BLAS = ThreadpoolController()
+    return _BLAS.limit(limits=1, user_api="blas")
+
+
 def _run(partition, decoder, method, samples, values, queries, alpha, n_partitions, seed, params, k,
          folding_seed, visitor, num_threads):
+    with _blas_on_one_thread():
+        return _run_engine(partition, decoder, method, samples, values, queries, alpha, n_partitions, seed,
+                           params, k, folding_seed, visitor, num_threads)
+
+
+def _run_engine(partition, decoder, method, samples, values, queries, alpha, n_partitions, seed, params, k,
+                folding_seed, visitor, num_threads):
     return lsp.run(np.asarray(samples, np.float32), np.asarray(values, np.float32),
                    np.asarray(queries, np.float32), partition, float(alpha), int(n_partitions), int(seed),
                    decoder, params, method, int(k), int(folding_seed), visitor, int(num_threads),

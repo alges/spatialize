@@ -51,6 +51,13 @@ namespace sptlz{
 				return(std::vector<float>());
 			}
 
+			// Whether a coarser region may take the parameters already fitted in one of its cells
+			// (Partition::Coarse::donor) in place of fit_cell. Fitting a region near the root of a
+			// tree costs a search over hundreds of data (the adaptive decoders), while the cell with
+			// the most data inside it holds a fitted answer. For the decoders without per-cell
+			// parameters both are empty. The custom decoder fits its region, as its user defined.
+			virtual bool reuses_descendant_params(){ return true; }
+
 			virtual std::vector<float> leaf_estimation(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<std::vector<float>> *locations, std::vector<int> *locations_id, std::vector<float> *params, const CellContext &cell){
 				throw std::runtime_error("must override");
 			}

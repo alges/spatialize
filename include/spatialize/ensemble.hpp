@@ -86,8 +86,10 @@ namespace sptlz{
 					auto &c = entry.second.first;
 					std::vector<float> params = c.fitted
 						? mt->leaf_params.at(c.id)
-						: this->decoder->fit_cell(&coords, &values, c.samples,
-						                          sptlz::mark_seed(this->seed, (static_cast<uint64_t>(c.id) << 32) ^ key));
+						: (c.donor >= 0 && this->decoder->reuses_descendant_params())
+							? mt->leaf_params.at(c.donor)
+							: this->decoder->fit_cell(&coords, &values, c.samples,
+							                          sptlz::mark_seed(this->seed, (static_cast<uint64_t>(c.id) << 32) ^ key));
 					auto pred = this->decoder->leaf_estimation(&coords, &values, &(c.samples), points, &(entry.second.second), &params,
 					                                           CellContext{t, c.id, this->seed, this->interrupt});
 					for(size_t k=0; k<entry.second.second.size(); k++) results.at(entry.second.second.at(k)).at(t) = pred.at(k);

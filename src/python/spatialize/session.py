@@ -50,9 +50,12 @@ The settings are the following.
       that holds data. For Mondrian partitions it is the nearest ancestor of the cell in the tree
       whose region holds data, the cell an earlier cut would have left whole, so every location of
       the empty cell uses the same data. For Voronoi partitions each location goes to the nearest
-      nucleus whose cell holds data, which is the Voronoi partition of the nuclei with data. The
-      decoder's parameters are fitted on the coarser cell when it has none of its own (a Mondrian
-      ancestor). Every member is defined, varying with the location inside the empty cell as the decoder's predictions do elsewhere.
+      nucleus whose cell holds data, which is the Voronoi partition of the nuclei with data. A
+      Mondrian ancestor has no parameters of its own, so the decoders that fit parameters in each
+      cell (the adaptive and sharpened IDW and the draws weighted by them) take those of the cell
+      inside it that holds the most data, all of them usable, already fitted. Fitting the ancestor
+      itself would cost a search over its data, hundreds near the root. The custom decoder fits the
+      ancestor with its ``post_creation``. Every member is defined, varying with the location inside the empty cell as the decoder's predictions do elsewhere.
 
     :meth:`~spatialize.gs.esi.ESIResult.empty_cell_fraction` tells, at each location, the share of
     partitions concerned.

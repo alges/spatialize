@@ -180,6 +180,13 @@ Results that change
   ``pair_strategy`` is ``"gaussian"``, the pair of each cell whose laws, read as Gaussians, diverge
   the most. The former default, ``"max_min"``, compared only the data of extreme means, missing
   laws that differ in spread.
+- **Empty cells coarsened with an adaptive decoder.** Under ``empty_cells="coarsen"`` a Mondrian
+  ancestor standing for an empty cell fitted the adaptive decoder's parameters on its own data, a
+  search over hundreds of data near the root of a tree, run once per partition on one thread. With a
+  query far from the data, or a large ``domain``, a call took minutes. The ancestor now takes the
+  parameters already fitted in its cell with the most data, all of them usable, so that a held-out
+  datum never shapes them. The members of the empty cells change. The same calls take about two
+  seconds.
 - **Simulation.** ``FittedModelFactory`` now ignores the undefined members by default
   (``nan_model_name="ignore"``); it used to replace them with the median, which narrowed the local
   laws where cells are often empty.

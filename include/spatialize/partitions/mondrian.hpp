@@ -342,11 +342,22 @@ namespace sptlz{
   			for(MondrianNode *node = leaves.at(leaf)->parent; node != NULL; node = node->parent){
   				std::vector<MondrianNode*> stack{node};
   				std::vector<int> samples;
+  				int donor = -1;
+  				size_t donor_size = 0;
   				while(!stack.empty()){
   					MondrianNode *n = stack.back();
   					stack.pop_back();
   					if(n->leaf_id >= 0){
-  						for(int d: samples_by_leaf.at(n->leaf_id)) if(usable(d)) samples.push_back(d);
+  						const auto &cell = samples_by_leaf.at(n->leaf_id);
+  						size_t used = 0;
+  						for(int d: cell) if(usable(d)){ samples.push_back(d); used++; }
+  						// a donor's parameters were fitted on its data, so all of them must be usable
+  						// (a held-out datum would leak into them); the largest such cell, lowest id on ties
+  						if(used > 0 && used == cell.size() &&
+  						   (used > donor_size || (used == donor_size && n->leaf_id < donor))){
+  							donor = n->leaf_id;
+  							donor_size = used;
+  						}
   					}else{
   						stack.push_back(n->right);
   						stack.push_back(n->left);
@@ -357,6 +368,7 @@ namespace sptlz{
   					out.id = node->node_id;
   					out.fitted = false;
   					out.samples = samples;
+  					out.donor = donor;
   					return(out);
   				}
   			}

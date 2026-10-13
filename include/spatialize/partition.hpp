@@ -29,10 +29,15 @@ namespace sptlz{
 			// The coarser cell that holds data (`usable` tells which data count), for a location of
 			// an empty cell: its `samples`, an `id` (-1 if there is none), and whether it is a cell of
 			// the partition whose parameters were fitted (`fitted`) or a region to fit (an ancestor).
+			// The coarser region standing for an empty cell: its id, whether it is a cell of the
+			// partition with parameters already fitted, its usable data, and, for a region made of
+			// several cells, the cell inside it whose parameters may stand for its own (`donor`: the
+			// cell with the most data, all of them usable; -1 if none).
 			struct Coarse {
 				int id = -1;
 				bool fitted = false;
 				std::vector<int> samples;
+				int donor = -1;
 			};
 			virtual Coarse coarser(int leaf, const std::vector<float> &point, const std::function<bool(int)> &usable) = 0;
 	};

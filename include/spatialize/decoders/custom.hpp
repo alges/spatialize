@@ -98,6 +98,8 @@ namespace sptlz{
         return(result);
       }
 
+      bool reuses_descendant_params(){ return false; }
+
       std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
                                   const std::vector<int> &samples, unsigned int seed){
         if(post_creation == NULL) return(std::vector<float>());

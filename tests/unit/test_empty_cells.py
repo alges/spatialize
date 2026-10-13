@@ -104,3 +104,23 @@ def test_coarsen_predicts_empty_cells_from_a_coarser_cell(partition, alpha, deco
     assert np.array_equal(coarse, run("coarsen", threads=1))
     for method in ("loo", "kfold"):
         assert not np.isnan(run("coarsen", method, queries=s)).any()
+
+
+def test_coarsen_reuses_the_parameters_fitted_in_the_cells():
+    """With an adaptive decoder, the Mondrian ancestor standing for an empty cell takes the parameters
+    already fitted in its largest cell instead of fitting its own data, so a query far from the data
+    (whose ancestor holds most of them) costs about what the same call costs under "nan". Fitting the
+    ancestor took several seconds per partition with 600 data."""
+    import time
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    s = rng.uniform(0, 1, (600, 2)).astype(np.float32)
+    v = (np.sin(6 * s[:, 0]) + s[:, 1] + 0.1 * rng.normal(size=600)).astype(np.float32)
+    q = np.array([[0.4, 0.4], [4.0, 4.0]], np.float32)
+    elapsed = {}
+    for policy in ("nan", "coarsen"):
+        start = time.perf_counter()
+        members = np.asarray(LIB.run(s, v, q, "mondrian", 0.95, 8, cases.SEED, "adaptiveidw", {}, "estimate",
+                                     cases.K, cases.FSEED, None, 0, policy)[1])
+        elapsed[policy] = time.perf_counter() - start
+    assert not np.isnan(members).any()
+    assert elapsed["coarsen"] < 3 * elapsed["nan"] + 1.0

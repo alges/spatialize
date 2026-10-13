@@ -97,20 +97,29 @@ namespace sptlz{
         sill = _sill;
       }
 
+      // The covariance C(d) of the model, despite the name: the sill s at d = 0, and (s - n) times one
+      // minus the normalised variogram beyond, so the nugget n (in the units of the sill) is the jump
+      // at the origin. Spherical and cubic reach the sill at the range r; exponential and Gaussian
+      // take r as the practical range.
       std::function<float(float)> variogram(int m, float n, float r, float s){
-        float c = static_cast<float>(1.0-nugget);
-
+        std::function<double(double)> g;
         if(m==1){ // Spherical
-          return([n,c,r,s](float d){return(s*std::min(1.0, std::max(0.0, 1.0 - n - c*(1.5*d/r - 0.5*pow(d/r, 3.0)))));});
+          g = [](double h){return(h>=1.0 ? 1.0 : 1.5*h - 0.5*pow(h, 3.0));};
         }else if(m==2){ // Exponential
-          return([n,c,r,s](float d){return(s*std::min(1.0, std::max(0.0, 1.0 - n - c*(1.0-exp(-3.0*d/r)))));});
+          g = [](double h){return(1.0 - exp(-3.0*h));};
         }else if(m==3){ // Cubic
-          return([n,c,r,s](float d){return(s*std::min(1.0, std::max(0.0, 1.0 - n - c*(7.0*pow(d/r, 2.0) - 35.0*pow(d/r, 3.0)/4.0 + 3.5*pow(d/r, 5.0) - 0.75*pow(d/r, 7.0)))));});
+          g = [](double h){return(h>=1.0 ? 1.0 : 7.0*pow(h, 2.0) - 35.0*pow(h, 3.0)/4.0 + 3.5*pow(h, 5.0) - 0.75*pow(h, 7.0));};
         }else if(m==4){ // Gaussian
-          return([n,c,r,s](float d){return(s*std::min(1.0, std::max(0.0, 1.0 - n - c*(1-exp(-3.0*pow(d/r, 2))))));});
+          g = [](double h){return(1.0 - exp(-3.0*pow(h, 2.0)));};
         }else{
           return([](float d){return(d);});
         }
+        return([g,n,r,s](float d){
+          if(d<=0.0f){
+            return(s);
+          }
+          return(static_cast<float>((s - n)*(1.0 - g(d/r))));
+        });
       }
 
       // The ordinary-kriging weights of the data at `cell_coords` for each of `points` (one row per

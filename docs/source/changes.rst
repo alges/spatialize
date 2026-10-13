@@ -127,6 +127,13 @@ warns once per session when first used.
 Results that change
 -------------------
 
+- **The variogram of the kriging decoders** (``kriging``, ``wdraw_kriging``). The nugget scaled the
+  whole covariance, the value at the origin included, so ordinary kriging, whose weights ignore a
+  constant factor, never saw it. It is now the jump of the variogram at the origin, in the units of
+  the sill. The spherical and cubic models rose back towards full correlation beyond the range, which
+  gave distant data the weight of coincident ones. They now stay at the sill there. Every kriging
+  estimate with a nonzero nugget, or with the spherical or cubic model and data farther apart than the
+  range, changes.
 - **The anisotropic classifier of categorical ESI** (``knn_pca``) stretched the distances along the
   boundaries between categories instead of across them, so cross-validation always chose the isotropic
   metric. It now stretches them across, and chooses an anisotropic metric where the categories lie in

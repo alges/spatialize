@@ -1180,13 +1180,17 @@ def esi_griddata(points, values, xi, **kwargs):
          Variogram model. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``"spherical"``.
     nugget : float, optional
-         Variogram nugget. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram nugget, the jump of the variogram at the origin, in the units of
+         the sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``0.1``.
     range : float, optional
-         Variogram range. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram range, where the spherical and cubic models reach the sill and the
+         practical range of the exponential and Gaussian ones. Only used by
+         ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``5000.0``.
     sill : float, optional
-         Variogram sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram sill, the nugget included. Only used by ``"kriging"`` and
+         ``"wdraw_kriging"``.
          Default: ``1.0``.
     negative_weights : {"clip", "abs"}, optional
          How ``"wdraw_kriging"`` turns the kriging weights into
@@ -1363,13 +1367,17 @@ def esi_nongriddata(points, values, xi, **kwargs):
          Variogram model. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``"spherical"``.
     nugget : float, optional
-         Variogram nugget. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram nugget, the jump of the variogram at the origin, in the units of
+         the sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``0.1``.
     range : float, optional
-         Variogram range. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram range, where the spherical and cubic models reach the sill and the
+         practical range of the exponential and Gaussian ones. Only used by
+         ``"kriging"`` and ``"wdraw_kriging"``.
          Default: ``5000.0``.
     sill : float, optional
-         Variogram sill. Only used by ``"kriging"`` and ``"wdraw_kriging"``.
+         Variogram sill, the nugget included. Only used by ``"kriging"`` and
+         ``"wdraw_kriging"``.
          Default: ``1.0``.
     negative_weights : {"clip", "abs"}, optional
          How ``"wdraw_kriging"`` turns the kriging weights into

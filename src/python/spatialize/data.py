@@ -534,7 +534,7 @@ def load_elevation_walker_lake(n_samples=780, seed=20261011):
     drawn from it.
 
     A 260 × 300 grid of 100 m cells (26 km × 30 km) of the U.S. Geological Survey's 3D Elevation
-    Program, covering the flat surface of the lake (about 1 194 m, a quarter of the cells), the steep
+    Program, covering the flat surface of the lake (1 194.3 m, about a seventh of the cells), the steep
     Wassuk Range to the west (up to 3 418 m) and lower hills to the east. The window has the size of the
     Walker Lake data set of Isaaks and Srivastava, derived from an elevation model of the same area.
     The values here are the elevation itself.

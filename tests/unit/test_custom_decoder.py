@@ -43,3 +43,22 @@ def test_custom_decoder_from_estimation_alone_matches_idw(partition, alpha, meth
         for policy in ("mark", "coarsen"):
             filled = np.asarray(LIB.run(*args, "custom", {"estimation": _python_idw}, *tail, policy)[1])
             assert not np.isnan(filled).any()
+
+
+@pytest.mark.parametrize("partition,alpha", [("mondrian", 0.9), ("voronoi", 0.9)])
+def test_post_creation_never_sees_a_cell_without_data(partition, alpha):
+    """Fine partitions leave cells without data; post_creation is called only on cells with data,
+    so a fit that divides by the number of data cannot fail."""
+    s, v, q = DATA["2d"]
+    sizes = []
+
+    def mean_of_cell(points, values):
+        sizes.append(len(values))
+        return np.array([values.sum() / len(values)], np.float32)
+
+    def from_params(points, values, queries, params):
+        return np.full(len(queries), params[0], np.float32)
+
+    LIB.run(s, v, q, partition, alpha, cases.T, cases.SEED, "custom",
+            {"estimation": from_params, "post_creation": mean_of_cell}, "estimate")
+    assert sizes and min(sizes) > 0

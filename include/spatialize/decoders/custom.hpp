@@ -134,6 +134,7 @@ namespace sptlz{
         for(int i=0; i<mondrian_forest.size(); i++){
           auto mt = mondrian_forest.at(i);
           for(int j=0; j<mt->samples_by_leaf.size(); j++){
+            if(mt->samples_by_leaf.at(j).empty()) continue;  // a cell without data is never decoded
             leaf_coords.clear();
             leaf_values.clear();
             for(int k=0; k<mt->samples_by_leaf.at(j).size(); k++){

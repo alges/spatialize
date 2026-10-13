@@ -111,6 +111,9 @@ New
   Jupyter. BLAS now runs on one thread while the engine runs, keeping all its threads outside. A
   tutorial with a Pareto search over 90 variograms took 163 s in Jupyter, against more than 30
   minutes before.
+- **``post_creation`` only on cells with data.** A decoder written in Python had its
+  ``post_creation`` called on the cells without data too, so a fit dividing by the number of data
+  failed on fine partitions. It now sees only cells with data, as the developer guide says.
 - **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
   defined member. The mean, median and percentile aggregations give it NaN without numpy's warning
   about an empty slice; ``empty_cell_fraction()`` reports such locations.

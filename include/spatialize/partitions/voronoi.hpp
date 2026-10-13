@@ -100,8 +100,9 @@ namespace sptlz{
 				return(static_cast<int>(this->nuclei_coords.size()));
 			}
 
-			int search_leaf(std::vector<float> point){
-				auto nbs = this->kdt->query_nn(&(point), 1, 2.0);
+			int search_leaf(const std::vector<float> &point){
+				std::vector<float> query = point;   // the kd-tree takes a mutable pointer
+				auto nbs = this->kdt->query_nn(&query, 1, 2.0);
 				return nbs.second.front();
 			}
 

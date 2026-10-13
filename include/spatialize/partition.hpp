@@ -20,7 +20,7 @@ namespace sptlz{
 			virtual int n_leaves() = 0;
 
 			// cell containing a point
-			virtual int search_leaf(std::vector<float> point) = 0;
+			virtual int search_leaf(const std::vector<float> &point) = 0;
 
 			// a point representing a cell (the centre of a box, the nucleus of a Voronoi cell), from
 			// which the nearness of cells is measured

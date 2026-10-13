@@ -155,7 +155,9 @@ namespace sptlz{
 				}
 			}
 
-			int search_leaf(std::vector<float> point){
+			// the point by reference: this recursion runs once per tree level, for every location and
+			// every partition, so a copy at each level would dominate the search
+			int search_leaf(const std::vector<float> &point){
 				if(leaf_id<0){
 					if(point.at(axis) < cut){
 						return(left->search_leaf(point));
@@ -385,8 +387,8 @@ namespace sptlz{
   			return(static_cast<int>(this->leaves.size()));
   		}
 
-  		int search_leaf(std::vector<float> point){
-  			auto bbox = root->bbox;
+  		int search_leaf(const std::vector<float> &point){
+  			const auto &bbox = root->bbox;
   			for(size_t i=0; i<point.size(); i++){
   				if((point.at(i) < bbox.at(i).at(0)) || (bbox.at(i).at(1) < point.at(i))){
   					return(-1);

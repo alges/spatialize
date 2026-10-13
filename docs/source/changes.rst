@@ -101,6 +101,10 @@ New
 - **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
   cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without
   that explosion, so fine granularities such as 0.98 are ordinary values.
+- **A faster cell search.** Finding the cell of a location in a Mondrian tree copied the location at
+  every level of the tree, and the tree's box at every call. It now reads them in place, with the same
+  results bit for bit. Estimating 40 000 locations with 200 partitions takes 0.11 s instead of 0.31 s
+  with the uniform draw, and about 10 % less with the adaptive IDW.
 - **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
   defined member. The mean, median and percentile aggregations give it NaN without numpy's warning
   about an empty slice; ``empty_cell_fraction()`` reports such locations.

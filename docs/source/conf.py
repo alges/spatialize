@@ -56,7 +56,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # Autodoc
 # -----------------------------------------------------------------------------
 
-autodoc_mock_imports = ['libspatialize', 'cv2']
+autodoc_mock_imports = ['libspatialize', 'spatialize.gs.cat_esi._dawid_skene', 'cv2']
 autodoc_default_options = {
     'members': True
 }

@@ -272,90 +272,77 @@ namespace sptlz{
         return(result);
       }
 
-      std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
-        std::vector<float> result;
-
-        if((samples_id->size()==0) || (samples_id->size()==1)){
-          for([[maybe_unused]] auto l: *samples_id){
-            result.push_back(NAN);
+      // the prediction at the datum `target` from the data `ids` (both global indices) under the
+      // parameters `p` of a fit (centroid, exponent, rotation)
+      float predict_with(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> &ids, int target, std::vector<float> &p){
+        auto sl_coords = slice(coords, &ids);
+        auto sl_values = slice(values, &ids);
+        int dim = static_cast<int>(coords->at(0).size());
+        std::vector<float> centroid(p.begin(), p.begin()+dim);
+        float exponent = p.at(dim);
+        std::vector<float> rot = slice_from(&p, dim+1);
+        auto tr = transform(&sl_coords, &rot, &centroid);
+        std::vector<std::vector<float>> at = {coords->at(target)};
+        auto tr_at = transform(&at, &rot, &centroid);
+        return(relative_idw([&](auto f){
+          for(size_t j=0; j<ids.size(); j++){
+            f(distance(&(tr_at.at(0)), &(tr.at(j))), sl_values.at(j), 1.0f);
           }
+        }, exponent));
+      }
+
+      std::function<std::vector<float>(const std::vector<int>&, unsigned int)> fitter(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+        return([this, coords, values](const std::vector<int> &ids, unsigned int seed){ return(this->fit_cell(coords, values, ids, seed)); });
+      }
+
+      bool held_out_uses_cell_params(){ return false; }
+
+      // Each datum is predicted with parameters cross-fitted without it (sptlz::cross_fitted): the fit
+      // chooses them by the cell's own errors, so the cell's parameters would let the datum help
+      // choose the parameters that predict it.
+      std::vector<float> leaf_loo(std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
+        int n = static_cast<int>(samples_id->size());
+        std::vector<float> result(n, NAN);
+        if(n <= 1){
           return(result);
         }
-
-        auto sl_coords = slice(coords, samples_id);
-        auto sl_values = slice(values, samples_id);
-        std::vector<float> centroid;
-        int i_params = 0;
-        for(size_t c=0; c<coords->at(0).size(); c++){
-          centroid.push_back(params->at(i_params++));
-        }
-
-        float exponent = params->at(i_params++);
-        std::vector<float> rot_params = slice_from(params, i_params);
-
-        auto tr_coords = transform(&sl_coords, &rot_params, &centroid);
-
-        result.resize(samples_id->size());
-
-        // Parallelize LOO evaluation (each sample is independent)
+        std::vector<int> group(n);
+        for(int j=0; j<n; j++) group[j] = j % 2;
+        auto p = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         #ifdef _OPENMP
         #pragma omp parallel for schedule(static)
         #endif
-        for(int i=0; i<samples_id->size(); i++){
-          result[i] = relative_idw([&](auto f){
-            for(int j=0; j<static_cast<int>(samples_id->size()); j++){
-              if(i!=j) f(distance(&(tr_coords.at(i)), &(tr_coords.at(j))), sl_values.at(j), 1.0f);
-            }
-          }, exponent);
+        for(int i=0; i<n; i++){
+          std::vector<int> others;
+          for(int j=0; j<n; j++) if(j != i) others.push_back(samples_id->at(j));
+          result[i] = predict_with(coords, values, others, samples_id->at(i), p[group[i]]);
         }
         return(result);
       }
 
+      // as leaf_loo, the folds cross-fitted by their parity (each fold predicted with parameters
+      // fitted on the folds of the other parity)
       std::vector<float> leaf_kfold(int k, std::vector<std::vector<float>> *coords, std::vector<float> *values, std::vector<int> *folds, std::vector<int> *samples_id, std::vector<float> *params, const CellContext &cell){
-        std::vector<float> result(samples_id->size());
-        auto sl_coords = slice(coords, samples_id);
-        auto sl_values = slice(values, samples_id);
-        auto sl_folds = slice(folds, samples_id);
-
-        if((samples_id->size()==0) || (samples_id->size()==1)){
-          // nothing to train on: every sample of the cell gets NaN (result already has their size,
-          // so the NaN must be assigned, not appended — appending left 0.0 in place)
-          result.assign(samples_id->size(), NAN);
+        std::vector<float> result(samples_id->size(), NAN);
+        if(samples_id->size() <= 1){
           return(result);
         }
-
-        std::vector<float> centroid;
-        int i_params = 0;
-        for(size_t c=0; c<coords->at(0).size(); c++){
-          centroid.push_back(params->at(i_params++));
-        }
-
-        float exponent = params->at(i_params++);
-        std::vector<float> rot_params = slice_from(params, i_params);
-        auto tr_coords = transform(&sl_coords, &rot_params, &centroid);
-
-        for(int i=0; i<k; i++){
-          auto test_train = indexes_by_predicate<int>(&sl_folds, [i](int *j){return(*j==i);});
-          if(test_train.first.size()!=0){ // if is 0, then there's nothing to estimate
-            if(test_train.second.size()==0){
-              for(int j: test_train.first){
-                result.at(j) = NAN;
-              }
-            }else{
-              // Parallelize over test samples within each fold
-              std::vector<int> test_indices(test_train.first.begin(), test_train.first.end());
-              #ifdef _OPENMP
-              #pragma omp parallel for schedule(static)
-              #endif
-              for(int idx=0; idx<test_indices.size(); idx++){
-                int j = test_indices[idx];
-                result.at(j) = relative_idw([&](auto f){
-                  for(int l: test_train.second){
-                    f(distance(&(tr_coords.at(j)), &(tr_coords.at(l))), values->at(samples_id->at(l)), 1.0f);
-                  }
-                }, exponent);
-              }
-            }
+        auto sl_folds = slice(folds, samples_id);
+        std::vector<int> group;
+        for(int fo: sl_folds) group.push_back(fo % 2);
+        auto p = cross_fitted(*samples_id, group, cell, fitter(coords, values));
+        for(int f=0; f<k; f++){
+          auto test_train = indexes_by_predicate<int>(&sl_folds, [f](int *j){return(*j==f);});
+          if(test_train.first.empty() || test_train.second.empty()) continue;
+          std::vector<int> train;
+          for(int l: test_train.second) train.push_back(samples_id->at(l));
+          auto pf = p[f % 2].empty() ? this->fit_cell(coords, values, train, cell.refit_seed(-1 - f)) : p[f % 2];
+          std::vector<int> test(test_train.first.begin(), test_train.first.end());
+          #ifdef _OPENMP
+          #pragma omp parallel for schedule(static)
+          #endif
+          for(int idx=0; idx<static_cast<int>(test.size()); idx++){
+            result.at(test[idx]) = predict_with(coords, values, train, samples_id->at(test[idx]), pf);
           }
         }
         return(result);

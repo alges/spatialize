@@ -56,6 +56,27 @@ namespace sptlz{
 				return(out);
 			}
 
+			// the parameters a held-out prediction reads: fitted only for decoders that read them
+			std::vector<float> *cell_params(int t, sptlz::Partition *mt, int leaf){
+				return(this->decoder->held_out_uses_cell_params() ? params_of(t, mt, leaf) : &(mt->leaf_params.at(leaf)));
+			}
+
+			bool lazy_params = false;
+			std::vector<std::vector<char>> params_ready;   // [tree][leaf], with lazy_params
+
+			// The fitted parameters of the cell `leaf` of tree `t`, fitted here on first use under lazy
+			// fitting (each tree is handled by one thread, so its cells are never fitted concurrently).
+			std::vector<float> *params_of(int t, sptlz::Partition *mt, int leaf){
+				if(this->lazy_params && !this->params_ready.at(t).at(leaf)){
+					if(!mt->samples_by_leaf.at(leaf).empty()){
+						mt->leaf_params.at(leaf) = this->decoder->fit_cell(&coords, &values, mt->samples_by_leaf.at(leaf),
+							sptlz::mark_seed(this->seed, (static_cast<uint64_t>(t) << 32) ^ static_cast<uint32_t>(leaf) ^ 0xF17ULL));
+					}
+					this->params_ready.at(t).at(leaf) = 1;
+				}
+				return(&(mt->leaf_params.at(leaf)));
+			}
+
 			// empty_cells "coarsen": the locations `ids` (rows of `points`) of the empty cell `leaf` are
 			// predicted by the decoder from the coarser cell with usable data (Partition::coarser), the
 			// nearest ancestor for Mondrian or the nearest nucleus with data for Voronoi. An ancestor
@@ -85,9 +106,9 @@ namespace sptlz{
 				for(auto &entry: groups){
 					auto &c = entry.second.first;
 					std::vector<float> params = c.fitted
-						? mt->leaf_params.at(c.id)
+						? *params_of(t, mt, c.id)
 						: (c.donor >= 0 && this->decoder->reuses_descendant_params())
-							? mt->leaf_params.at(c.donor)
+							? *params_of(t, mt, c.donor)
 							: this->decoder->fit_cell(&coords, &values, c.samples,
 							                          sptlz::mark_seed(this->seed, (static_cast<uint64_t>(c.id) << 32) ^ key));
 					auto pred = this->decoder->leaf_estimation(&coords, &values, &(c.samples), points, &(entry.second.second), &params,
@@ -141,7 +162,7 @@ namespace sptlz{
 					}
 					std::vector<std::vector<float>> at{target.point};
 					std::vector<int> at_id{0};
-					auto value = this->decoder->leaf_estimation(&coords, &values, &source, &at, &at_id, &(mt->leaf_params.at(c)),
+					auto value = this->decoder->leaf_estimation(&coords, &values, &source, &at, &at_id, params_of(t, mt, c),
 					                                            CellContext{t, c, sptlz::mark_seed(this->seed, target.key), this->interrupt});
 					for(int r: target.rows) results.at(r).at(t) = value.at(0);
 				}
@@ -172,13 +193,23 @@ namespace sptlz{
 				}
 			}
 
-			// Takes ownership of the decoder and fits it on the forest.
-			void set_decoder(sptlz::Decoder *_decoder){
+			// Takes ownership of the decoder and fits it on the forest. With `lazy`, for cross-validation,
+			// the cells are not fitted now: params_of fits a cell when a coarser cell, a mark or the
+			// decoder's held-out predictions first need it.
+			void set_decoder(sptlz::Decoder *_decoder, bool lazy=false){
 				if(this->decoder != NULL){
 					delete(this->decoder);
 				}
 				this->decoder = _decoder;
-				this->decoder->fit(&(this->forest), &(this->coords), &(this->values), this->my_rand, this->callback_visitor, this->class_name);
+				this->lazy_params = lazy;
+				if(lazy){
+					this->params_ready.assign(this->forest.size(), std::vector<char>());
+					for(size_t t=0; t<this->forest.size(); t++){
+						this->params_ready.at(t).assign(this->forest.at(t)->samples_by_leaf.size(), 0);
+					}
+				}else{
+					this->decoder->fit(&(this->forest), &(this->coords), &(this->values), this->my_rand, this->callback_visitor, this->class_name);
+				}
 			}
 
 			int forest_size(){
@@ -373,7 +404,7 @@ namespace sptlz{
 							continue;
 						}
 						if(mt->samples_by_leaf.at(j).size()!=0){
-							auto predictions = decoder->leaf_loo(&coords, &values, &(mt->samples_by_leaf.at(j)), &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed, this->interrupt});
+							auto predictions = decoder->leaf_loo(&coords, &values, &(mt->samples_by_leaf.at(j)), cell_params(i, mt, static_cast<int>(j)), CellContext{i, static_cast<int>(j), this->seed, this->interrupt});
 							for(size_t k=0; k<mt->samples_by_leaf.at(j).size(); k++){
 								results.at(mt->samples_by_leaf.at(j).at(k)).at(i) = predictions.at(k);
 							}
@@ -414,7 +445,7 @@ namespace sptlz{
 						if(this->interrupted()) return;
 						auto &cell = mt->samples_by_leaf.at(j);
 						if(cell.size()!=0){
-							auto predictions = decoder->leaf_kfold(k, &coords, &values, &folds, &cell, &(mt->leaf_params.at(j)), CellContext{i, static_cast<int>(j), this->seed, this->interrupt});
+							auto predictions = decoder->leaf_kfold(k, &coords, &values, &folds, &cell, cell_params(i, mt, static_cast<int>(j)), CellContext{i, static_cast<int>(j), this->seed, this->interrupt});
 							for(size_t l=0; l<cell.size(); l++){
 								results.at(cell.at(l)).at(i) = predictions.at(l);
 							}

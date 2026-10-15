@@ -57,7 +57,8 @@ namespace sptlz{
   // weights of a cell's data at a batch of points: one row per point, one column per datum
 
   // `cell_values` and `params` (the cell's fitted parameters, see Decoder::fit) serve the weights
-  // that depend on them (adaptive and sharpened IDW); the others ignore them.
+  // that depend on them (adaptive and sharpened IDW); the others ignore them. Held-out predictions
+  // refit the parameters without the held-out data (fit_cell), so those data take no part in them.
   class CellWeights {
     public:
       virtual ~CellWeights(){}
@@ -149,6 +150,20 @@ namespace sptlz{
     protected:
       std::unique_ptr<CellWeights> weights;
 
+      std::function<std::vector<float>(const std::vector<int>&, unsigned int)> fitter(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+        return([this, coords, values](const std::vector<int> &ids, unsigned int seed){ return(weights->fit_cell(coords, values, ids, seed)); });
+      }
+
+      bool held_out_uses_cell_params(){ return false; }
+
+      // the parameters predicting fold f: cross-fitted, or refitted on its training data when the
+      // folds of the other parity are absent from the cell
+      std::vector<float> fold_params(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                     std::vector<std::vector<float>> &crossed, int f, std::vector<int> &train, const CellContext &cell){
+        if(!crossed[f % 2].empty()) return(crossed[f % 2]);
+        return(weights->fit_cell(coords, values, train, cell.refit_seed(-1 - f)));
+      }
+
       float mean_of(std::vector<float> &w, std::vector<float> &v){
         double sw = 0.0, swv = 0.0;
         for(size_t j=0; j<w.size(); j++){ sw += w[j]; swv += w[j]*v[j]; }
@@ -196,12 +211,16 @@ namespace sptlz{
         if(samples_id->size() <= 1){
           return(result);
         }
+        // the parameters of adaptive weights cross-fitted without the datum (sptlz::cross_fitted)
+        std::vector<int> group(samples_id->size());
+        for(size_t j=0; j<group.size(); j++) group[j] = static_cast<int>(j % 2);
+        auto refit = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         for(size_t i=0; i<samples_id->size(); i++){
           std::vector<int> others;
           for(size_t j=0; j<samples_id->size(); j++){
             if(i != j) others.push_back(samples_id->at(j));
           }
-          result[i] = mean_from(coords, values, others, samples_id->at(i), params);
+          result[i] = mean_from(coords, values, others, samples_id->at(i), refit[group[i]].empty() ? params : &refit[group[i]]);
         }
         return(result);
       }
@@ -212,13 +231,17 @@ namespace sptlz{
           return(result);
         }
         auto sl_folds = slice(folds, samples_id);
+        std::vector<int> group;
+        for(int fo: sl_folds) group.push_back(fo % 2);
+        auto crossed = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         for(int f=0; f<k; f++){
           auto test_train = indexes_by_predicate<int>(&sl_folds, [f](int *j){return(*j==f);});
           if(test_train.first.empty() || test_train.second.empty()) continue;
           std::vector<int> train;
           for(int l: test_train.second) train.push_back(samples_id->at(l));
+          auto refit = fold_params(coords, values, crossed, f, train, cell);
           for(int j: test_train.first){
-            result.at(j) = mean_from(coords, values, train, samples_id->at(j), params);
+            result.at(j) = mean_from(coords, values, train, samples_id->at(j), refit.empty() ? params : &refit);
           }
         }
         return(result);
@@ -228,6 +251,20 @@ namespace sptlz{
   class DrawDecoder: public Decoder {
     protected:
       std::unique_ptr<CellWeights> weights;
+
+      std::function<std::vector<float>(const std::vector<int>&, unsigned int)> fitter(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+        return([this, coords, values](const std::vector<int> &ids, unsigned int seed){ return(weights->fit_cell(coords, values, ids, seed)); });
+      }
+
+      bool held_out_uses_cell_params(){ return false; }
+
+      // the parameters predicting fold f: cross-fitted, or refitted on its training data when the
+      // folds of the other parity are absent from the cell
+      std::vector<float> fold_params(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                     std::vector<std::vector<float>> &crossed, int f, std::vector<int> &train, const CellContext &cell){
+        if(!crossed[f % 2].empty()) return(crossed[f % 2]);
+        return(weights->fit_cell(coords, values, train, cell.refit_seed(-1 - f)));
+      }
 
     public:
       DrawDecoder(CellWeights *_weights): weights(_weights){}
@@ -264,12 +301,16 @@ namespace sptlz{
         if(samples_id->size() <= 1){
           return(result);
         }
+        // the parameters of adaptive weights cross-fitted without the datum (sptlz::cross_fitted)
+        std::vector<int> group(samples_id->size());
+        for(size_t j=0; j<group.size(); j++) group[j] = static_cast<int>(j % 2);
+        auto refit = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         for(size_t i=0; i<samples_id->size(); i++){
           std::vector<int> others;
           for(size_t j=0; j<samples_id->size(); j++){
             if(i != j) others.push_back(samples_id->at(j));
           }
-          result[i] = draw_from(coords, values, others, samples_id->at(i), params, cell, DrawRole::LOO);
+          result[i] = draw_from(coords, values, others, samples_id->at(i), refit[group[i]].empty() ? params : &refit[group[i]], cell, DrawRole::LOO);
         }
         return(result);
       }
@@ -281,13 +322,17 @@ namespace sptlz{
           return(result);
         }
         auto sl_folds = slice(folds, samples_id);
+        std::vector<int> group;
+        for(int fo: sl_folds) group.push_back(fo % 2);
+        auto crossed = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         for(int f=0; f<k; f++){
           auto test_train = indexes_by_predicate<int>(&sl_folds, [f](int *j){return(*j==f);});
           if(test_train.first.empty() || test_train.second.empty()) continue;
           std::vector<int> train;
           for(int l: test_train.second) train.push_back(samples_id->at(l));
+          auto refit = fold_params(coords, values, crossed, f, train, cell);
           for(int j: test_train.first){
-            result.at(j) = draw_from(coords, values, train, samples_id->at(j), params, cell, DrawRole::KFOLD);
+            result.at(j) = draw_from(coords, values, train, samples_id->at(j), refit.empty() ? params : &refit, cell, DrawRole::KFOLD);
           }
         }
         return(result);

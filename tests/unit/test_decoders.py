@@ -76,3 +76,16 @@ def test_kriging_nugget_changes_the_prediction():
                               {"model": 2, "nugget": n, "range": 0.3, "sill": 1.0}, "estimate")[1])
            for n in (0.0, 0.5)]
     assert np.nanmax(np.abs(run[0] - run[1])) > 1e-2
+
+
+@pytest.mark.parametrize("decoder", ["adaptiveidw", "sharpidw", "wdraw_adaptiveidw", "wdraw_sharpidw"])
+@pytest.mark.parametrize("method", ["loo", "kfold"])
+def test_a_held_out_datum_takes_no_part_in_its_prediction(decoder, method):
+    """The adaptive fit chooses its parameters by the cell's own errors, so a held-out prediction refits
+    them without the held-out data: changing a held-out value leaves its own prediction unchanged."""
+    s, v, q = DATA["2d"]
+    changed = v.copy()
+    changed[0] += 100.0                         # datum 0, held out in leave-one-out and in its fold
+    run = [np.asarray(LIB.run(s, values, s, "mondrian", cases.ALPHA, 10, cases.SEED, decoder, {}, method,
+                              cases.K, cases.FSEED)[1]) for values in (v, changed)]
+    assert np.array_equal(run[0][0], run[1][0], equal_nan=True)

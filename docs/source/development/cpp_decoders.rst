@@ -44,6 +44,10 @@ data of one cell at a time, through indices into the arrays of all the data.
      - The parameters of one region from given data, which ``empty_cells="coarsen"`` asks for a
        Mondrian ancestor when the decoder declines the reuse above. A decoder that overrides ``fit``
        overrides it too.
+   * - ``held_out_uses_cell_params`` (optional)
+     - Whether ``leaf_loo`` and ``leaf_kfold`` read ``params``. ``true`` by default. A decoder that
+       refits its parameters without the held-out data returns ``false``, and cross-validation then
+       fits a cell's parameters only where a coarser cell or a mark needs them.
    * - ``thread_safe`` (optional)
      - Whether cells may be decoded on several threads at once. ``true`` by default.
 
@@ -221,6 +225,16 @@ decoder then returns at once, with any value in the places left, which the engin
 Such a decoder also overrides ``fit_cell``, which fits one region from a given list of data with a
 given seed. The policy ``empty_cells="coarsen"`` uses it for a Mondrian ancestor, a region that is
 not a cell of the partition and so has no stored parameters.
+
+A decoder that chooses its parameters by the cell's own errors, as adaptive IDW does, must not reuse
+them to predict held-out data, since each held-out datum would then have helped choose the
+parameters that predict it, and cross-validation would score the decoder too well. Its ``leaf_loo``
+and ``leaf_kfold`` call ``sptlz::cross_fitted`` with its ``fit_cell``. The cell's data are split in
+two halves, by position for leave-one-out and by the parity of the fold for k-fold, and each half is
+predicted with the parameters fitted on the other. The decoder then returns ``false`` from
+``held_out_uses_cell_params``. ``AdaptiveIDWDecoder`` shows the pattern, and the unit test
+``test_a_held_out_datum_takes_no_part_in_its_prediction`` checks it, a held-out prediction staying
+the same whatever the held-out value.
 
 Step 7. Tests
 =============

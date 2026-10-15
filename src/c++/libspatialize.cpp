@@ -274,7 +274,8 @@ static std::vector<std::vector<float>> run_ensemble(std::vector<std::vector<floa
     std::unique_ptr<sptlz::Ensemble> ensemble(spec.make(smp, val, bbox, mu, alpha, forest_size, seed, visitor));
     ensemble->set_class_name(class_name);
     ensemble->set_empty_cells(empty_cells);
-    ensemble->set_decoder(owned.release());
+    // cross-validation fits the cells on demand (Ensemble::params_of)
+    ensemble->set_decoder(owned.release(), method != EsiMethod::ESTIMATE);
 
     if (method == EsiMethod::ESTIMATE){
         return(ensemble->estimate(&qry));

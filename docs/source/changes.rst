@@ -142,6 +142,15 @@ warns once per session when first used.
 Results that change
 -------------------
 
+- **Cross-validation of the adaptive decoders** (``adaptiveidw``, ``sharpidw`` and their weighted
+  draws and means). Each cell fits its parameters by its own leave-one-out error, and the held-out
+  predictions reused them, so every datum had helped choose the parameters that predicted it. Their
+  leave-one-out and k-fold errors came out too low (4.96 mm against 6.14 mm with the gauge removed on
+  the Maipo rain of 6 July, 24.7 m against a true 35.5 m on Walker Lake), which also misled the
+  searches. The cell's data are now split in two halves, each predicted with the parameters fitted on
+  the other, and cross-validation fits a cell in full only where a coarser cell or a mark needs it. The
+  scores are honest and the searches faster (a Pareto search of adaptive IDW on Walker Lake, 37 s
+  against 62 s). Estimation is unchanged.
 - **The CRPS score** (``scorefunction.crps``, ``scoring="crps"``) integrated the cumulative distribution
   of a density fitted to the members, over the grid of that density only, and returned infinity, without
   saying why, when the fit failed. It is now the exact score of the members themselves,

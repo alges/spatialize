@@ -169,12 +169,18 @@ namespace sptlz{
         if(samples_id->size() <= 1) return(result);
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
-        float p;
-        auto tr = to_cell(&sl_coords, params, p);
-        for(size_t i=0; i<samples_id->size(); i++){
+        // parameters cross-fitted without the datum, as AdaptiveIDWDecoder::leaf_loo
+        int n = static_cast<int>(samples_id->size());
+        std::vector<int> group(n);
+        for(int j=0; j<n; j++) group[j] = j % 2;
+        auto refit = cross_fitted(*samples_id, group, cell, fitter(coords, values));
+        float p[2];
+        std::vector<std::vector<float>> tr[2];
+        for(int h=0; h<2; h++) tr[h] = to_cell(&sl_coords, &refit[h], p[h]);
+        for(int i=0; i<n; i++){
           std::vector<int> others;
-          for(size_t j=0; j<samples_id->size(); j++) if(i != j) others.push_back(static_cast<int>(j));
-          result[i] = predict_from(tr, sl_values, others, static_cast<int>(i), p);
+          for(int j=0; j<n; j++) if(i != j) others.push_back(j);
+          result[i] = predict_from(tr[group[i]], sl_values, others, i, p[group[i]]);
         }
         return(result);
       }
@@ -185,11 +191,17 @@ namespace sptlz{
         auto sl_coords = slice(coords, samples_id);
         auto sl_values = slice(values, samples_id);
         auto sl_folds = slice(folds, samples_id);
-        float p;
-        auto tr = to_cell(&sl_coords, params, p);
+        std::vector<int> group;
+        for(int fo: sl_folds) group.push_back(fo % 2);
+        auto crossed = cross_fitted(*samples_id, group, cell, fitter(coords, values));
         for(int fo=0; fo<k; fo++){
           auto test_train = indexes_by_predicate<int>(&sl_folds, [fo](int *j){return(*j==fo);});
           if(test_train.first.empty() || test_train.second.empty()) continue;
+          std::vector<int> train_id;
+          for(int l: test_train.second) train_id.push_back(samples_id->at(l));
+          auto refit = crossed[fo % 2].empty() ? this->fit_cell(coords, values, train_id, cell.refit_seed(-1 - fo)) : crossed[fo % 2];
+          float p;
+          auto tr = to_cell(&sl_coords, &refit, p);
           for(int j: test_train.first){
             result.at(j) = predict_from(tr, sl_values, test_train.second, j, p);
           }

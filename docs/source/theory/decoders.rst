@@ -96,7 +96,8 @@ and for variables with many zeros.
 where :math:`A_\theta` rotates by an azimuth :math:`\varphi` and stretches by an elongation
 :math:`a_f`, three angles and two elongations in three dimensions. The exponent and
 :math:`\theta = (\varphi, a_f)` are fitted once per cell by minimising the leave-one-out error of
-the cell's data. Prefer it when the field is continuous along a direction that is unknown or varies
+the cell's data. In cross-validation a held-out datum takes no part in that fit, the cell's data
+being split in two halves, each predicted with the parameters fitted on the other. Prefer it when the field is continuous along a direction that is unknown or varies
 across the domain. The per-cell fit makes it slower than IDW. It works in one, two and three
 dimensions. On a line there is no direction to fit, so only the exponent is fitted. The weights
 are computed relative to the nearest datum, :math:`w_j = (d_{\min}/d_j)^p`, which normalise to the

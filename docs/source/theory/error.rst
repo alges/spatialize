@@ -120,8 +120,12 @@ while the negative log-likelihood and the continuous ranked probability score ju
    S = \int_{-\infty}^{\infty} \big(\hat F_{v_i}(z) - \mathbf 1\{z \ge z_i\}\big)^2\, dz,
 
 with :math:`\hat f` a density fitted to the members, a Gaussian kernel density whose bandwidth
-follows Silverman's rule on the members' own spread. The scores of the law need enough partitions to
-estimate it at each datum, a few tens at least.
+follows Silverman's rule on the members' own spread, and :math:`\hat F` the empirical distribution of
+the members themselves. For the latter the CRPS has the exact form
+:math:`\mathrm{E}|X - z_i| - \tfrac12\,\mathrm{E}|X - X'|`, with :math:`X, X'` two members drawn
+independently, so an atom among the members, such as the dry places of a drawing decoder, counts as
+it is. The scores of the law need enough partitions to estimate it at each datum, a few tens at
+least.
 
 The negative log-likelihood is the score the theory is written with. The total approximation error
 is an excess of log-loss, so only under this score does the cross-validation risk estimate

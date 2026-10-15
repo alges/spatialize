@@ -43,6 +43,11 @@ A ``Partition`` exposes its cells only through ``n_leaves()``, ``search_leaf(poi
 of each cell (``samples_by_leaf``). A ``Decoder`` implements ``leaf_estimation``, ``leaf_loo`` and
 ``leaf_kfold`` on the samples of one cell. It may also implement ``fit()``, run once after the forest
 is drawn to compute per-cell parameters, as adaptive IDW does to fit its exponent and anisotropy.
+Leave-one-out and k-fold skip that pass. They fit a cell only when a coarser cell, a mark or the
+decoder's held-out predictions first need it (``Ensemble::params_of``). A decoder that chooses its
+parameters by the cell's own errors cross-fits them for its held-out predictions
+(``sptlz::cross_fitted``), each half of the cell's data predicted with the parameters fitted on the
+other, so a held-out datum takes no part in the parameters that predict it.
 Since the loop knows neither the partition process nor the decoder, any decoder runs on any
 partition.
 
@@ -214,6 +219,9 @@ The following corrections change numbers.
 - **k-fold** gives NaN for a sample whose cell has no other sample to train on, where earlier versions
   returned 0.0.
 - **Adaptive IDW** returns the datum's value at a query placed on it.
+- **Cross-validation of the adaptive decoders** (``adaptiveidw``, ``sharpidw`` and their weighted
+  draws and means) cross-fits the cell's parameters, where earlier versions reused parameters fitted
+  with the held-out data, which scored these decoders too well.
 - **Voronoi with uniform nuclei** (negative ``alpha``) draws one uniform value per coordinate of each
   nucleus, where earlier versions drew the coordinates :math:`d` times over and kept the last draw.
   The law of the partition is the same, but a given seed yields a different partition.
@@ -224,7 +232,9 @@ Reproducibility under parallel execution
 ========================================
 
 - **Seeds.** The seeds determine a run fully. The forest, then the decoder's ``fit``, draw from one
-  ``std::mt19937`` in a fixed order, while k-fold uses its own ``folding_seed``.
+  ``std::mt19937`` in a fixed order, while k-fold uses its own ``folding_seed``. A cell fitted on
+  demand in cross-validation, and each half of a cross-fit, takes a seed derived from the run's seed,
+  the tree and the cell.
 - **Parallel trees.** Estimation, leave-one-out and k-fold run the trees of the ensemble in
   parallel under OpenMP, each tree writing only its own column of the result, so the output is
   bitwise the same for any number of threads. A decoder whose ``thread_safe()`` returns false,

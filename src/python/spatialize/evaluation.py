@@ -1618,6 +1618,7 @@ class PrecipitationCaseStudy:
     See Also
     --------
     SyntheticScenario : Generate synthetic test scenarios
+    spatialize.data.load_precipitation_maipo : The same data, without the plotting dependencies.
     spatialize.gs.esi.esi_nongriddata : ESI for scattered points
     """
     def __init__(self, locs_cmap=None, data_cmap=None, precision_cmap=None):

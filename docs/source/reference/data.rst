@@ -25,3 +25,5 @@ Saving and loading results, and the datasets bundled with Spatialize.
 .. autofunction:: load_elevation_walker_lake
 
 .. autofunction:: load_reflectance_sundarbans
+
+.. autofunction:: load_precipitation_maipo

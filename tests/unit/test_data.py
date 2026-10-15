@@ -74,3 +74,15 @@ def test_exhaustive_fields_are_truths_with_samples_drawn_from_them():
         merged = s2.merge(g, on=["x", "y"], suffixes=("", "_grid"))
         assert len(merged) == 100 and (merged[col] == merged[f"{col}_grid"]).all()
         assert os.path.exists(os.path.join(str(rs.files(data)), folder, "README.md"))
+
+
+def test_precipitation_maipo_loads_the_gauges_and_the_basin():
+    from spatialize.data import load_precipitation_maipo
+    samples, locations = load_precipitation_maipo()
+    days = ["2018-07-04", "2018-07-05", "2018-07-06"]
+    assert list(samples.columns) == ["x", "y", "z"] + days
+    assert list(locations.columns) == ["x", "y", "z"]
+    assert len(samples) == 69 and len(locations) == 3824
+    for day in days:
+        rain = samples[day].dropna()
+        assert (rain >= 0).all() and 0 < (rain == 0).mean() < 0.5

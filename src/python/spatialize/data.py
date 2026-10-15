@@ -608,3 +608,37 @@ def load_reflectance_sundarbans(n_samples=2320, seed=20261011):
     """
     grid = pd.read_csv(os.path.join(str(rs.files(data)), "reflectance_sundarbans", "grid.csv"))
     return _sample_grid(grid, n_samples, seed), grid
+
+
+def load_precipitation_maipo():
+    """
+    Load the daily precipitation of the Maipo basin, central Chile, at its rain gauges on three days of
+    July 2018, with the locations of the basin where to estimate it.
+
+    The 69 gauges lie mostly in the valley, below 1 000 m, while the basin rises to the high Andes,
+    above 6 000 m, so most of it lies far from any gauge, in distance and in elevation. Some gauges
+    record no rain on each day, 10 % to 27 % of them depending on the day, which gives the values an
+    atom at zero. These are the data of :class:`~spatialize.evaluation.PrecipitationCaseStudy`, without
+    its plotting dependencies.
+
+    Returns
+    -------
+    samples : pandas.DataFrame of shape (69, 6)
+        Columns ``'x'``, ``'y'`` (m, UTM zone 19S), ``'z'`` (elevation, m) and one column per day,
+        ``'2018-07-04'``, ``'2018-07-05'`` and ``'2018-07-06'``, with the precipitation in mm. A gauge
+        without a record on a day has NaN there.
+    locations : pandas.DataFrame of shape (3824, 3)
+        Columns ``'x'``, ``'y'`` and ``'z'`` of the centres of the 2 km cells covering the basin.
+
+    Examples
+    --------
+    >>> from spatialize.data import load_precipitation_maipo
+    >>> samples, locations = load_precipitation_maipo()
+    >>> day = samples.dropna(subset=['2018-07-06'])
+    >>> points, values = day[['x', 'y']].values, day['2018-07-06'].values
+    >>> xi = locations[['x', 'y']].values
+    """
+    base = str(rs.files(data))
+    samples = pd.read_csv(os.path.join(base, "PP_samples.csv"))
+    locations = pd.read_csv(os.path.join(base, "PP_locations.csv")).rename(columns=str.lower)
+    return samples, locations

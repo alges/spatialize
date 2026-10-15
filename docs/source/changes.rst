@@ -32,6 +32,10 @@ New
   domain). :func:`~spatialize.data.load_reflectance_sundarbans` gives the near-infrared reflectance of the
   Sundarbans mangrove forest on a 400 × 580 grid, its tidal channels a field of sharp, winding boundaries
   (Landsat 9, USGS, public domain). Each returns the whole grid as the truth with samples drawn from it.
+- **The Maipo precipitation as a data set.** :func:`~spatialize.data.load_precipitation_maipo` gives
+  the daily precipitation of 69 rain gauges of the Maipo basin, central Chile, on three days of July
+  2018, with the 2 km cells of the basin, the data of
+  :class:`~spatialize.evaluation.PrecipitationCaseStudy` without its plotting dependencies.
 - **Dawid–Skene aggregation of categorical ensembles**, an alternative to the majority vote, which
   stays the default: :func:`~spatialize.gs.cat_esi.aggregate_with_btd`, with ``re_estimate('btd')``
   on a result, weighs the partitions by their reliability, for nominal, ordinal and binary variables,

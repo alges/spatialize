@@ -138,12 +138,13 @@ def neg_log_likelihood(true_values, samples, min_points=30):
 
 def crps(true_values, samples):
     """
-    Computes the average Continuous Ranked Probability Score (CRPS).
+    Computes the average Continuous Ranked Probability Score (CRPS) of the members.
 
-    Computes CRPS as the integral of the squared difference between the predicted CDF
-    and the Heaviside step function at the true observation:
-
-        CRPS(F, y) = integral[(F(x) - H(x - y))^2 dx]
+    The CRPS of a law :math:`F` at an observation :math:`y` is
+    :math:`\\int (F(x) - \\mathbf{1}\\{x \\ge y\\})^2\\,dx`. For the empirical law of the members it
+    has the exact form :math:`\\mathrm{E}|X - y| - \\tfrac12\\,\\mathrm{E}|X - X'|`, with :math:`X, X'`
+    two members drawn independently, so no density is fitted and an atom among the members (several
+    members with the same value, as the drawing decoders give) counts as it is.
 
     Parameters
     ----------
@@ -156,42 +157,21 @@ def crps(true_values, samples):
     Returns
     -------
     float
-        Average CRPS. Lower values indicate better probabilistic predictions.
+        Average CRPS over the points with at least two finite members, in the units of the
+        values. Lower is better. ``inf`` when no point has two finite members.
     """
-    from spatialize.empirical import EmpiricalModel      # local import to avoid circularities
-
-    n_points = len(samples)
-    total_crps = 0.0
-    valid_points = n_points
-
-    for i in range(n_points):
-        point_samples = samples[i, :]
-        clean_samples = point_samples[np.isfinite(point_samples)]
-
-        if len(clean_samples) < 2:
-            valid_points -= 1
+    samples = np.asarray(samples, dtype=float)
+    true_values = np.asarray(true_values, dtype=float)
+    scores = []
+    for y, members in zip(true_values, samples):
+        x = np.sort(members[np.isfinite(members)])
+        n = len(x)
+        if n < 2:
             continue
+        spread = 2.0 * np.sum((2 * np.arange(1, n + 1) - n - 1) * x) / n ** 2     # E|X - X'|
+        scores.append(np.mean(np.abs(x - y)) - 0.5 * spread)
+    return float(np.mean(scores)) if scores else np.inf
 
-        try:
-            em = EmpiricalModel(sample=clean_samples)
-            x_grid = em.x_
-            cdf = em.cdf(x_grid)
-
-            y_true = true_values[i]
-            # Heaviside step function: H(x - y) = 1 if x >= y, else 0
-            indicator = (x_grid >= y_true).astype(float)
-            diff_squared = (cdf - indicator) ** 2
-            point_crps = np.trapezoid(diff_squared, x_grid)
-
-            total_crps += point_crps
-        except:
-            valid_points -= 1
-
-    if valid_points == 0:
-        return np.inf
-
-    return total_crps / valid_points
-  
 
 # The fewest valid (non-NaN) members each scorer needs to score a datum. A datum with fewer is left
 # out of its score: under the session setting empty_cells="nan", the members of a datum whose cell is

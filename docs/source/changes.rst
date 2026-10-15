@@ -118,6 +118,8 @@ New
 - **``post_creation`` only on cells with data.** A decoder written in Python had its
   ``post_creation`` called on the cells without data too, so a fit dividing by the number of data
   failed on fine partitions. It now sees only cells with data, as the developer guide says.
+- **Scores by name in the Pareto search.** ``esi_pareto_hparams_search`` took ``scoring="nll"``,
+  ``"crps"``, ``"rmse"`` or ``"mae"`` in its documentation only, failing on any name. It now takes them.
 - **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
   defined member. The mean, median and percentile aggregations give it NaN without numpy's warning
   about an empty slice; ``empty_cell_fraction()`` reports such locations.
@@ -140,6 +142,11 @@ warns once per session when first used.
 Results that change
 -------------------
 
+- **The CRPS score** (``scorefunction.crps``, ``scoring="crps"``) integrated the cumulative distribution
+  of a density fitted to the members, over the grid of that density only, and returned infinity, without
+  saying why, when the fit failed. It is now the exact score of the members themselves,
+  :math:`\mathrm{E}|X - y| - \tfrac12\,\mathrm{E}|X - X'|`, which keeps an atom among the members,
+  such as the dry gauges the drawing decoders reproduce. Searches scored by the CRPS change.
 - **The variogram of the kriging decoders** (``kriging``, ``wdraw_kriging``). The nugget scaled the
   whole covariance, the value at the origin included, so ordinary kriging, whose weights ignore a
   constant factor, never saw it. It is now the jump of the variogram at the origin, in the units of

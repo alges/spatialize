@@ -149,3 +149,28 @@ def test_a_point_mass_law_gets_the_spread_floor():
     assert np.isclose(laws[0][4], floor)
     gauss = np.log(laws[1][4] / floor) + (floor ** 2 + 4.0) / (2 * laws[1][4] ** 2) - 0.5
     assert 0.8 * gauss < _kl_from_models(laws[0], laws[1]) < 1.2 * gauss
+
+
+def test_crps_is_the_exact_score_of_the_members():
+    import spatialize.gs.esi.scorefunction as sf
+    """E|X - y| - E|X - X'| / 2 over the members: brute force, an atom at the observation, a normal law."""
+    rng = np.random.default_rng(1)
+    members, observed = rng.random((5, 40)), rng.random(5)
+    brute = np.mean([np.mean(np.abs(m - y)) - 0.5 * np.mean(np.abs(m[:, None] - m[None]))
+                     for m, y in zip(members, observed)])
+    assert abs(sf.crps(observed, members) - brute) < 1e-12
+    assert sf.crps(np.array([0.0]), np.zeros((1, 10))) == 0.0
+    normal = rng.standard_normal((1, 200_000))
+    assert abs(sf.crps(np.array([0.0]), normal) - (2 / np.sqrt(2 * np.pi) - 1 / np.sqrt(np.pi))) < 0.005
+
+
+@pytest.mark.parametrize("name", ["crps", "mae", "rmse", "nll"])
+def test_pareto_search_takes_the_scoring_by_name(name):
+    import spatialize
+    from spatialize.gs.esi import esi_pareto_hparams_search
+    rng = np.random.default_rng(0)
+    points, values = rng.random((60, 2)), rng.random(60)
+    with spatialize.session.override(progress=False):
+        search = esi_pareto_hparams_search(points, values, local_interpolator="idw", n_partitions=[50],
+                                           alpha=[0.7], exponent=[2.0], k="loo", scoring=name, seed=0)
+    assert np.isfinite(search.all_results[0]["decoder_error"])

@@ -1596,6 +1596,13 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     # forwarded as-is to every ESI call, not iterated over in the grid.
     fixed_interp_kwargs = {name: kwargs.get(name) for name in decoder_callables(kwargs["local_interpolator"])}
 
+    by_name = {"nll": sf.neg_log_likelihood, "crps": sf.crps, "rmse": sf.rmse, "mae": sf.mae}
+    if isinstance(kwargs["scoring"], str):
+        if kwargs["scoring"] not in by_name:
+            raise SpatializeError(f"Unknown scoring '{kwargs['scoring']}' (available: {', '.join(by_name)}, "
+                                  f"or a callable)")
+        kwargs["scoring"] = by_name[kwargs["scoring"]]
+
     _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
     if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
         import warnings

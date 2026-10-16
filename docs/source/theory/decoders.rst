@@ -80,8 +80,10 @@ variogram :math:`\gamma` inside the cell,
    \Gamma_{jl} = \gamma(v_j - v_l), \quad \boldsymbol\gamma(v)_j = \gamma(v - v_j).
    \end{gathered}
 
-The prediction is :math:`\sum_j \lambda_j(v) z_j`. Prefer it when a variogram is known and
-trusted, on smooth fields close to Gaussian. The :math:`\lambda_j` can be negative, so the estimate
+The prediction is :math:`\sum_j \lambda_j(v) z_j`. The variogram is isotropic. Its model, nugget
+and range are hyperparameters, chosen by the Pareto search like the granularity, never a model fitted
+to an experimental variogram, so the decoder rests on no second-order model of the field. Prefer it on
+smooth fields without a preferred direction. The :math:`\lambda_j` can be negative, so the estimate
 can leave the range of the data, which makes it a poor choice for skewed or heavy-tailed variables
 and for variables with many zeros.
 
@@ -202,8 +204,8 @@ Choosing by purpose
      - a weighted draw, read through its median
    * - the latent geometry of the field
      - ``cellmean``
-   * - a known variogram on a smooth field
-     - ``kriging``
+   * - a smooth field without a preferred direction
+     - ``kriging``, its variogram chosen by the Pareto search
 
 In Spatialize
 =============

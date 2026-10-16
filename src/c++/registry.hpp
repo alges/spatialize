@@ -210,7 +210,7 @@ namespace registry {
        1, ANY, true,
        {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
        nullptr});
-    specs.push_back({"kriging", "Ordinary kriging with a fixed variogram model.",
+    specs.push_back({"kriging", "Ordinary kriging with an isotropic variogram, its parameters hyperparameters (chosen by a search).",
        1, ANY, true,
        {{"model", "choice", "variogram model", true, py::none(), {"spherical", "exponential", "cubic", "gaussian"}},
         {"nugget", "float", "nugget", true, py::none(), {}},

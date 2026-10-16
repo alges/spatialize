@@ -141,7 +141,7 @@ Every partition works with every decoder, in the dimensions both support.
      - inverse distance weighting
    * - ``kriging``
      - 1 or more
-     - ordinary kriging with a fixed variogram
+     - ordinary kriging with an isotropic variogram, its parameters hyperparameters
    * - ``adaptiveidw``
      - 1, 2 or 3
      - IDW with exponent and anisotropy fitted in each cell

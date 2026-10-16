@@ -55,6 +55,12 @@ pointer to the :doc:`../theory/index` page that explains the method behind it.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Data
+
+   datasets
+
+.. toctree::
+   :maxdepth: 2
    :caption: Results
 
    result

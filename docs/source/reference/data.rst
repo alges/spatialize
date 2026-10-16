@@ -1,29 +1,14 @@
 .. _data:
 
-*************************
-Saving, loading, datasets
-*************************
+**************
+Saving results
+**************
 
-Saving and loading results, and the datasets bundled with Spatialize.
+Results saved to a directory and loaded back. The data sets bundled with Spatialize have a page of
+their own, :doc:`datasets`.
 
 .. currentmodule:: spatialize.data
 
 .. autofunction:: load_result
 
 .. autofunction:: save_result
-
-.. autofunction:: load_drill_holes_andes_2D
-
-.. autofunction:: load_drill_holes_andes_3D
-
-.. autofunction:: load_simulated_anisotropic_data
-
-.. autofunction:: load_lithology_golden
-
-.. autofunction:: load_facies_pyrcz
-
-.. autofunction:: load_elevation_walker_lake
-
-.. autofunction:: load_reflectance_sundarbans
-
-.. autofunction:: load_precipitation_maipo

@@ -379,6 +379,13 @@ def load_simulated_anisotropic_data():
         followed by ``'sim1'`` through ``'sim100'``, one column per
         realization.
 
+    Notes
+    -----
+    Measured on the 100 realisations of the full grid, the variogram follows a spherical model with
+    geometric anisotropy along the x axis, a range of about 72 cells along x and 37 along y, a partial
+    sill of 0.94 and a jump of 0.10 at the origin, which acts as a nugget at the scale of one cell
+    (tutorial *An anisotropic field* of the examples gallery).
+
     Examples
     --------
     >>> from spatialize.data import load_simulated_anisotropic_data

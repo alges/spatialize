@@ -948,6 +948,9 @@ def esi_hparams_search(points, values, xi, **kwargs):
     negative_weights : list of str, optional
         *(Kriging draw)* Candidates among ``"clip"`` and ``"abs"``.
         Default: ``["clip"]``.
+    coupling : list of str, optional
+        *(Drawing decoders)* Candidates among ``"location"`` and ``"cell"``.
+        Default: ``["location"]``.
 
     Returns
     -------
@@ -1196,6 +1199,16 @@ def esi_griddata(points, values, xi, **kwargs):
          How ``"wdraw_kriging"`` turns the kriging weights into
          probabilities: ``"clip"`` sets the negative ones to 0, ``"abs"``
          takes their absolute value. Default: ``"clip"``.
+    coupling : {"location", "cell"}, optional
+         How the drawing decoders (``"draw"`` and the ``"wdraw_*"``) couple
+         the draws of one member within a cell. ``"location"`` draws each
+         location on its own. ``"cell"`` gives the cell one level per tree,
+         each location taking the datum at that level of its own weighted
+         law, the data ordered by value, so under ``"draw"`` the whole cell
+         takes one datum. The law at each location is the same in both
+         modes. Only the joint law within a cell differs, which a block
+         mean, an area or a curve over many locations reads.
+         Default: ``"location"``.
     metric : str, optional
          Error metric used for the per-cell LOO parameter optimization.
          Only used by ``"adaptiveidw"``, ``"sharpidw"`` and their draws.
@@ -1383,6 +1396,16 @@ def esi_nongriddata(points, values, xi, **kwargs):
          How ``"wdraw_kriging"`` turns the kriging weights into
          probabilities: ``"clip"`` sets the negative ones to 0, ``"abs"``
          takes their absolute value. Default: ``"clip"``.
+    coupling : {"location", "cell"}, optional
+         How the drawing decoders (``"draw"`` and the ``"wdraw_*"``) couple
+         the draws of one member within a cell. ``"location"`` draws each
+         location on its own. ``"cell"`` gives the cell one level per tree,
+         each location taking the datum at that level of its own weighted
+         law, the data ordered by value, so under ``"draw"`` the whole cell
+         takes one datum. The law at each location is the same in both
+         modes. Only the joint law within a cell differs, which a block
+         mean, an area or a curve over many locations reads.
+         Default: ``"location"``.
     metric : str, optional
          Error metric used for the per-cell LOO parameter optimization.
          Only used by ``"adaptiveidw"``, ``"sharpidw"`` and their draws.

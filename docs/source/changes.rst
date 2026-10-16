@@ -18,6 +18,11 @@ New
   (``wdraw_idw``, ``wdraw_kriging``, ``wdraw_adaptiveidw``, ``wdraw_sharpidw``) and the sharpened
   adaptive IDW (``sharpidw``, with ``kappa_r``, ``kappa_g`` and ``rho_max``), described in
   :doc:`theory/decoders`.
+- **The coupling of the draws** (``coupling``), a parameter of every drawing decoder.
+  ``"location"``, the default, draws each location of a cell on its own, as before. ``"cell"`` gives
+  the cell one level per tree, read on each location's weighted law, so block means, areas and curves
+  read from the members keep the spread of the draws. The law at each location is the same in both
+  modes (:doc:`theory/decoders`).
 - **Decoders written in Python.** ``local_interpolator="custom"`` takes the functions of a decoder
   (``estimation``, and optionally ``post_creation``, ``loo`` and ``kfold``) in the estimation
   functions and the searches, on any partition and in any dimension. Leave-one-out and k-fold are

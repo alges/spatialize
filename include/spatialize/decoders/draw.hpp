@@ -1,6 +1,7 @@
 #ifndef _SPTLZ_DECODERS_DRAW_
 #define _SPTLZ_DECODERS_DRAW_
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -16,6 +17,14 @@ namespace sptlz{
   // query a datum of the cell, chosen with probability proportional to its weight. The mean of the
   // draws is the weighted-mean decoder with the same weights, their variance the weighted
   // dispersion of the cell, and every member is an observed value.
+  //
+  // Coupling. Drawn location by location, the draws of one member are independent within a cell,
+  // so a block mean, an area or a curve, an average over many locations of one member, cancels the
+  // spread of the draws. Coupled by cell, the locations of a cell share one uniform
+  // number per tree, and each takes the datum at that level of its own weighted law, the data
+  // ordered by value: under uniform weights the whole cell takes one datum (a block-mark member),
+  // under distance weights the value changes smoothly across the cell. The law at each location is
+  // the same in both modes; only the joint law within a cell differs.
 
   // ----------------------------------------------------------------------------------------------
   // counter-based random numbers: a uniform number from (seed, tree, item, role) alone, so a draw
@@ -28,9 +37,10 @@ namespace sptlz{
     return(x ^ (x >> 31));
   }
 
-  enum class DrawRole : uint64_t { ESTIMATE = 1, LOO = 2, KFOLD = 3 };
+  enum class DrawRole : uint64_t { ESTIMATE = 1, LOO = 2, KFOLD = 3, CELL = 0 };
 
-  // uniform in [0, 1) for one draw; `item` is the query's (or held-out sample's) global index
+  // uniform in [0, 1) for one draw; `item` is the query's (or held-out sample's) global index, or
+  // the cell's index for a draw coupled by cell
   inline double draw_uniform(const CellContext &cell, int item, DrawRole role){
     uint64_t h = splitmix64(0x5D7A11ULL ^ static_cast<uint64_t>(cell.seed));
     h = splitmix64(h ^ static_cast<uint64_t>(static_cast<uint32_t>(cell.tree)));
@@ -251,6 +261,7 @@ namespace sptlz{
   class DrawDecoder: public Decoder {
     protected:
       std::unique_ptr<CellWeights> weights;
+      bool by_cell;   // coupling: one uniform number per cell (true) or per location (false)
 
       std::function<std::vector<float>(const std::vector<int>&, unsigned int)> fitter(std::vector<std::vector<float>> *coords, std::vector<float> *values){
         return([this, coords, values](const std::vector<int> &ids, unsigned int seed){ return(weights->fit_cell(coords, values, ids, seed)); });
@@ -267,7 +278,7 @@ namespace sptlz{
       }
 
     public:
-      DrawDecoder(CellWeights *_weights): weights(_weights){}
+      DrawDecoder(CellWeights *_weights, bool _by_cell=false): weights(_weights), by_cell(_by_cell){}
 
       std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
                                   const std::vector<int> &samples, unsigned int seed){
@@ -288,9 +299,24 @@ namespace sptlz{
         auto sl_values = slice(values, samples_id);
         auto sl_points = slice(locations, locations_id);
         auto w = weights->at(&sl_coords, &sl_values, &sl_points, params);
+        if(!by_cell){
+          for(size_t q=0; q<locations_id->size(); q++){
+            int j = draw_index(w[q], draw_uniform(cell, locations_id->at(q), DrawRole::ESTIMATE));
+            if(j >= 0) result[q] = sl_values[j];
+          }
+          return(result);
+        }
+        // coupled by cell: one level for the cell, read on each location's weighted law of the data
+        // in increasing order of value (ties kept in the cell's order)
+        double u = draw_uniform(cell, cell.cell, DrawRole::CELL);
+        std::vector<int> order(sl_values.size());
+        for(size_t j=0; j<order.size(); j++) order[j] = static_cast<int>(j);
+        std::stable_sort(order.begin(), order.end(), [&sl_values](int a, int b){ return(sl_values[a] < sl_values[b]); });
+        std::vector<float> ordered(order.size());
         for(size_t q=0; q<locations_id->size(); q++){
-          int j = draw_index(w[q], draw_uniform(cell, locations_id->at(q), DrawRole::ESTIMATE));
-          if(j >= 0) result[q] = sl_values[j];
+          for(size_t k=0; k<order.size(); k++) ordered[k] = w[q][order[k]];
+          int k = draw_index(ordered, u);
+          if(k >= 0) result[q] = sl_values[order[k]];
         }
         return(result);
       }

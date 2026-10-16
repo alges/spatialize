@@ -120,14 +120,22 @@ def cases(lib):
     phase2 = [("cellmean", {}, T), ("draw", {}, T), ("wdraw_idw", {"exponent": EXP}, T),
               ("wdraw_kriging", dict(krig, negative_weights="clip"), T),
               ("sharpidw", {}, T_ADAPTIVE), ("wdraw_adaptiveidw", {}, T_ADAPTIVE), ("wdraw_sharpidw", {}, T_ADAPTIVE)]
+    # the drawing decoders keep their first snapshots with draws location by location (the default);
+    # the draws coupled by cell (since 2026-10-16) have their own estimation cases
+    located = lambda decoder, params: dict(params, coupling="location") if "draw" in decoder else params
+    coupled = lambda params: dict(params, coupling="cell")
     for decoder, params, forest_size in phase2:
         for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
-            add(f"{pre}_{decoder}", "2d", run("mondrian", ALPHA, forest_size, decoder, params, method))
+            add(f"{pre}_{decoder}", "2d", run("mondrian", ALPHA, forest_size, decoder, located(decoder, params), method))
+        if "draw" in decoder:
+            add(f"estimation_{decoder}_cell", "2d", run("mondrian", ALPHA, forest_size, decoder, coupled(params), "estimate"))
 
     # the adaptive decoders on a line, where only the exponent is fitted (since 2026-10-07)
     for decoder in ("adaptiveidw", "sharpidw", "wdraw_adaptiveidw", "wdraw_sharpidw"):
         for method, pre in (("estimate", "estimation"), ("loo", "loo"), ("kfold", "kfold")):
-            add(f"{pre}_{decoder}_1d", "1d", run("mondrian", ALPHA, T_ADAPTIVE, decoder, {}, method))
+            add(f"{pre}_{decoder}_1d", "1d", run("mondrian", ALPHA, T_ADAPTIVE, decoder, located(decoder, {}), method))
+        if "draw" in decoder:
+            add(f"estimation_{decoder}_1d_cell", "1d", run("mondrian", ALPHA, T_ADAPTIVE, decoder, coupled({}), "estimate"))
 
     # co-estimation: two variables observed at the same locations (3D samples array: variables x n x d)
     co = lambda s, v: (np.stack([s, s]), np.stack([v, np.log(v)]).astype(np.float32))

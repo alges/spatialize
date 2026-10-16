@@ -125,13 +125,14 @@ def more_decoders(idw, kriging, adaptive, grid=False):
     """
     one = (lambda x: [x]) if grid else (lambda x: x)
     sharp = dict(adaptive, kappa_r=one(1.5), kappa_g=one(0.2), rho_max=one(3.0))
+    coupled = dict(coupling=one("location"))   # the drawing decoders: independent draws at each location
     return {
-        local_interpolator.CELLMEAN: {}, local_interpolator.DRAW: {},
-        local_interpolator.WDRAW_IDW: dict(idw),
-        local_interpolator.WDRAW_KRIGING: dict(kriging, negative_weights=one("clip")),
+        local_interpolator.CELLMEAN: {}, local_interpolator.DRAW: dict(coupled),
+        local_interpolator.WDRAW_IDW: dict(idw, **coupled),
+        local_interpolator.WDRAW_KRIGING: dict(kriging, negative_weights=one("clip"), **coupled),
         local_interpolator.SHARP_IDW: sharp,
-        local_interpolator.WDRAW_ADAPTIVE_IDW: dict(adaptive),
-        local_interpolator.WDRAW_SHARP_IDW: dict(sharp),
+        local_interpolator.WDRAW_ADAPTIVE_IDW: dict(adaptive, **coupled),
+        local_interpolator.WDRAW_SHARP_IDW: dict(sharp, **coupled),
         # the custom decoder's functions are given by the user, never searched over
         local_interpolator.CUSTOM: {"post_creation": None, "estimation": None, "loo": None, "kfold": None},
     }

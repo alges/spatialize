@@ -102,6 +102,11 @@ namespace registry {
     }
   }
 
+  // the coupling of a drawing decoder: true when the draws are coupled by cell
+  inline bool by_cell(const DecoderSpec &spec, const py::dict &params){
+    return(param<int>(spec, params, "coupling") == 2);
+  }
+
   // ---------------------------------------------------------------------------------------------
   // custom decoder: Python callables on the cells (cat_esi and user decoders)
 
@@ -199,6 +204,8 @@ namespace registry {
     // interpreter has finalised (that crashed the process at exit)
     static std::vector<DecoderSpec> &specs = *new std::vector<DecoderSpec>();
     if (!specs.empty()) return(specs);
+    // the coupling of the draws within a cell, a parameter of every drawing decoder (draw.hpp)
+    const Param COUPLING = {"coupling", "choice", "'location': independent draws at each location; 'cell': the locations of a cell share one level, read on each one's weighted law", false, py::str("location"), {"location", "cell"}};
     specs.push_back({"idw", "Inverse distance weighting, weights 1/d^p (a datum at distance 0 takes all the weight).",
        1, ANY, true,
        {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
@@ -223,11 +230,11 @@ namespace registry {
        nullptr});
     specs.push_back({"draw", "A datum of the cell drawn uniformly (the block-mark decoder).",
        1, ANY, true,
-       {},
+       {COUPLING},
        nullptr});
     specs.push_back({"wdraw_idw", "A datum of the cell drawn with probability proportional to 1/d^p.",
        1, ANY, true,
-       {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
+       {{"exponent", "float", "the power p of the distance", true, py::none(), {}}, COUPLING},
        nullptr});
     specs.push_back({"wdraw_kriging", "A datum of the cell drawn with probability proportional to its ordinary-kriging weight, made non-negative.",
        1, ANY, true,
@@ -235,7 +242,7 @@ namespace registry {
         {"nugget", "float", "nugget", true, py::none(), {}},
         {"range", "float", "range", true, py::none(), {}},
         {"sill", "float", "sill", true, py::none(), {}},
-        {"negative_weights", "choice", "'clip' sets negative weights to 0, 'abs' takes their absolute value", false, py::str("clip"), {"clip", "abs"}}},
+        {"negative_weights", "choice", "'clip' sets negative weights to 0, 'abs' takes their absolute value", false, py::str("clip"), {"clip", "abs"}}, COUPLING},
        nullptr});
     specs.push_back({"cellmean", "The mean of the cell's data (the linear decoder of the theory's co-occurrence identity).",
        1, ANY, true,
@@ -250,14 +257,14 @@ namespace registry {
        nullptr});
     specs.push_back({"wdraw_adaptiveidw", "A datum of the cell drawn with probability proportional to its adaptive IDW weight.",
        1, 3, true,
-       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}},
+       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}, COUPLING},
        nullptr});
     specs.push_back({"wdraw_sharpidw", "A datum of the cell drawn with probability proportional to its sharpened adaptive IDW weight.",
        1, 3, true,
        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
         {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
         {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},
-        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}},
+        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}, COUPLING},
        nullptr});
     // factories, which read the parameters through their own spec
     specs[0].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
@@ -276,16 +283,16 @@ namespace registry {
       return(custom_decoder(decoders()[3], d, p, m));
     };
     specs[4].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
-      return(new sptlz::DrawDecoder(new sptlz::UniformWeights()));
+      return(new sptlz::DrawDecoder(new sptlz::UniformWeights(), by_cell(decoders()[4], p)));
     };
     specs[5].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
-      return(new sptlz::DrawDecoder(new sptlz::IDWWeights(param<float>(decoders()[5], p, "exponent"))));
+      return(new sptlz::DrawDecoder(new sptlz::IDWWeights(param<float>(decoders()[5], p, "exponent")), by_cell(decoders()[5], p)));
     };
     specs[6].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       const DecoderSpec &s = decoders()[6];
       return(new sptlz::DrawDecoder(new sptlz::KrigingWeights(
           param<int>(s, p, "model"), param<float>(s, p, "nugget"), param<float>(s, p, "range"), param<float>(s, p, "sill"),
-          s.params[4].choices[param<int>(s, p, "negative_weights")-1])));
+          s.params[4].choices[param<int>(s, p, "negative_weights")-1]), by_cell(s, p)));
     };
     specs[7].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       return(new sptlz::WeightedMeanDecoder(new sptlz::UniformWeights()));
@@ -297,12 +304,12 @@ namespace registry {
     };
     specs[9].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       const DecoderSpec &s = decoders()[9];
-      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], 0.0f, 0.0f, 0.0f)));
+      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], 0.0f, 0.0f, 0.0f), by_cell(s, p)));
     };
     specs[10].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
       const DecoderSpec &s = decoders()[10];
       return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], param<float>(s, p, "kappa_r"),
-                                                                param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max"))));
+                                                                param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max")), by_cell(s, p)));
     };
     return(specs);
   }

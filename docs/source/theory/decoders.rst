@@ -172,6 +172,17 @@ the most reliable reading among the decoders. The kriging weights are made non-n
    w_j &= |\lambda_j| && (\texttt{"abs"}).
    \end{aligned}
 
+**The coupling of the draws.** Every drawing decoder draws one datum at each location of a cell. With
+``coupling="location"``, the default, the draws at two locations of one cell are independent. The law
+at each location is then right, while an average over many locations of one member, a block mean, the
+area above a limit or a curve over thresholds, cancels most of the spread of the draws. With
+``coupling="cell"`` the cell draws one level per tree, each location taking the datum at that level of
+its own weighted law, the data ordered by value. Under the uniform draw the whole cell then takes one
+datum, so each member is a block-mark field. The law at each location is the same in both modes. Only
+the joint law within a cell differs. Full coupling can overstate the spread of such averages, the
+values of a real field varying inside a cell, so measure the coverage of the reading in use before
+relying on either mode.
+
 Choosing by purpose
 ===================
 

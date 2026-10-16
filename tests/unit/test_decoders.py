@@ -89,3 +89,54 @@ def test_a_held_out_datum_takes_no_part_in_its_prediction(decoder, method):
     run = [np.asarray(LIB.run(s, values, s, "mondrian", cases.ALPHA, 10, cases.SEED, decoder, {}, method,
                               cases.K, cases.FSEED)[1]) for values in (v, changed)]
     assert np.array_equal(run[0][0], run[1][0], equal_nan=True)
+
+
+def _members(decoder, params, s, v, q, alpha=cases.ALPHA, trees=cases.T):
+    return np.asarray(LIB.run(s, v, q, "mondrian", alpha, trees, cases.SEED, decoder, params, "estimate")[1])
+
+
+def test_uniform_draws_coupled_by_cell_give_one_datum_per_cell():
+    """Coupled by cell, the uniform draw gives every location of a cell the same datum:
+    in each member, queries with the same cell mean (the same cell) take the same value. Drawn
+    location by location, they do not."""
+    s, v, q = DATA["2d"]
+    cell = _members("cellmean", {}, s, v, q)
+    coupled, located = _members("draw", {"coupling": "cell"}, s, v, q), _members("draw", {}, s, v, q)
+    split = 0
+    for t in range(cell.shape[1]):
+        for m in np.unique(cell[~np.isnan(cell[:, t]), t]):
+            same = cell[:, t] == m
+            assert np.unique(coupled[same, t]).size == 1
+            split += np.unique(located[same, t]).size > 1
+    assert split > 0
+
+
+@pytest.mark.parametrize("decoder, params", [("wdraw_idw", {"exponent": cases.EXP}),
+                                             ("wdraw_kriging", {"model": 2, "nugget": 0.0, "range": 0.3, "sill": 1.0})])
+def test_weighted_draws_coupled_by_cell_are_comonotone(decoder, params):
+    """In an uncut cell, the draws coupled by cell read one level per tree on each location's weighted
+    law, so the members are ordered alike at every location. (The adaptive weights are fitted again
+    in each tree, so their laws differ between trees and the property holds within a tree only.)"""
+    gen = np.random.default_rng(3)
+    s = gen.uniform(0, 1, (30, 2)).astype(np.float32)
+    v = (np.sin(4 * s[:, 0]) + gen.normal(0, 0.3, 30)).astype(np.float32)
+    q = gen.uniform(0, 1, (25, 2)).astype(np.float32)
+    cell = _members("cellmean", {}, s, v, q, alpha=0.0, trees=200)
+    members = _members(decoder, dict(params, coupling="cell"), s, v, q, alpha=0.0, trees=200)
+    uncut = members[:, np.all(np.abs(cell - v.mean()) < 1e-5, axis=0)]
+    assert uncut.shape[1] >= 10
+    d = uncut[:, :, None] - uncut[:, None, :]                  # [location, member, member]
+    assert np.all(d[:, None] * d[None] >= -1e-6)               # same order at every pair of locations
+
+
+@pytest.mark.parametrize("decoder, params", [("draw", {}), ("wdraw_idw", {"exponent": cases.EXP})])
+def test_coupling_keeps_the_law_at_each_location(decoder, params):
+    """The coupling changes the joint law within a cell, never the law at a location: over many trees
+    the mean of the draws at each location is the weighted mean of its cells in both modes."""
+    s, v, q = DATA["2d"]
+    mean = {"draw": "cellmean", "wdraw_idw": "idw"}[decoder]
+    expected = np.nanmean(_members(mean, params, s, v, q, trees=400), axis=1)
+    spread = np.nanstd(v)
+    for coupling in ("cell", "location"):
+        draws = np.nanmean(_members(decoder, dict(params, coupling=coupling), s, v, q, trees=400), axis=1)
+        assert np.nanmean(np.abs(draws - expected)) < 0.15 * spread

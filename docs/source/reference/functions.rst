@@ -33,6 +33,18 @@ Aggregation functions
    :special-members: __call__
    :undoc-members:
 
+.. autoclass:: Expectile
+   :members:
+   :special-members: __call__
+
+.. autoclass:: ExpectedShortfall
+   :members:
+   :special-members: __call__
+
+.. autoclass:: AsymmetricLoss
+   :members:
+   :special-members: __call__
+
 Loss functions
 ===============
 
@@ -67,3 +79,5 @@ Score functions
 .. autofunction:: neg_log_likelihood
 
 .. autofunction:: crps
+
+.. autofunction:: asymmetric_loss

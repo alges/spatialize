@@ -174,3 +174,54 @@ def test_pareto_search_takes_the_scoring_by_name(name):
         search = esi_pareto_hparams_search(points, values, local_interpolator="idw", n_partitions=[50],
                                            alpha=[0.7], exponent=[2.0], k="loo", scoring=name, seed=0)
     assert np.isfinite(search.all_results[0]["decoder_error"])
+
+
+@pytest.mark.parametrize("over,under", [(1.0, 1.0), (5.0, 1.0), (1.0, 3.0)])
+@pytest.mark.parametrize("kind", ["linear", "squared"])
+def test_asymmetric_loss_reading_minimises_the_expected_loss(over, under, kind):
+    """For a fixed law, the reading AsymmetricLoss returns has the smallest expected loss among nearby
+    readings, a quantile for the linear loss and an expectile for the squared one, both at level
+    under / (over + under)."""
+    from spatialize.gs.esi import aggfunction as af
+    rng = np.random.default_rng(0)
+    members = rng.lognormal(0, 1, (1, 20_000))
+    reading = af.AsymmetricLoss(over, under, kind)(members)[0]
+
+    def expected(r):
+        excess, shortfall = np.clip(r - members, 0, None), np.clip(members - r, 0, None)
+        if kind == "squared":
+            excess, shortfall = excess ** 2, shortfall ** 2
+        return np.mean(over * excess + under * shortfall)
+    assert all(expected(reading) <= expected(reading + d) + 1e-12 for d in (-0.05, -0.01, 0.01, 0.05))
+    alpha = under / (over + under)
+    target = np.quantile(members, alpha) if kind == "linear" else af.Expectile(alpha)(members)[0]
+    assert abs(reading - target) < 1e-9
+
+
+def test_expectile_and_expected_shortfall():
+    from spatialize.gs.esi import aggfunction as af
+    rng = np.random.default_rng(1)
+    members = rng.normal(0, 1, (3, 5000))
+    members[0, :10] = np.nan
+    assert np.allclose(af.Expectile(0.5)(members), np.nanmean(members, axis=1), atol=1e-9)
+    e = af.Expectile(0.3)(members)
+    for row, value in zip(members, e):
+        row = row[np.isfinite(row)]
+        assert abs(0.3 * np.mean(np.clip(row - value, 0, None)) - 0.7 * np.mean(np.clip(value - row, 0, None))) < 1e-9
+    es = af.ExpectedShortfall(0.9)(members)
+    for row, value in zip(members, es):
+        row = row[np.isfinite(row)]
+        assert abs(value - row[row >= np.quantile(row, 0.9)].mean()) < 1e-12
+    assert np.all(af.ExpectedShortfall(0.1, tail="lower")(members) < af.Expectile(0.5)(members))
+
+
+def test_asymmetric_loss_score_in_a_search():
+    import spatialize
+    from spatialize.gs.esi import esi_pareto_hparams_search, scorefunction as sf
+    rng = np.random.default_rng(0)
+    points, values = rng.random((60, 2)), rng.lognormal(0, 1, 60)
+    with spatialize.session.override(progress=False):
+        search = esi_pareto_hparams_search(points, values, local_interpolator="wdraw_idw", n_partitions=[50],
+                                           alpha=[0.7], exponent=[2.0], k="loo",
+                                           scoring=sf.asymmetric_loss(over=5, under=1), seed=0)
+    assert np.isfinite(search.all_results[0]["decoder_error"])

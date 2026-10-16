@@ -173,6 +173,47 @@ def crps(true_values, samples):
     return float(np.mean(scores)) if scores else np.inf
 
 
+def asymmetric_loss(over=1.0, under=1.0, kind="linear"):
+    """
+    A cross-validation score that charges the reading an asymmetric loss selects.
+
+    Each datum is predicted by the reading of its members that minimises the expected loss,
+    :class:`~spatialize.gs.esi.aggfunction.AsymmetricLoss` with the same costs, and charged that loss
+    against its value, ``over`` per unit of over-prediction and ``under`` per unit of under-prediction,
+    linearly or squared. A search scored by it chooses the ensemble the use itself prefers.
+
+    Parameters
+    ----------
+    over : float
+        Cost of one unit of over-prediction, positive. Default: ``1``.
+    under : float
+        Cost of one unit of under-prediction, positive. Default: ``1``.
+    kind : {"linear", "squared"}
+        Shape of the loss. Default: ``"linear"``.
+
+    Returns
+    -------
+    callable
+        ``score(true_values, samples) -> float``, the mean loss over the data, lower being better.
+    """
+    from spatialize.gs.esi.aggfunction import AsymmetricLoss
+    if kind not in ("linear", "squared"):
+        raise ValueError("kind must be 'linear' or 'squared'")
+    reading = AsymmetricLoss(over, under, kind)
+
+    def score(true_values, samples):
+        z = np.asarray(true_values, dtype=float)
+        r = reading(np.asarray(samples, dtype=float))
+        excess, shortfall = np.clip(r - z, 0, None), np.clip(z - r, 0, None)
+        if kind == "squared":
+            excess, shortfall = excess ** 2, shortfall ** 2
+        return float(np.nanmean(reading.over * excess + reading.under * shortfall))
+
+    score.__name__ = f"asymmetric_loss_{kind}"
+    score.min_valid = 2
+    return score
+
+
 # The fewest valid (non-NaN) members each scorer needs to score a datum. A datum with fewer is left
 # out of its score: under the session setting empty_cells="nan", the members of a datum whose cell is
 # left empty by cross-validation are NaN.

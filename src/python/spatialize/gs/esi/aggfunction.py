@@ -145,6 +145,148 @@ class Percentile:
         return f"percentile({self.q})"
 
 
+def _expectile(samples, alpha, steps=60):
+    """The expectile of each row at level ``alpha`` by bisection over the range of its members, NaN
+    for a row without a defined member."""
+    x = np.asarray(samples, dtype=float)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        lo, hi = np.nanmin(x, axis=1), np.nanmax(x, axis=1)
+        for _ in range(steps):
+            e = 0.5 * (lo + hi)
+            above = np.nanmean(np.clip(x - e[:, None], 0, None), axis=1)
+            below = np.nanmean(np.clip(e[:, None] - x, 0, None), axis=1)
+            positive = alpha * above - (1 - alpha) * below > 0       # the root lies above e
+            lo, hi = np.where(positive, e, lo), np.where(positive, hi, e)
+    return 0.5 * (lo + hi)
+
+
+class Expectile:
+    """Aggregation callable that reduces ESI samples to their expectile at a given level.
+
+    The expectile :math:`e_\\alpha` of a law balances the mean departures on either side,
+    :math:`\\alpha\\, \\mathrm{E}[(Z - e)^+] = (1 - \\alpha)\\, \\mathrm{E}[(e - Z)^+]`. It is the reading that
+    minimises a squared loss weighing an over-prediction by :math:`1 - \\alpha` and an
+    under-prediction by :math:`\\alpha` (:class:`AsymmetricLoss` with ``kind="squared"``). At
+    :math:`\\alpha = 1/2` it is the mean. Unlike a quantile, it moves with how far the members of the
+    tail lie, so it needs a finite second moment to be stable.
+
+    Parameters
+    ----------
+    alpha : float
+        Level in (0, 1). Default: ``0.5``, the mean.
+
+    See Also
+    --------
+    Percentile : the quantile, its counterpart under a piecewise-linear loss.
+    AsymmetricLoss : the reading a pair of costs selects.
+    """
+    def __init__(self, alpha=0.5):
+        if not 0 < alpha < 1:
+            raise ValueError("alpha must lie in (0, 1)")
+        self.alpha = alpha
+
+    def __call__(self, samples):
+        """The expectile of the members at each location (NaN where none is defined)."""
+        return _expectile(samples, self.alpha)
+
+    def __repr__(self):
+        return f"expectile({self.alpha})"
+
+
+class ExpectedShortfall:
+    """Aggregation callable that reduces ESI samples to their expected shortfall beyond a quantile.
+
+    The upper expected shortfall at level :math:`\\alpha` is the mean of the members at or above their
+    quantile at :math:`\\alpha`, the value at risk, :math:`\\mathrm{E}[Z \\mid Z \\ge q_\\alpha]`. It answers
+    how large the value is when it exceeds that quantile. The lower one, ``tail="lower"``, is the mean of
+    the members at or below the quantile. The value at risk itself is ``Percentile(100 * alpha)``.
+
+    Parameters
+    ----------
+    alpha : float
+        Level of the quantile, in (0, 1). Default: ``0.9``.
+    tail : {"upper", "lower"}
+        The tail averaged. Default: ``"upper"``.
+
+    See Also
+    --------
+    Percentile : the value at risk.
+    """
+    def __init__(self, alpha=0.9, tail="upper"):
+        if not 0 < alpha < 1:
+            raise ValueError("alpha must lie in (0, 1)")
+        if tail not in ("upper", "lower"):
+            raise ValueError("tail must be 'upper' or 'lower'")
+        self.alpha, self.tail = alpha, tail
+
+    def __call__(self, samples):
+        """The expected shortfall of the members at each location (NaN where none is defined)."""
+        x = np.asarray(samples, dtype=float)
+        q = _over_members(np.nanquantile, x, self.alpha)
+        beyond = x >= q[:, None] if self.tail == "upper" else x <= q[:, None]
+        return _over_members(np.nanmean, np.where(beyond, x, np.nan))
+
+    def __repr__(self):
+        return f"expected_shortfall({self.alpha}, {self.tail})"
+
+
+class AsymmetricLoss:
+    """Aggregation callable that reads the members by the functional an asymmetric loss selects.
+
+    A use that pays ``over`` for each unit of over-prediction and ``under`` for each unit of
+    under-prediction is best served, at each location, by the reading of the law that minimises the
+    expected loss. With :math:`\\alpha = \\text{under} / (\\text{over} + \\text{under})`,
+
+    - ``kind="linear"``, the loss :math:`\\text{over}\\,(\\hat z - z)^+ + \\text{under}\\,(z - \\hat z)^+`, is
+      minimised by the quantile at :math:`\\alpha`,
+    - ``kind="squared"``, the loss :math:`\\text{over}\\,((\\hat z - z)^+)^2 + \\text{under}\\,((z - \\hat z)^+)^2`,
+      by the expectile at :math:`\\alpha`,
+    - ``kind="zero-one"``, every departure costing alike, by the mode, whatever the costs.
+
+    Equal costs give the median and the mean. The more an over-prediction costs, the lower the reading.
+    The book behind Spatialize derives these readings, in its chapter on higher-order spatial
+    prediction, from the predictive law the members give.
+
+    Parameters
+    ----------
+    over : float
+        Cost of one unit of over-prediction, positive. Default: ``1``.
+    under : float
+        Cost of one unit of under-prediction, positive. Default: ``1``.
+    kind : {"linear", "squared", "zero-one"}
+        Shape of the loss. Default: ``"linear"``.
+
+    Attributes
+    ----------
+    alpha : float
+        The level the costs select, ``under / (over + under)``.
+
+    See Also
+    --------
+    Percentile, Expectile, MAP : the readings selected.
+    spatialize.gs.esi.scorefunction.asymmetric_loss : the same loss as a cross-validation score.
+    """
+    def __init__(self, over=1.0, under=1.0, kind="linear"):
+        if over <= 0 or under <= 0:
+            raise ValueError("over and under must be positive")
+        if kind not in ("linear", "squared", "zero-one"):
+            raise ValueError("kind must be 'linear', 'squared' or 'zero-one'")
+        self.over, self.under, self.kind = float(over), float(under), kind
+        self.alpha = self.under / (self.over + self.under)
+
+    def __call__(self, samples):
+        """The reading of the members that minimises the expected loss at each location."""
+        if self.kind == "linear":
+            return _over_members(np.nanquantile, np.asarray(samples, dtype=float), self.alpha)
+        if self.kind == "squared":
+            return _expectile(samples, self.alpha)
+        return np.ravel(MAP(samples))
+
+    def __repr__(self):
+        return f"asymmetric_loss(over={self.over:g}, under={self.under:g}, {self.kind})"
+
+
 class WeightedAverage:
     """Aggregation callable that reduces ESI samples to a weighted average.
 

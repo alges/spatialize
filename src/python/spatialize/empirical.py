@@ -451,6 +451,11 @@ class FittedModelFactory:
         model = clone(self.model)
         if self.point_model_name == "kde":
             model.set_params(bandwidth=silverman_bandwidth(data))
+        elif seed is not None:
+            # a mixture takes this call's seed, for its EM start and for its draws: with the factory's
+            # seed at every location, the draws of ess_sample would share one random stream and the
+            # simulated fields would not be drawn location by location
+            model.set_params(random_state=seed)
         return model.fit(data.reshape(-1, 1)), data
 
     def __repr__(self):
@@ -1360,22 +1365,27 @@ class EmpiricalModel(BaseEmpiricalModel):
 
         dx = self.x_[1] - self.x_[0]
 
-        # Call the Numba-optimized function
-        # Note: pdf_ is already normalized such that sum(pdf_ * dx) = 1 in __init__
+        # the density itself, normalised in __init__ so that sum(pdf_ * dx) = 1: the differential
+        # entropy, which is negative for a law narrower than a unit interval. (Until version 1.3 the
+        # density was divided by its sum first, which returned neither the differential nor the
+        # discrete entropy.)
         log_base = np.log(base)
+        return _compute_entropy_numba(self.pdf_, start_idx, end_idx, dx, log_base, epsilon)
 
-        # Ensure pdf is normalized:
-        # this is different from the normalization in __init__ where we normalize the entire pdf_ to integrate to 1.
-        # It's to avoid numerical issues in the entropy calculation - for example, if the pdf is not normalized,
-        # the differential entropy could be negative or diverge.
-        pdf = self.pdf_ / np.sum(self.pdf_)
-        return _compute_entropy_numba(pdf, start_idx, end_idx, dx, log_base, epsilon)
+    def _grid_entropy_masses(self):
+        """The law on the support grid as probability masses, whose entropy contributions -p log p
+        are never negative: the entropy the two entropy intervals divide into shares."""
+        return self.pdf_ / np.sum(self.pdf_)
 
 
     def central_entropy_interval(self, alpha=0.9, base=np.e, epsilon=1e-10):
         """
         Find the narrowest interval [a, b] that contains ``alpha`` percentage
         of the total entropy.
+
+        The share is taken of the entropy of the law discretised on the support
+        grid, whose contributions are never negative, so that a share is well
+        defined. The entropies reported are differential (:meth:`entropy`).
 
         Parameters
         ----------
@@ -1395,15 +1405,13 @@ class EmpiricalModel(BaseEmpiricalModel):
         _ensure_numba()
         dx = self.x_[1] - self.x_[0]
 
-        # Ensure pdf is normalized:
-        # this is different from the normalization in __init__ where we normalize the entire pdf_ to integrate to 1.
-        # It's to avoid numerical issues in the entropy calculation - for example, if the pdf is not normalized,
-        # the differential entropy could be negative or diverge.
-        pdf_for_entropy = self.pdf_ / np.sum(self.pdf_)
+        # the shares are of the entropy of the probability masses on the grid (see the docstring)
+        pdf_for_entropy = self._grid_entropy_masses()
         log_base = np.log(base)
 
         # Call the Numba-optimized function to find the interval
-        i, j, total_entropy = _find_central_entropy_interval_numba(pdf_for_entropy, self.x_, dx, alpha, log_base, epsilon)
+        i, j, _ = _find_central_entropy_interval_numba(pdf_for_entropy, self.x_, dx, alpha, log_base, epsilon)
+        total_entropy = self.entropy(base=base, epsilon=epsilon)
 
         a, b = self.x_[i], self.x_[j]
 
@@ -1421,6 +1429,10 @@ class EmpiricalModel(BaseEmpiricalModel):
         """
         Find an interval [a, b] around a given point x0 that contains ``alpha``
         percentage of the total entropy.
+
+        The share is taken of the entropy of the law discretised on the support
+        grid, whose contributions are never negative, so that a share is well
+        defined. The entropies reported are differential (:meth:`entropy`).
 
         The interval is expanded outwards from x0 by adding points with the
         highest entropy contribution.
@@ -1445,16 +1457,14 @@ class EmpiricalModel(BaseEmpiricalModel):
         _ensure_numba()
         dx = self.x_[1] - self.x_[0]
 
-        # Ensure pdf is normalized:
-        # this is different from the normalization in __init__ where we normalize the entire pdf_ to integrate to 1.
-        # It's to avoid numerical issues in the entropy calculation - for example, if the pdf is not normalized,
-        # the differential entropy could be negative or diverge.
-        pdf_for_entropy = self.pdf_ / np.sum(self.pdf_)
+        # the shares are of the entropy of the probability masses on the grid (see the docstring)
+        pdf_for_entropy = self._grid_entropy_masses()
 
         log_base = np.log(base)
 
         total_entropy = self.entropy(base=base, epsilon=epsilon)
-        target_entropy = alpha * total_entropy
+        # the target share on the scale of the masses' entropy, the scale the search adds up
+        target_entropy = alpha * _compute_entropy_numba(pdf_for_entropy, 0, len(pdf_for_entropy), dx, log_base, epsilon)
 
         # Find the index closest to x0
         center_idx = np.argmin(np.abs(self.x_ - x0))

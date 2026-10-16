@@ -168,6 +168,15 @@ Results that change
   saying why, when the fit failed. It is now the exact score of the members themselves,
   :math:`\mathrm{E}|X - y| - \tfrac12\,\mathrm{E}|X - X'|`, which keeps an atom among the members,
   such as the dry gauges the drawing decoders reproduce. Searches scored by the CRPS change.
+- **The entropy of a fitted law** (``EmpiricalModel.entropy``). The density was divided by its sum
+  before the integral, which returned neither the differential nor the discrete entropy, 0.04 for a
+  normal law of unit spread whose entropy is 1.42. It is now the differential entropy, negative for a
+  law narrower than a unit interval. The two entropy intervals keep their intervals, chosen by shares
+  of the entropy of the law on its support grid, and report differential entropies.
+- **Simulation with Gaussian mixtures** (``ess_sample`` with ``point_model_name="emm"`` or ``"vim"``).
+  Every location's mixture took the factory's seed, so the draws at all locations shared one random
+  stream, and a simulated field followed the cells of the partitions instead of being drawn location
+  by location. Each location now takes its own seed, as the kernel density did.
 - **The variogram of the kriging decoders** (``kriging``, ``wdraw_kriging``). The nugget scaled the
   whole covariance, the value at the origin included, so ordinary kriging, whose weights ignore a
   constant factor, never saw it. It is now the jump of the variogram at the origin, in the units of

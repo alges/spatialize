@@ -40,3 +40,31 @@ def test_a_near_degenerate_mixture_component_still_gives_a_law():
     assert np.all((F >= 0) & (F <= 1)) and np.all(np.diff(F) >= 0)
     q = np.asarray(em.inv_cdf(np.array([0.05, 0.5, 0.95])))
     assert np.all(np.isfinite(q)) and np.all(np.diff(q) > 0)
+
+
+@pytest.mark.parametrize("point_model", ["emm", "vim"])
+def test_mixture_draws_differ_between_locations(point_model):
+    """ess_sample draws each location from its own law with its own seed, so two locations with the
+    same members get different draws (with the factory's seed at every location they were identical)."""
+    from spatialize.empirical import FittedModelFactory
+    from spatialize.gs.ess import ess_sample
+    from spatialize.gs.esi import esi_nongriddata
+    from spatialize.logging import singleton_null_callback as quiet
+    rng = np.random.default_rng(0)
+    p = rng.random((60, 2)); v = rng.normal(size=60)
+    q = np.array([[0.5, 0.5], [0.5, 0.5]])                   # one place, listed twice
+    r = esi_nongriddata(p, v, q, local_interpolator="idw", exponent=2.0, n_partitions=50, alpha=0.7, seed=0)
+    sims = np.asarray(ess_sample(r, n_sims=40, callback=quiet,
+                                 fitted_model_factory=FittedModelFactory(point_model_name=point_model, seed=3)).scenarios)
+    sims = sims.reshape(2, -1)
+    assert not np.allclose(sims[0], sims[1])
+
+
+@pytest.mark.parametrize("sigma", [1.0, 0.1])
+def test_entropy_is_the_differential_entropy(sigma):
+    """The entropy of a normal law is log(sigma * sqrt(2 pi e)), negative below sigma ~ 0.242; the
+    model fitted to a large sample comes close."""
+    from spatialize.empirical import EmpiricalModel
+    s = np.random.default_rng(0).normal(0.0, sigma, 20000)
+    expected = np.log(sigma * np.sqrt(2 * np.pi * np.e))
+    assert abs(EmpiricalModel(sample=s).entropy() - expected) < 0.05

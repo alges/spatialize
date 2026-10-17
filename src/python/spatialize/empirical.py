@@ -290,7 +290,8 @@ class FittedModelFactory:
               falls back to a symmetric Normal-mixture shape when no target
               skewness is available).
             - ``"auto"``: ``"gamma"`` if the sample is non-negative, otherwise
-              ``"skew_normal"``.
+              ``"skew_normal"``. :func:`~spatialize.gs.ess.ess_sample` decides it once for the
+              variable, by the sign of its data, so that every location gets the same family.
 
             Widening is calibrated per-call against a target local variance (and,
             for ``"skew_normal"``, a target local skewness) estimated from

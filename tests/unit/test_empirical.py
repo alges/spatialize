@@ -68,3 +68,22 @@ def test_entropy_is_the_differential_entropy(sigma):
     s = np.random.default_rng(0).normal(0.0, sigma, 20000)
     expected = np.log(sigma * np.sqrt(2 * np.pi * np.e))
     assert abs(EmpiricalModel(sample=s).entropy() - expected) < 0.05
+
+
+def test_auto_widening_follows_the_sign_of_the_data():
+    """With widening="auto", ess_sample chooses the family once for the variable: data that take negative
+    values get a skew-normal widening everywhere, even where a location's members are all positive (a
+    Gamma law there came out sharply peaked, its entropy several bits too low)."""
+    from spatialize.empirical import FittedModelFactory
+    from spatialize.gs.esi import esi_nongriddata
+    from spatialize.gs.ess import ess_sample
+    from spatialize.logging import singleton_null_callback as quiet
+    rng = np.random.default_rng(0)
+    p = rng.random((400, 2))
+    spread = lambda x: 0.1 + 1.5 * np.linalg.norm(x - 0.5, axis=1)
+    q = np.array([[0.5, 0.5], [0.52, 0.5], [0.48, 0.52]])            # near the centre, where the spread is small
+    r = esi_nongriddata(p, rng.normal(0, spread(p)), q, local_interpolator="idw", exponent=2.0, alpha=0.8,
+                        n_partitions=300, seed=0)
+    auto = np.asarray(ess_sample(r, n_sims=300, callback=quiet, fitted_model_factory=FittedModelFactory(widening="auto", seed=0)).scenarios)
+    skew = np.asarray(ess_sample(r, n_sims=300, callback=quiet, fitted_model_factory=FittedModelFactory(widening="skew_normal", seed=0)).scenarios)
+    assert np.allclose(auto, skew)

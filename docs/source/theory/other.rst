@@ -40,15 +40,25 @@ value and are left out, the shares :math:`p_c` being taken over the valid member
 fewer than two valid members gets no entropy (NaN). For the mutual information, a pair counts only
 when both of its members are valid.
 
-The members of :math:`U` and of :math:`V` at a location co-vary through the cells they share, so the
-two ensembles are drawn on the same partitions, with one seed, one box holding both data sets and the
-queries, and, for the Mondrian process, the granularity that gives both the same rate. With partitions
-drawn independently the members would be independent whatever the dependence of the variables, and
-the mutual information near zero. Voronoi partitions with nuclei among the data cannot be shared, so
-they need ``data_cond=False``. A density estimated from a finite number of members puts a positive
-mutual information even on independent variables, the more so the finer the partition of the values,
-so the estimate subtracts, at each location, the mutual information of the same members with those of
-:math:`V` permuted.
+Spatialize reads these laws in two ways. The entropy can come from the members themselves, their
+density estimated with random partitions of their range (``method="partition"``), or from the law
+ensemble spatial simulation fits at each location, widened to the spread of the nearest data
+(``method="ess"``, :doc:`ess`). With an averaging decoder the members' spread follows the granularity,
+so only the second follows the field. A drawing decoder gives members whose spread is that of the data,
+so both read it.
+
+The mutual information needs the joint law of :math:`U` and :math:`V` at a location, which neither
+ensemble gives, since each is built on its own data. The default (``method="colocated"``) pairs the
+two variables where one of them is measured, the datum of one with the other predicted there by its
+own ensemble, and weighs each pair, for a target location, by the share of partitions in which the
+pair's location and the target share a cell, so the partitions act as adaptive neighbourhoods. The
+mutual information is then that of a kernel density of the weighted pairs, minus that of the same pairs
+with :math:`V` permuted, the bias of the density under independence. The pairs hold the variables' own
+relation, so independent variables give a value near zero and a dependence that is not monotone is
+seen too. The alternative (``method="members"``) reads the members of both ensembles, drawn on shared
+partitions, through random partitions of the plane of values. The members are averages, which blur the
+relation of the variables, and they co-vary through the size of the cells they share whatever that
+relation, so this estimate sees a link faintly and a non-monotone one hardly at all.
 
 In Spatialize
 =============

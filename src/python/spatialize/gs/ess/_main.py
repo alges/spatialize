@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from sklearn.exceptions import ConvergenceWarning
 
@@ -213,6 +214,13 @@ def ess_sample(esi_result,
     esi_samples = np.array(esi_result.esi_samples(raw=True))
 
     log_message(logging.logger.debug(f"esi_samples shape: {esi_samples.shape}"))
+
+    if fitted_model_factory.widening == "auto" and esi_result.values is not None:
+        # the family of the widening follows the variable, not each location's members: a location
+        # whose members are all positive, in a variable that also takes negative values, would
+        # otherwise get a Gamma law, sharply peaked when the target variance is large
+        fitted_model_factory = copy.copy(fitted_model_factory)
+        fitted_model_factory.widening = "gamma" if np.nanmin(esi_result.values) >= 0 else "skew_normal"
 
     target_var_arr = None
     target_skew_arr = None

@@ -183,10 +183,21 @@ Results that change
   of the entropy of the law on its support grid, and report differential entropies.
 - **Spatial mutual information** (``spatialize.futures.esmi.SpatialMutualInformation``,
   experimental). The ensembles of the two variables were drawn with different seeds, so their members
-  were independent and the mutual information came out near zero whatever the dependence. They now
-  share their partitions, and the estimate subtracts the mutual information of a permutation, its
-  bias under independence (``bias_correction=True``). On two variables linked over one half of a region
-  and independent over the other, the estimate went from 0.03 on both halves to 0.12 against 0.03.
+  were independent and the mutual information came out near zero whatever the dependence. The new
+  default, ``method="colocated"``, pairs each datum of one variable with the other predicted at its
+  location and weighs the pairs by the partitions, so it reads the variables' own relation, a
+  dependence that is not monotone included. On two variables linked over one half of a region and
+  independent over the other, its ranks follow the true link with a correlation of 0.89, against 0.47
+  before. The former estimate remains as ``method="members"``, now on shared partitions with a
+  permutation correction (``bias_correction=True``).
+- **Widening chosen once per variable** (``FittedModelFactory(widening="auto")`` in ``ess_sample``). The
+  choice between a Gamma and a skew-normal widening was made at each location, by the sign of its
+  members, so a location whose members were all positive, in a variable that also takes negative values,
+  got a sharply peaked Gamma law. ``ess_sample`` and the posterior analysis (``PosteriorAudit``,
+  whose default it is) now decide it once, by the sign of the data.
+- **Spatial entropy by simulation** (``SpatialEntropy(method="ess")``, experimental): the entropy of the
+  law ensemble spatial simulation fits at each location, widened to the spread of the nearest data,
+  which follows the field with an averaging decoder.
 - **Simulation with Gaussian mixtures** (``ess_sample`` with ``point_model_name="emm"`` or ``"vim"``).
   Every location's mixture took the factory's seed, so the draws at all locations shared one random
   stream, and a simulated field followed the cells of the partitions instead of being drawn location

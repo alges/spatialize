@@ -361,7 +361,7 @@ class PosteriorAudit(Summarised):
         self._weights = None
 
     def _widening_targets(self):
-        f = self.fitted_model_factory
+        f = self._resolved_factory()
         if self._targets is None:
             # leave-one-out targets: each datum's k nearest OTHER data, so its own value does not
             # deflate its target
@@ -370,6 +370,16 @@ class PosteriorAudit(Summarised):
                     if f.widening == "skew_normal" else None)
             self._targets = (var, skew)
         return self._targets
+
+    def _resolved_factory(self):
+        """The fitted-model factory with ``widening="auto"`` decided once for the variable, by the sign
+        of its data, as :func:`~spatialize.gs.ess.ess_sample` does."""
+        f = self.fitted_model_factory
+        if f is not None and f.widening == "auto":
+            import copy
+            f = copy.copy(f)
+            f.widening = "gamma" if np.nanmin(self.values) >= 0 else "skew_normal"
+        return f
 
     def model(self, i):
         """The density model of datum ``i``'s law, fitted to its defined members, or None.
@@ -386,7 +396,7 @@ class PosteriorAudit(Summarised):
         """
         if i not in self._models:
             sample = self.members[i][np.isfinite(self.members[i])]
-            f = self.fitted_model_factory
+            f = self._resolved_factory()
             var, skew = self._widening_targets()
             model = None
             if sample.size >= 2:
@@ -463,12 +473,18 @@ class PosteriorAudit(Summarised):
         if self._laws is None:
             from spatialize.empirical import _widen_sample
             var, skew = self._robust_targets() if self.widening else (None, None)
+            # "auto" is decided once for the variable, by the sign of its data on the scale of the
+            # readings, not datum by datum (a datum whose members are all positive, in a variable that
+            # also takes negative values, would get a sharply peaked Gamma law)
+            family = self.widening
+            if family == "auto":
+                family = "gamma" if np.nanmin(self._tvalues) >= 0 else "skew_normal"
             laws = []
             for j in range(len(self.values)):
                 m = self.members[j]
                 x = self._fwd(m[np.isfinite(m)])
                 if self.widening and x.size >= 2 and var[j] > 0:
-                    mode = self.widening
+                    mode = family
                     if mode == "gamma" and np.any(x < 0):
                         mode = "skew_normal"
                     x = _widen_sample(x, mode, var[j], skew[j], np.random.default_rng(self.seed + j))

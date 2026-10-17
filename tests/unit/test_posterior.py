@@ -114,3 +114,17 @@ def test_posterior_audit_shift_is_the_neighbours_mean_signed_position():
     expected = np.array([np.mean(2 * u[[j for j in row if j != i][:3]] - 1) for i, row in enumerate(idx)])
     sh = audit.shift(k=3)
     assert np.allclose(sh, expected) and np.all(np.abs(sh) <= 1)
+
+
+def test_auto_widening_is_decided_once_for_the_variable():
+    """widening="auto" on data of both signs gives every datum the skew-normal widening, even a datum whose
+    members are all positive (it got a sharply peaked Gamma law before)."""
+    from spatialize.gs.spa._main import PosteriorAudit
+    rng = np.random.default_rng(0)
+    points = rng.random((80, 2))
+    values = rng.normal(size=80)
+    members = values[:, None] + rng.normal(0, 0.3, (80, 40))
+    members[0] = np.abs(members[0]) + 0.1                       # one datum whose members are all positive
+    laws = lambda widening: PosteriorAudit(members, points, values, widening=widening, seed=1, calibrate=False)._widened()
+    auto, skew = laws("auto"), laws("skew_normal")
+    assert all(np.allclose(a, b) for a, b in zip(auto, skew))

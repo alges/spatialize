@@ -223,6 +223,8 @@ class SpatialEntropy:
                  local_interpolator="idw",
                  p_process="mondrian",
                  data_cond=True,
+                 method="partition",
+                 widening="auto",
                  **interp_kwargs
                  ):
         """
@@ -256,6 +258,16 @@ class SpatialEntropy:
             cell sizes of the density estimate.
         data_cond : bool, default=True
             For "voronoi", whether the nuclei are drawn among the data or uniformly.
+        method : {"partition", "ess"}, default="partition"
+            How the law at each location is read. ``"partition"`` estimates its density from the
+            members with random partitions of their range (``M``, ``alpha_m``). ``"ess"`` follows
+            ensemble spatial simulation (:func:`~spatialize.gs.ess.ess_sample`): a law fitted to the
+            members at each location, widened to the spread of the nearest data, whose differential
+            entropy is computed (:class:`~spatialize.empirical.EmpiricalModel`). With an averaging
+            decoder the members' spread follows the granularity, so ``"ess"`` is the method whose
+            entropy follows the field.
+        widening : {"auto", "gamma", "skew_normal", False}, default="auto"
+            The widening of ``method="ess"`` (:class:`~spatialize.empirical.FittedModelFactory`).
         **interp_kwargs
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
@@ -286,7 +298,35 @@ class SpatialEntropy:
         self.local_interpolator = local_interpolator
         self.p_process = p_process
         self.data_cond = data_cond
+        if method not in ("partition", "ess"):
+            raise SpatializeError(f"method must be 'partition' or 'ess', got {method!r}")
+        self.method = method
+        self.widening = widening
         self.interp_kwargs = interp_kwargs
+
+    def _ess_entropy(self, points, values, xi, esi_samples):
+        """The differential entropy, in bits, of the widened law fitted to the members at each location
+        (``method="ess"``)."""
+        from spatialize.gs.esi import ESIResult
+        from spatialize.gs.ess import ess_sample
+        from spatialize.empirical import EmpiricalModel, FittedModelFactory
+        with np.errstate(all="ignore"):
+            estimate = np.nanmean(esi_samples, axis=1)
+        result = ESIResult(estimate, esi_samples, xi=np.asarray(xi, dtype=float),
+                           points=np.asarray(points, dtype=float), values=np.asarray(values, dtype=float))
+        log_message(logging.logger.info("simulating the widened local laws"))
+        draws = np.asarray(ess_sample(result, n_sims=self.T, callback=self.callback,
+                                      fitted_model_factory=FittedModelFactory(widening=self.widening, seed=self.seed)).scenarios)
+        draws = draws.reshape(len(xi), -1)
+        entropies = np.full(len(xi), np.nan)
+        self.callback(logging.progress.init(len(xi), 1, desc="entropy"))
+        for i, sample in enumerate(draws):
+            sample = sample[np.isfinite(sample)]
+            if len(sample) >= 2 and np.ptp(sample) > 0:
+                entropies[i] = EmpiricalModel(sample=sample).entropy(base=2)
+            self.callback(logging.progress.inform())
+        self.callback(logging.progress.stop())
+        return entropies
 
     def calculate_entropy(self, points, values, xi):
         """
@@ -336,6 +376,9 @@ class SpatialEntropy:
                                          seed=self.seed, callback=self.callback,
                                          **self.interp_kwargs)
         self.esi_samples = esi_samples
+
+        if self.method == "ess":
+            return self._ess_entropy(points, values, xi, esi_samples)
 
         # Pre-allocate array for efficiency
         entropies = np.zeros(len(xi))
@@ -460,6 +503,8 @@ class SpatialMutualInformation:
                  p_process="mondrian",
                  data_cond=True,
                  bias_correction=True,
+                 method="colocated",
+                 alpha_w=0.8,
                  **interp_kwargs
                  ):
         """
@@ -496,6 +541,22 @@ class SpatialMutualInformation:
             ensembles share their partitions only with nuclei drawn uniformly, so
             ``data_cond=True`` with ``"voronoi"`` gives independent partitions and a mutual
             information near zero; a warning says so.
+        method : {"colocated", "members"}, default="colocated"
+            How the joint law of U and V at a location is read.
+
+            - ``"colocated"`` pairs the two variables where one of them is measured, the datum of one
+              with the other predicted there by its own ensemble, and weighs each pair, for a target,
+              by the share of partitions in which its location and the target share a cell. The
+              mutual information comes from a kernel density of the weighted pairs. The pairs hold
+              the variables' own relation, so independent variables give a mutual information near
+              zero, and a dependence that is not monotone is seen too.
+            - ``"members"`` reads the members of U and of V at the location, drawn on shared
+              partitions, through random partitions of the plane of values (``M``, ``alpha_m``).
+              The members co-vary through the cells they share even when the variables are
+              independent, which biases it upward.
+        alpha_w : float, default=0.8
+            Granularity of the partitions whose cells weigh the pairs (``method="colocated"``):
+            higher values give smaller neighbourhoods.
         bias_correction : bool, default=True
             Subtract, at each location, the mutual information of the same members with those of
             V permuted, which estimates the positive bias of the density estimate under
@@ -532,6 +593,12 @@ class SpatialMutualInformation:
         self.p_process = p_process
         self.data_cond = data_cond
         self.bias_correction = bias_correction
+        if method not in ("colocated", "members"):
+            raise SpatializeError(f"method must be 'colocated' or 'members', got {method!r}")
+        if not 0 <= alpha_w <= 1:
+            raise SpatializeError(f"alpha_w must be in [0, 1], got {alpha_w}")
+        self.method = method
+        self.alpha_w = alpha_w
         self.interp_kwargs = interp_kwargs
 
     def _calculate_marginal_entropy_from_joint(self, partitions_2d, leaf_indexes_2d, marginal='u'):
@@ -642,6 +709,63 @@ class SpatialMutualInformation:
 
         return entropy, partitions, leaf_indexes
 
+    def _colocated_mutual_information(self, points_u, values_u, points_v, values_v, xi):
+        """``method="colocated"``: the mutual information of the weighted co-located pairs."""
+        from scipy.stats import gaussian_kde
+        from spatialize import session
+        points_u, points_v = np.asarray(points_u, dtype=float), np.asarray(points_v, dtype=float)
+        values_u, values_v = np.asarray(values_u, dtype=float), np.asarray(values_v, dtype=float)
+        common = dict(local_interpolator=self.local_interpolator, p_process=self.p_process,
+                      data_cond=self.data_cond, seed=self.seed, callback=self.callback, **self.interp_kwargs)
+
+        # the pairs: each datum with the other variable predicted at its location by its own ensemble
+        log_message(logging.logger.info("predicting each variable at the other's data"))
+        with np.errstate(all="ignore"):
+            v_at_u = np.nanmean(_get_esi_estimates(points_v, values_v, points_u, self.T, self.alpha_t, **common), axis=1)
+            u_at_v = np.nanmean(_get_esi_estimates(points_u, values_u, points_v, self.T, self.alpha_t, **common), axis=1)
+        places = np.vstack([points_u, points_v])
+        pair_u = np.concatenate([values_u, u_at_v])
+        pair_v = np.concatenate([v_at_u, values_v])
+        valid = np.isfinite(pair_u) & np.isfinite(pair_v)
+        places, pair_u, pair_v = places[valid], pair_u[valid], pair_v[valid]
+        self.pairs = np.column_stack([pair_u, pair_v])
+
+        # the weights: which places share a cell with each target, read through the cell means of
+        # random marks at the places (two cells never share a mean); cells without places stay empty
+        log_message(logging.logger.info("weighing the pairs by the partitions"))
+        marks = np.random.default_rng(self.seed).normal(size=len(places))
+        cell_kw = dict(common, local_interpolator=li.CELLMEAN)
+        for name in decoder_arguments(self.local_interpolator):
+            cell_kw.pop(name, None)
+        with session.override(empty_cells="nan"):
+            cells = _get_esi_estimates(places, marks, np.vstack([xi, places]), self.T, self.alpha_w, **cell_kw)
+        at_targets, at_places = cells[:len(xi)], cells[len(xi):]
+
+        def weighted_mi(u, v, w):
+            keep = w > 0
+            if keep.sum() < 10:
+                return np.nan
+            u, v, w = u[keep], v[keep], w[keep] / w[keep].sum()
+            try:
+                uv = np.vstack([u, v])
+                joint, fu, fv = gaussian_kde(uv, weights=w), gaussian_kde(u, weights=w), gaussian_kde(v, weights=w)
+                return float(np.sum(w * np.log2(joint(uv) / (fu(u) * fv(v)))))
+            except (np.linalg.LinAlgError, ValueError):
+                return np.nan
+
+        mutual_information = np.full(len(xi), np.nan)
+        self.callback(logging.progress.init(len(xi), 1, desc="mutual information"))
+        for i in range(len(xi)):
+            weights = np.mean(at_targets[i][None, :] == at_places, axis=1)    # NaN never equals NaN
+            mi = weighted_mi(pair_u, pair_v, weights)
+            if self.bias_correction and np.isfinite(mi):
+                mi -= weighted_mi(pair_u, np.random.default_rng(self.seed + i).permutation(pair_v), weights)
+            mutual_information[i] = mi
+            self.callback(logging.progress.inform())
+        self.callback(logging.progress.stop())
+        self.entropies_u = self.entropies_v = self.entropies_joint = None
+        return mutual_information
+
     def calculate_mutual_information(self,
                                      points_u, values_u,
                                      points_v, values_v,
@@ -694,6 +818,9 @@ class SpatialMutualInformation:
             raise SpatializeError("xi must contain at least one target location")
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable U using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
+
+        if self.method == "colocated":
+            return self._colocated_mutual_information(points_u, values_u, points_v, values_v, xi)
 
         # The two ensembles must share their partitions: the members of U and of V at a location
         # co-vary through the cells they share, which is what the mutual information reads (with

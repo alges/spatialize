@@ -115,6 +115,7 @@ class ESSResult(Summarised):
             return plot_colormap_array(self.scenarios, n_imgs=n_imgs,
                                        n_cols=n_cols, norm_lims=norm_lims,
                                        xi_locations=self.esi_result._xi,
+                                       griddata=self.esi_result.griddata,
                                        reference_map=self.esi_result.estimation(),
                                        title_prefix=title_prefix,
                                        title=title,

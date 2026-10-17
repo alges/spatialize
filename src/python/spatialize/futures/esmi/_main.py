@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from spatialize import SpatializeError, logging
-from spatialize.gs import lib_spatialize_facade, local_interpolator as li, with_more_decoders, decoder_arguments
+from spatialize.gs import lib_spatialize_facade, local_interpolator as li, partitioning_process as pp, with_more_decoders, decoder_arguments
 from spatialize._util import signature_overload
 from spatialize.logging import log_message, default_singleton_callback
 from spatialize.futures import _experimental
@@ -459,6 +459,7 @@ class SpatialMutualInformation:
                  local_interpolator="idw",
                  p_process="mondrian",
                  data_cond=True,
+                 bias_correction=True,
                  **interp_kwargs
                  ):
         """
@@ -491,7 +492,15 @@ class SpatialMutualInformation:
             The value range is always partitioned with Mondrian trees, whose boxes give the
             cell sizes of the density estimate.
         data_cond : bool, default=True
-            For "voronoi", whether the nuclei are drawn among the data or uniformly.
+            For "voronoi", whether the nuclei are drawn among the data or uniformly. The two
+            ensembles share their partitions only with nuclei drawn uniformly, so
+            ``data_cond=True`` with ``"voronoi"`` gives independent partitions and a mutual
+            information near zero; a warning says so.
+        bias_correction : bool, default=True
+            Subtract, at each location, the mutual information of the same members with those of
+            V permuted, which estimates the positive bias of the density estimate under
+            independence. Without it the estimate is positive even where U and V are independent,
+            the more so the finer the value partition (larger ``alpha_m``).
         **interp_kwargs
             Interpolator-specific parameters:
             - IDW: exponent (float, default=3.0)
@@ -522,6 +531,7 @@ class SpatialMutualInformation:
         self.local_interpolator = local_interpolator
         self.p_process = p_process
         self.data_cond = data_cond
+        self.bias_correction = bias_correction
         self.interp_kwargs = interp_kwargs
 
     def _calculate_marginal_entropy_from_joint(self, partitions_2d, leaf_indexes_2d, marginal='u'):
@@ -685,23 +695,45 @@ class SpatialMutualInformation:
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable U using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
+        # The two ensembles must share their partitions: the members of U and of V at a location
+        # co-vary through the cells they share, which is what the mutual information reads (with
+        # partitions drawn independently, as before version 1.3, it came out near zero whatever the
+        # dependence). The partitions are drawn on the box of the data and the queries, so both
+        # runs get the queries plus the corners of the joint box, the same seed, and, for the
+        # theory's Mondrian process, whose rate follows the sides of each data set's box, the
+        # granularity that gives V the rate of U.
+        points_u, points_v = np.asarray(points_u, dtype=float), np.asarray(points_v, dtype=float)
+        lo = np.minimum.reduce([points_u.min(axis=0), points_v.min(axis=0), xi.min(axis=0)])
+        hi = np.maximum.reduce([points_u.max(axis=0), points_v.max(axis=0), xi.max(axis=0)])
+        queries = np.vstack([xi, lo, hi])
+        alpha_u = alpha_v = self.alpha_t
+        if self.p_process == pp.MONDRIAN:
+            side_sum = lambda p: float(np.ptp(p, axis=0).sum())
+            alpha_v = 1.0 - side_sum(points_u) * (1.0 - self.alpha_t) / side_sum(points_v)
+            alpha_v = min(max(alpha_v, 0.0), 0.999999)
+        if self.p_process == pp.VORONOI and self.data_cond:
+            log_message(logging.logger.warning("the nuclei of data-conditioned Voronoi partitions differ "
+                                               "between U and V, so the two ensembles share no partitions "
+                                               "and their mutual information is near zero; use data_cond=False"))
+
         log_message(logging.logger.info("generating ESI samples for U"))
         # Get ESI estimates for both variables at all target locations (progress tracked by C++ code)
-        estimates_u = _get_esi_estimates(points_u, values_u, xi, self.T, self.alpha_t,
+        estimates_u = _get_esi_estimates(points_u, values_u, queries, self.T, alpha_u,
                                          local_interpolator=self.local_interpolator,
                                          p_process=self.p_process, data_cond=self.data_cond,
                                          seed=self.seed, callback=self.callback,
                                          **self.interp_kwargs)
-        self.esi_samples_u = estimates_u
 
         log_message(logging.logger.debug(f'generating {self.T} ESI samples for variable V using alpha_t={self.alpha_t}, local_interpolator={self.local_interpolator}'))
 
         log_message(logging.logger.info("generating ESI samples for V"))
-        estimates_v = _get_esi_estimates(points_v, values_v, xi, self.T, self.alpha_t,
+        estimates_v = _get_esi_estimates(points_v, values_v, queries, self.T, alpha_v,
                                          local_interpolator=self.local_interpolator,
                                          p_process=self.p_process, data_cond=self.data_cond,
-                                         seed=self.seed + 1, callback=self.callback,
+                                         seed=self.seed, callback=self.callback,
                                          **self.interp_kwargs)
+        estimates_u, estimates_v = estimates_u[:len(xi)], estimates_v[:len(xi)]
+        self.esi_samples_u = estimates_u
         self.esi_samples_v = estimates_v
 
         # Pre-allocate arrays for efficiency
@@ -754,6 +786,12 @@ class SpatialMutualInformation:
 
             # Calculate mutual information
             mi = h_u + h_v - h_uv
+            if self.bias_correction:
+                # the same estimate with V's members permuted, where U and V are independent
+                shuffled = np.random.default_rng(location_seed).permutation(est_v)
+                h_uv0, parts0, leaves0 = self._calculate_joint_entropy(est_u, shuffled, location_seed)
+                mi -= (self._calculate_marginal_entropy_from_joint(parts0, leaves0, marginal='u') +
+                       self._calculate_marginal_entropy_from_joint(parts0, leaves0, marginal='v') - h_uv0)
             mutual_information[i] = mi
 
             # Update progress

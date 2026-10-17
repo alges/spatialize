@@ -130,6 +130,14 @@ New
 - **``post_creation`` only on cells with data.** A decoder written in Python had its
   ``post_creation`` called on the cells without data too, so a fit dividing by the number of data
   failed on fine partitions. It now sees only cells with data, as the developer guide says.
+- **Saving a result on a grid.** ``save_result`` wrote the estimate of a gridded result as a table with
+  one column per grid row under a single header, and failed. It now writes the estimate and the
+  locations flat, and ``load_result`` rebuilds the grid.
+- **The quick plot of simulations on a grid.** ``ESSResult.quick_plot`` drew the fields of a gridded
+  result as points with coordinates taken from the grid array itself, and failed. It now draws them on
+  the grid.
+- **plot_nongriddata without xarray.** It laid the values on their lattice through xarray, which
+  Spatialize does not depend on, so it failed in a plain installation. It now uses NumPy.
 - **Scores by name in the Pareto search.** ``esi_pareto_hparams_search`` took ``scoring="nll"``,
   ``"crps"``, ``"rmse"`` or ``"mae"`` in its documentation only, failing on any name. It now takes them.
 - **Locations without members.** Under ``empty_cells="nan"`` a location far from the data can have no
@@ -173,6 +181,12 @@ Results that change
   normal law of unit spread whose entropy is 1.42. It is now the differential entropy, negative for a
   law narrower than a unit interval. The two entropy intervals keep their intervals, chosen by shares
   of the entropy of the law on its support grid, and report differential entropies.
+- **Spatial mutual information** (``spatialize.futures.esmi.SpatialMutualInformation``,
+  experimental). The ensembles of the two variables were drawn with different seeds, so their members
+  were independent and the mutual information came out near zero whatever the dependence. They now
+  share their partitions, and the estimate subtracts the mutual information of a permutation, its
+  bias under independence (``bias_correction=True``). On two variables linked over one half of a region
+  and independent over the other, the estimate went from 0.03 on both halves to 0.12 against 0.03.
 - **Simulation with Gaussian mixtures** (``ess_sample`` with ``point_model_name="emm"`` or ``"vim"``).
   Every location's mixture took the factory's seed, so the draws at all locations shared one random
   stream, and a simulated field followed the cells of the partitions instead of being drawn location

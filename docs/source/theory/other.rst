@@ -40,6 +40,16 @@ value and are left out, the shares :math:`p_c` being taken over the valid member
 fewer than two valid members gets no entropy (NaN). For the mutual information, a pair counts only
 when both of its members are valid.
 
+The members of :math:`U` and of :math:`V` at a location co-vary through the cells they share, so the
+two ensembles are drawn on the same partitions, with one seed, one box holding both data sets and the
+queries, and, for the Mondrian process, the granularity that gives both the same rate. With partitions
+drawn independently the members would be independent whatever the dependence of the variables, and
+the mutual information near zero. Voronoi partitions with nuclei among the data cannot be shared, so
+they need ``data_cond=False``. A density estimated from a finite number of members puts a positive
+mutual information even on independent variables, the more so the finer the partition of the values,
+so the estimate subtracts, at each location, the mutual information of the same members with those of
+:math:`V` permuted.
+
 In Spatialize
 =============
 

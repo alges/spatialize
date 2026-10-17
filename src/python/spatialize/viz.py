@@ -997,7 +997,7 @@ def plot_colormap_data(data, ax=None, w=None, h=None, xi_locations=None, griddat
 
 def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=None,
                         reference_map=None, title=None, title_prefix="scenario", seed=None,
-                        figsize=(10, 10), dpi=120, **imshow_args):
+                        figsize=(10, 10), dpi=120, griddata=False, **imshow_args):
     """
     Plot a grid of colormap visualizations for a random subset of data columns.
 
@@ -1036,6 +1036,9 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
         Figure size ``(width, height)`` in inches. Default is ``(10, 10)``.
     dpi : int, optional
         Figure resolution in dots-per-inch. Default is ``120``.
+    griddata : bool, optional
+        Whether the fields come from a grid: each column of `data` is then laid back on the shape of
+        `xi_locations` (the grid of ``np.mgrid``). Default is False.
     **imshow_args
         Additional keyword arguments forwarded to :func:`plot_colormap_data`
         (and thus to :func:`matplotlib.pyplot.imshow`), e.g. ``cmap``.
@@ -1098,9 +1101,12 @@ def plot_colormap_array(data, n_imgs=9, n_cols=3, norm_lims=False, xi_locations=
             if isinstance(subplots_result, np.ndarray)
             else np.array([subplots_result]))
 
+    # each column is one field, flat; on a grid it is laid back on the grid's shape
+    grid_shape = np.asarray(xi_locations[0]).shape if griddata else None
     for i in range(n_imgs):
-        plot_colormap_data(data[:, sim_idx[i]], ax=axes[i],
-                        xi_locations=xi_locations,
+        field = data[:, sim_idx[i]]
+        plot_colormap_data(field.reshape(grid_shape) if griddata else field, ax=axes[i],
+                        xi_locations=xi_locations, griddata=griddata,
                         **plot_imshow_args)
         axes[i].set_title(f"{title_prefix} {sim_idx[i] + 1}")
 
@@ -1124,9 +1130,10 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
     Plots a colormap visualization for non-rectangular/irregular spatial data.
 
     This function handles spatial data that doesn't form a complete rectangular grid,
-    such as irregularly shaped study areas (e.g., lakes, watersheds). It uses xarray
-    to organize scattered points into a plottable format, automatically handling gaps
-    in the spatial domain.
+    such as irregularly shaped study areas (e.g., lakes, watersheds): the locations
+    are nodes of a regular lattice covering only part of its rectangle. They are laid
+    on the lattice of their distinct coordinates, the nodes outside the area left
+    empty.
 
     Parameters
     ----------
@@ -1195,13 +1202,12 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
             f"data length ({len(data)}) must match xi_locations length ({len(xi_locations)})"
         )
 
-    # Create DataFrame with spatial coordinates and values
-    results = pd.DataFrame(xi_locations, columns=['X', 'Y'])
-    results['est'] = data
-
-    # Convert to xarray using X, Y as index dimensions
-    # This automatically handles irregular/sparse grids
-    results_array = results.set_index(['X', 'Y']).to_xarray()
+    # The lattice of the distinct coordinates, [x, y], NaN at the nodes without a value (until
+    # version 1.3 this went through xarray, which Spatialize does not depend on)
+    xs, ix = np.unique(np.asarray(xi_locations)[:, 0], return_inverse=True)
+    ys, iy = np.unique(np.asarray(xi_locations)[:, 1], return_inverse=True)
+    lattice = np.full((len(xs), len(ys)), np.nan)
+    lattice[ix, iy] = data
 
     # Create or use provided axes
     fig_created = False
@@ -1214,10 +1220,8 @@ def plot_nongriddata(data, xi_locations, ax=None, title="",
         plotter.set_title(title)
         fig_created = True
 
-    # Plot the data
-    # xarray creates array with dimensions (X, Y), but imshow expects (Y, X)
-    # Transpose to swap dimensions; origin parameter controls Y-axis direction
-    img = plotter.imshow(results_array.est.T, origin=origin, **imshow_args)
+    # Plot the data: the lattice is [x, y], imshow expects [y, x]; origin sets the direction of y
+    img = plotter.imshow(lattice.T, origin=origin, **imshow_args)
 
     # Add colorbar
     if show_colorbar:

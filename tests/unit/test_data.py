@@ -86,3 +86,26 @@ def test_precipitation_maipo_loads_the_gauges_and_the_basin():
     for day in days:
         rain = samples[day].dropna()
         assert (rain >= 0).all() and 0 < (rain == 0).mean() < 0.5
+
+
+def test_a_gridded_result_saves_and_loads_unchanged(tmp_path):
+    """A result on a grid, with its simulations, comes back from disk unchanged (save_result wrote the
+    grid as one column and failed before version 1.3)."""
+    import spatialize
+    from spatialize.data import save_result, load_result
+    from spatialize.empirical import FittedModelFactory
+    from spatialize.gs.esi import esi_griddata
+    from spatialize.gs.ess import ess_sample
+    from spatialize.logging import singleton_null_callback as quiet
+    rng = np.random.default_rng(0)
+    points, values = rng.random((60, 2)) * 9, rng.normal(size=60)
+    xi = np.mgrid[0:10, 0:12].astype(float)
+    result = esi_griddata(points, values, xi, local_interpolator="idw", exponent=2.0, n_partitions=20, alpha=0.8, seed=0)
+    simulation = ess_sample(result, n_sims=4, fitted_model_factory=FittedModelFactory(seed=0), callback=quiet)
+    save_result(str(tmp_path), result)
+    save_result(str(tmp_path), simulation)
+    loaded = load_result(str(tmp_path), just_esi_result=True)
+    assert loaded.estimation().shape == (10, 12)
+    assert np.allclose(loaded.estimation(), result.estimation(), equal_nan=True)
+    assert np.allclose(loaded.esi_samples(), result.esi_samples(), equal_nan=True)
+    assert np.allclose(load_result(str(tmp_path))[0].scenarios, simulation.scenarios)

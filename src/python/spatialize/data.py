@@ -9,6 +9,7 @@ from spatialize import EstimationResult, logging, SpatializeError, session
 from spatialize.gs.esi import ESIResult
 from spatialize.gs.ess import ESSResult
 from spatialize.logging import log_message
+from spatialize._math_util import flatten_grid_data
 from spatialize.resources import data
 
 
@@ -64,9 +65,11 @@ def load_result(result_dir_path, just_esi_result=False, simulation_desc=None):
     fn = os.path.join(result_dir_path, meta_data['estimation'])
     estimation = pd.read_csv(fn).values.reshape(-1)
 
-    # load the xi locations
+    # load the xi locations; a gridded result gets back its grid, one array per coordinate
     fn = os.path.join(result_dir_path, meta_data['xi'])
     xi = pd.read_csv(fn).values
+    if meta_data['griddata']:
+        xi = np.stack([xi[:, k].reshape(meta_data['original_shape']) for k in range(xi.shape[1])])
 
     # load the observed points/values used to build the result, if this directory was
     # saved by a version of spatialize that persisted them (needed to calibrate ensemble
@@ -193,15 +196,16 @@ def save_result(result_dir_path, result):
         "xi": "locations.csv"
     })
 
-    # save the estimation
+    # save the estimation, flat (a gridded result is rebuilt from original_shape on loading)
     fn = os.path.join(result_dir_path, meta_data['estimation'])
     columns = ["estimation"]
-    pd.DataFrame(est_result.estimation()).to_csv(fn, index=False, header=columns)
+    pd.DataFrame(np.asarray(est_result.estimation()).reshape(-1)).to_csv(fn, index=False, header=columns)
 
-    # save the xi locations
+    # save the xi locations, one row per location and one column per coordinate
     fn = os.path.join(result_dir_path, meta_data['xi'])
-    columns = ["x", "y"]
-    pd.DataFrame(est_result._xi).to_csv(fn, index=False, header=columns)
+    xi_flat = flatten_grid_data(est_result._xi)[0] if est_result.griddata else np.asarray(est_result._xi)
+    columns = ["x", "y", "z", "t"][:xi_flat.shape[1]]
+    pd.DataFrame(xi_flat).to_csv(fn, index=False, header=columns)
 
     # save the observed points/values used to build the result, if available (needed to
     # calibrate ensemble widening after reload)

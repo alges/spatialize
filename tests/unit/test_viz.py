@@ -21,3 +21,37 @@ def test_scattered_values_become_an_image_whatever_their_order():
     assert _as_image(z[:-1], 7, 2, xi[:-1]).shape == (2, 7)           # w and h reshape it as given
     with pytest.raises(SpatializeError):
         _as_image(z, 4, 4)
+
+
+def test_plot_nongriddata_lays_values_on_their_lattice():
+    """Locations on part of a lattice land on their nodes, the others left empty, without xarray."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from spatialize.viz import plot_nongriddata
+    locations = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 1.0]])
+    fig, ax = plt.subplots()
+    plot_nongriddata(np.array([1.0, 2.0, 3.0, 4.0]), locations, ax=ax, show_colorbar=False)
+    image = np.ma.filled(ax.images[0].get_array().astype(float), np.nan)     # [y, x]
+    expected = np.array([[1.0, 2.0, np.nan], [3.0, np.nan, 4.0]])
+    assert np.array_equal(image, expected, equal_nan=True)
+    plt.close(fig)
+
+
+def test_quick_plot_of_simulations_on_a_grid():
+    """The simulated fields of a gridded result are drawn on the grid (they were drawn as points with
+    coordinates taken from the grid itself, and failed, before version 1.3)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from spatialize.empirical import FittedModelFactory
+    from spatialize.gs.esi import esi_griddata
+    from spatialize.gs.ess import ess_sample
+    from spatialize.logging import singleton_null_callback as quiet
+    rng = np.random.default_rng(0)
+    xi = np.mgrid[0:10, 0:12].astype(float)
+    result = esi_griddata(rng.random((60, 2)) * 9, rng.normal(size=60), xi, local_interpolator="idw", exponent=2.0,
+                          n_partitions=20, alpha=0.8, seed=0)
+    ess_sample(result, n_sims=4, fitted_model_factory=FittedModelFactory(seed=0), callback=quiet).quick_plot(n_imgs=4, n_cols=2)
+    assert plt.gcf().axes[0].images[0].get_array().shape == (12, 10)
+    plt.close("all")

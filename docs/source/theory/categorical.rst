@@ -53,6 +53,20 @@ a cell with data, one per cell, and under ``"coarsen"`` the classifier of the ne
 data predicts it (:doc:`blockmark`). The hyperparameter search reports the share of the data left
 without a category, and warns above the session's ``max_left_out``.
 
+What categories cannot fix
+--------------------------
+
+In the block-mark model (:doc:`blockmark`) a field is a random partition of the domain into blocks with
+one value drawn independently in each. With continuous values, two locations show the same value only if
+they share a block, so the values record how the partition groups the locations. A category takes few
+values, and separate blocks often draw the same one, so two locations with the same category may share a
+block or lie in two. The law of two categories fixes how often pairs and triples of locations share a
+block, never how often four or more do. Two random groupings that put pairs and triples together equally
+often, one sometimes joining four locations into one block and the other never, give the categories
+exactly the same law. Each further category recovers only a few more orders. Categorical data therefore
+cannot fix the shapes of the units beyond pairs and triples. The partitions and the classifier supply
+that structure, and the disagreement among the members measures the freedom it leaves.
+
 The classifiers
 ===============
 

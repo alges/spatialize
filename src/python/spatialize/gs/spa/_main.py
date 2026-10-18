@@ -197,8 +197,8 @@ def _fit_spread(laws, values, target=0.9):
 
 
 def _kernel(tails, nu):
-    """The kernel of the densities the readings use: Student-t of ``nu`` degrees of freedom, or Gaussian
-    (``"normal"``, and ``"gpd"``, whose densities keep Gaussian kernels)."""
+    """The kernel of the kernel densities: Student-t of ``nu`` degrees of freedom, or Gaussian (``"normal"``,
+    and ``"gpd"``, whose spliced laws have a Gaussian kernel density between their thresholds)."""
     from scipy.stats import norm, t as student
     return (norm, ()) if tails in ("normal", "gpd") else (student, (nu,))
 
@@ -222,6 +222,8 @@ def _tail_readings(laws, values, tails, nu, q=0.9, seed=0):
     from scipy.special import logsumexp
     from scipy.stats import genpareto
     from spatialize.empirical import silverman_bandwidth
+    if tails == "gpd":
+        return _gpd_readings(laws, values, q, seed)
     n = len(values)
     logf, ent, var, below, above = (np.full(n, np.nan) for _ in range(5))
     kernel = _kernel(tails, nu)
@@ -238,35 +240,137 @@ def _tail_readings(laws, values, tails, nu, q=0.9, seed=0):
         uz = (z - x) / h
         below[i] = float(np.exp(logsumexp(kernel[0].logcdf(uz, *kernel[1])) - np.log(x.size)))
         above[i] = float(np.exp(logsumexp(kernel[0].logsf(uz, *kernel[1])) - np.log(x.size)))
-    if tails == "gpd":
-        # pooled generalized Pareto tails over the laws standardised by median and IQR
-        std, ex_hi, ex_lo = [], [], []
-        for x in laws:
-            if x.size < 2:
-                std.append(None)
-                continue
-            m = np.median(x)
-            sc = float(np.subtract(*np.percentile(x, [75, 25]))) or float(np.std(x)) or 1.0
-            w = (x - m) / sc
-            uh, ul = np.quantile(w, q), np.quantile(w, 1 - q)
-            std.append((m, sc, w, uh, ul))
-            ex_hi += list(w[w > uh] - uh)
-            ex_lo += list(ul - w[w < ul])
-        fit_hi = genpareto.fit(ex_hi, floc=0) if len(ex_hi) > 10 else None
-        fit_lo = genpareto.fit(ex_lo, floc=0) if len(ex_lo) > 10 else None
-        for i, (st, z) in enumerate(zip(std, values)):
-            if st is None:
-                continue
-            m, sc, w, uh, ul = st
-            xz = (z - m) / sc
-            if xz > uh and fit_hi is not None:
-                above[i] = (1 - q) * float(genpareto.sf(xz - uh, *fit_hi))
-            else:
-                above[i] = float(np.mean(w >= xz))
-            if xz < ul and fit_lo is not None:
-                below[i] = (1 - q) * float(genpareto.sf(ul - xz, *fit_lo))
-            else:
-                below[i] = float(np.mean(w <= xz))
+    return logf, ent, var, below, above
+
+
+def _gpd_logpdf(e, shape, scale):
+    """The log density of a generalized Pareto law at the excesses ``e`` ≥ 0 (-inf beyond a bounded
+    support)."""
+    if abs(shape) < 1e-12:
+        return -np.log(scale) - e / scale
+    t = 1.0 + shape * e / scale
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(t > 0, -np.log(scale) - (1.0 + 1.0 / shape) * np.log(np.where(t > 0, t, 1.0)), -np.inf)
+
+
+def _gpd_sf(e, shape, scale):
+    """The survival function of a generalized Pareto law at the excess ``e`` ≥ 0."""
+    if abs(shape) < 1e-12:
+        return float(np.exp(-e / scale))
+    t = 1.0 + shape * e / scale
+    return float(t ** (-1.0 / shape)) if t > 0 else 0.0
+
+
+def _gpd_rvs(size, shape, scale, rng):
+    """``size`` draws of a generalized Pareto law, by inversion."""
+    u = rng.random(size)
+    if abs(shape) < 1e-12:
+        return -scale * np.log1p(-u)
+    return scale / shape * ((1.0 - u) ** (-shape) - 1.0)
+
+
+class _SplicedLaw:
+    """A law spliced from the Gaussian kernel density of a sample between its quantiles 1 - q and q,
+    holding the probability 2q - 1, and a generalized Pareto law beyond each of them, holding 1 - q,
+    all on the sample standardised by its median ``m`` and scale ``sc`` (``tails="gpd"``). ``hi`` and
+    ``lo`` are the (shape, location, scale) of the Pareto law of each side, location 0."""
+
+    _LOG_SQRT_2PI = 0.5 * np.log(2 * np.pi)
+
+    def __init__(self, x, m, sc, q, hi, lo):
+        from scipy.special import ndtr
+        from spatialize.empirical import silverman_bandwidth
+        self.m, self.sc = m, sc
+        self.hi, self.lo = (hi[0], hi[2]), (lo[0], lo[2])
+        self.w = (x - m) / sc
+        self.uh, self.ul = np.quantile(self.w, q), np.quantile(self.w, 1 - q)
+        self.tail, self.body = 1.0 - q, 2.0 * q - 1.0
+        self.h = silverman_bandwidth(self.w)
+        self.k_lo, self.k_hi = (float(np.mean(ndtr((t - self.w) / self.h))) for t in (self.ul, self.uh))
+        self.mass = max(self.k_hi - self.k_lo, np.finfo(float).tiny)   # the kernel density's mass in the body
+
+    def logpdf(self, z):
+        from scipy.special import logsumexp
+        y = (np.atleast_1d(np.asarray(z, dtype=float)) - self.m) / self.sc
+        out = np.empty(y.size)
+        up, down = y > self.uh, y < self.ul
+        mid = ~(up | down)
+        out[up] = np.log(self.tail) + _gpd_logpdf(y[up] - self.uh, *self.hi)
+        out[down] = np.log(self.tail) + _gpd_logpdf(self.ul - y[down], *self.lo)
+        if mid.any():
+            u = (y[mid, None] - self.w[None, :]) / self.h
+            out[mid] = (np.log(self.body / self.mass) - np.log(self.w.size * self.h) - self._LOG_SQRT_2PI
+                        + logsumexp(-0.5 * u * u, axis=1))
+        return out - np.log(self.sc)
+
+    def below_above(self, z):
+        """The probabilities of the law below and above ``z``, each computed on its own side so that a
+        small one keeps its precision."""
+        from scipy.special import ndtr
+        y = (float(z) - self.m) / self.sc
+        if y > self.uh:
+            above = self.tail * _gpd_sf(y - self.uh, *self.hi)
+            return 1.0 - above, above
+        if y < self.ul:
+            below = self.tail * _gpd_sf(self.ul - y, *self.lo)
+            return below, 1.0 - below
+        below = self.tail + self.body * (float(np.mean(ndtr((y - self.w) / self.h))) - self.k_lo) / self.mass
+        return below, 1.0 - below
+
+    def rvs(self, size, rng):
+        """``size`` draws: each side's share from its Pareto law, the body from the kernel density kept
+        between the thresholds."""
+        n_up, n_down, n_mid = rng.multinomial(size, [self.tail, self.tail, self.body])
+        mid = np.empty(0)
+        while mid.size < n_mid:
+            k = 2 * (n_mid - mid.size) + 8
+            c = self.w[rng.integers(self.w.size, size=k)] + self.h * rng.standard_normal(k)
+            mid = np.concatenate([mid, c[(c >= self.ul) & (c <= self.uh)]])
+        y = np.concatenate([self.uh + _gpd_rvs(n_up, *self.hi, rng), self.ul - _gpd_rvs(n_down, *self.lo, rng),
+                            mid[:n_mid]])
+        return self.m + self.sc * rng.permutation(y)
+
+
+def _spliced_laws(laws, q=0.9):
+    """The spliced law of every sample of ``laws`` (None for fewer than two values), with the shape and
+    scale of each Pareto side pooled over all the samples standardised by their median and interquartile
+    range, or None when too few values lie beyond the thresholds to fit them."""
+    from scipy.stats import genpareto
+    std, ex_hi, ex_lo = [], [], []
+    for x in laws:
+        if x.size < 2:
+            std.append(None)
+            continue
+        m = np.median(x)
+        sc = float(np.subtract(*np.percentile(x, [75, 25]))) or float(np.std(x)) or 1.0
+        w = (x - m) / sc
+        uh, ul = np.quantile(w, q), np.quantile(w, 1 - q)
+        std.append((m, sc))
+        ex_hi += list(w[w > uh] - uh)
+        ex_lo += list(ul - w[w < ul])
+    if len(ex_hi) <= 10 or len(ex_lo) <= 10:
+        return None
+    hi, lo = genpareto.fit(ex_hi, floc=0), genpareto.fit(ex_lo, floc=0)
+    return [None if st is None else _SplicedLaw(x, st[0], st[1], q, hi, lo) for x, st in zip(laws, std)]
+
+
+def _gpd_readings(laws, values, q=0.9, seed=0):
+    """The readings of ``_tail_readings`` under ``tails="gpd"``, on the spliced law of each datum
+    (:class:`_SplicedLaw`): every reading, the probabilities, the log score and the entropy, of one law."""
+    spliced = _spliced_laws(laws, q)
+    if spliced is None:
+        log_message(logging.logger.warning(
+            "too few values beyond the thresholds to fit the generalized Pareto tails; the laws are read "
+            "with Gaussian kernels instead"))
+        return _tail_readings(laws, values, "normal", None, q, seed)
+    n = len(values)
+    logf, ent, var, below, above = (np.full(n, np.nan) for _ in range(5))
+    for i, (law, z) in enumerate(zip(spliced, values)):
+        if law is None:
+            continue
+        logs = law.logpdf(law.rvs(law.w.size, np.random.default_rng(seed + i)))
+        logf[i], ent[i], var[i] = float(law.logpdf(z)[0]), -float(np.mean(logs)), float(np.var(logs))
+        below[i], above[i] = law.below_above(z)
     return logf, ent, var, below, above
 
 
@@ -317,11 +421,13 @@ class PosteriorAudit(Summarised):
         of the data lie inside the central 90 % interval of their law (:attr:`spread_factor`).
         Default: True.
     tails : {"t", "gpd", "normal"}, optional
-        The model of the law beyond its sample, for the p-values and the log scores. ``"t"``, a
-        kernel density with Student-t kernels of ``nu`` degrees of freedom; ``"gpd"``, generalized
-        Pareto tails beyond the 10 % and 90 % quantiles of each law, with one shape and scale per
-        side pooled over all the laws standardised by their median and interquartile range;
-        ``"normal"``, a kernel density with Gaussian kernels. Default: ``"t"``.
+        The model of the law beyond its sample, for every reading (positions, p-values, log scores,
+        entropies). ``"t"``, a kernel density with Student-t kernels of ``nu`` degrees of freedom;
+        ``"gpd"``, a law spliced from a Gaussian kernel density between the 10 % and 90 % quantiles
+        of the sample, holding 80 % of the probability, and generalized Pareto tails beyond them,
+        holding 10 % each, with one shape and scale per side pooled over all the laws standardised
+        by their median and interquartile range; ``"normal"``, a kernel density with Gaussian
+        kernels. Default: ``"t"``.
     nu : float, optional
         The degrees of freedom of the Student-t kernels. Default: 3.
     cells : callable, optional
@@ -656,7 +762,7 @@ class PosteriorAudit(Summarised):
         pandas.DataFrame
             ``value``; ``pit`` (:meth:`pit`); ``tail_p`` (:meth:`tail_p`); ``flag`` (:meth:`flags`);
             ``level`` (:meth:`levels`); ``surprisal``, the log score :math:`-\log \hat f_{-i}(z_i)`
-            of the datum under its law (the density of :meth:`law` with the kernels of ``tails``);
+            of the datum under its law (the density of :meth:`law` under the tail model ``tails``);
             ``entropy``, the entropy of that density, the expected log score of a value drawn from
             it, so that ``excess`` = ``surprisal`` − ``entropy`` has mean 0 for a datum drawn from
             its law (:meth:`calibration`, ``information``); ``width90``, the width of the central 90 % interval of
@@ -859,7 +965,7 @@ class PosteriorAudit(Summarised):
             (as in :meth:`table`); ``gain``, the entropy of the distribution of all the data minus
             that of the law, the information the other data give about the datum, in the units of
             ``base``. The entropy of the distribution of all the data, read as a kernel density of
-            the values with the kernels of ``tails``, is in ``attrs["prior_entropy"]``.
+            the values with the kernels of ``tails`` (Gaussian under ``"gpd"``), is in ``attrs["prior_entropy"]``.
 
         Notes
         -----
@@ -937,9 +1043,11 @@ class PosteriorAudit(Summarised):
             intervals of probability below 0.9. With ``information``, also ``information``, a dict
             with ``mean_excess``, the mean over the data of the excess surprise (the ``excess``
             column of :meth:`table`), its standard error under calibration ``se``, ``z`` =
-            mean_excess/se, ``n``, ``base`` and ``verdict``: ``"calibrated"``, ``"too narrow or
-            off-centre"`` (z above 3) or ``"too wide"`` (z below −3), logged as a warning when not
-            calibrated.
+            mean_excess/se, ``n``, the data it averages, ``outside_support``, the data where their
+            law has no density (possible only beyond the end of a bounded Pareto tail,
+            ``tails="gpd"``), left out of the mean, ``base`` and ``verdict``: ``"calibrated"``,
+            ``"too narrow or off-centre"`` (z above 3, or some datum outside the support of its law)
+            or ``"too wide"`` (z below −3), logged as a warning when not calibrated.
 
         Notes
         -----
@@ -967,7 +1075,9 @@ class PosteriorAudit(Summarised):
         can carry the mean on their own, their excess growing with the distance to the law (slowly
         with the Student-t kernels, as the square of the distance with the Gaussian ones): the
         ``excess`` column of :meth:`table` tells whether the mean comes from the bulk of the data or
-        from a few of them.
+        from a few of them. Every ``tails`` reads the check on the law its p-values use; under
+        ``"gpd"`` that law is spliced from a Gaussian kernel density between the 10 % and 90 %
+        quantiles of the sample and the pooled generalized Pareto tails beyond them.
         """
         from scipy import stats
         pit = self.pit()
@@ -1011,19 +1121,24 @@ class PosteriorAudit(Summarised):
         logf, ent, var, _, _ = self._kde()
         draws = np.array([self.law(i).size for i in range(len(self.values))], dtype=float)
         ok = np.isfinite(logf) & np.isfinite(ent) & np.isfinite(var)
+        # a datum where its law has no density (beyond the end of a bounded Pareto tail) is impossible
+        # under it: counted apart, since its excess is infinite
+        outside = int(np.sum(np.isneginf(logf) & np.isfinite(ent)))
         n, nats = int(ok.sum()), np.log(self.base)
         if not n:
-            return {"mean_excess": np.nan, "se": np.nan, "z": np.nan, "n": 0, "base": self.base,
-                    "verdict": "calibrated"}
+            return {"mean_excess": np.nan, "se": np.nan, "z": np.nan, "n": 0, "outside_support": outside,
+                    "base": self.base, "verdict": "too narrow or off-centre" if outside else "calibrated"}
         mean = float(np.mean(-logf[ok] - ent[ok])) / nats
         se = float(np.sqrt(np.sum(var[ok] * (1 + 1 / draws[ok])))) / n / nats
         z = mean / se if se > 0 else np.nan
-        verdict = "too narrow or off-centre" if z > 3 else "too wide" if z < -3 else "calibrated"
+        verdict = "too narrow or off-centre" if z > 3 or outside else "too wide" if z < -3 else "calibrated"
         if verdict != "calibrated":
             log_message(logging.logger.warning(
                 f"the laws look {verdict} by the information check: mean excess surprise {mean:.3f} "
-                f"(standard error {se:.3f}, z = {z:.1f})"))
-        return {"mean_excess": mean, "se": se, "z": z, "n": n, "base": self.base, "verdict": verdict}
+                f"(standard error {se:.3f}, z = {z:.1f})"
+                + (f"; {outside} data lie where their laws have no density" if outside else "")))
+        return {"mean_excess": mean, "se": se, "z": z, "n": n, "outside_support": outside, "base": self.base,
+                "verdict": verdict}
 
     # ------------------------------------------------------------------ plots
     def plot_calibration(self, alphas=None, theme='alges', color=None, **figargs):

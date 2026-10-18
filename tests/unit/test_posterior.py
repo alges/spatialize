@@ -220,3 +220,45 @@ def test_plot_evidence_draws_support_and_gain():
     titles = [a.get_title() for a in fig.axes]
     assert "Support of each law" in titles and "Information from the other data" in titles
     assert len(fig.axes) == 4
+
+
+def test_gpd_tails_read_one_spliced_law():
+    """Under tails="gpd" every reading is of one law, spliced from a Gaussian kernel density between the
+    10 % and 90 % quantiles and pooled generalized Pareto tails beyond them: its density integrates to 1,
+    its distribution function is continuous at the thresholds, its closed forms agree with scipy; data
+    drawn from it give an information check within 3 and uniform positions; a datum beyond the end of a
+    bounded tail is counted apart and makes the laws too narrow."""
+    from scipy.stats import genpareto, kstest
+    from spatialize.gs.spa import PosteriorAudit
+    from spatialize.gs.spa._main import _spliced_laws, _gpd_logpdf, _gpd_sf
+    from spatialize.logging import singleton_null_callback as quiet
+    e = np.linspace(0, 3, 50)
+    for shape in (-0.3, 0.0, 0.4):
+        assert np.allclose(_gpd_logpdf(e, shape, 0.7), genpareto.logpdf(e, shape, 0, 0.7))
+        assert np.isclose(_gpd_sf(1.3, shape, 0.7), genpareto.sf(1.3, shape, 0, 0.7))
+    rng = np.random.default_rng(5)
+    zs = []
+    for seed in range(5):
+        points, members, _, _ = _laws_and_draws(seed=seed)
+        laws = _spliced_laws(list(members))
+        values = np.array([law.rvs(1, rng)[0] for law in laws])
+        audit = PosteriorAudit(members, points, values, widening=False, calibrate=False, tails="gpd",
+                               callback=quiet, seed=seed)
+        info = audit.calibration(information=True)["information"]
+        zs.append(info["z"])
+        assert info["outside_support"] == 0 and kstest(audit.pit(), "uniform").pvalue > 1e-3
+    assert np.all(np.abs(zs) < 3)
+    law = laws[0]
+    grid = np.linspace(law.m + law.sc * (law.ul - 40), law.m + law.sc * (law.uh + 40), 200001)
+    assert abs(np.trapz(np.exp(law.logpdf(grid)), grid) - 1) < 1e-3
+    for y in (law.ul, law.uh):
+        z = law.m + law.sc * y
+        assert np.allclose(law.below_above(z - 1e-9), law.below_above(z + 1e-9), atol=1e-6)
+    shape, scale = law.lo
+    assert shape < 0                                   # the lower tail of these skewed laws is bounded
+    beyond = law.m + law.sc * (law.ul + scale / shape - 1.0)
+    values[0] = beyond
+    audit = PosteriorAudit(members, points, values, widening=False, calibrate=False, tails="gpd", callback=quiet)
+    info = audit.calibration(information=True)["information"]
+    assert info["outside_support"] == 1 and info["verdict"] == "too narrow or off-centre"
+    assert np.isinf(audit.table().surprisal[0])

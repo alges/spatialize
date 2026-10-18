@@ -213,9 +213,13 @@ lower tail likewise. Above the threshold the tail is
 .. math::
 
    \Pr(W_i > w) = 0.1\,\Big(1 + \xi\, \frac{w - \omega_i^{+}}{\beta}\Big)^{-1/\xi},
-   \qquad w > \omega_i^{+},
+   \qquad w > \omega_i^{+}.
 
-the share of the sample being used below it.
+Between the two thresholds the law follows the kernel density of the sample with Gaussian kernels,
+rescaled to hold the probability 0.8. The law spliced from the three parts has one density, which
+the positions, the p-values, the log scores and the entropy all read. With a negative shape
+:math:`\xi` a tail ends at :math:`\omega_i^{+} - \beta/\xi`, beyond which the law gives no value at
+all.
 
 Version 1.2 controlled the tails another way, adding the datum to its own sample. The law then
 always reached the datum, which kept its tail probability away from 0, at the price of the surprise
@@ -271,9 +275,9 @@ because the laws are too narrow, centred away from the data or too light in thei
 standard error treats the data as independent, as the binomial errors of the coverage do, while
 neighbouring laws share data. A few gross errors can carry the mean on their own, their excess
 growing with their distance to the law, slowly with Student-t kernels and as its square with
-Gaussian ones, so the excess of each datum tells whether the mean comes from the bulk of the data.
-With ``tails="gpd"`` the generalized Pareto tails give the probabilities only. The log scores keep
-the Gaussian kernels, so the check then reads the Gaussian density, not the tails the p-values use.
+Gaussian ones, so the excess of each datum tells whether the mean comes from the bulk of the data. A datum beyond
+the end of a bounded Pareto tail has an infinite excess, its law giving no value there. Such data
+are counted apart, outside the mean, and any of them makes the laws too narrow.
 
 The corrections on synthetic fields
 -----------------------------------
@@ -345,7 +349,8 @@ The information check sees what the coverage misses. With Gaussian kernels the c
 tails calibrated on 26 of the 32 clean fields, while the mean excess surprise exceeded 3 standard
 errors on 19 of them, the light tails of the kernels making the few data beyond them very
 improbable. With the default Student-t kernels the information check stayed between -3.5 and 2.1 on
-every clean field. The calibration of the laws is therefore part of the
+every clean field. With the generalized Pareto tails it exceeded 3 on 2 of them, both lognormal, the
+kind of field where those tails flag clean data most often. The calibration of the laws is therefore part of the
 result. Spatialize reports it, with a verdict, in whose light the flags are to be read.
 
 An error or an unrepresented place

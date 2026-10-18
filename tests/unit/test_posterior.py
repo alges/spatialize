@@ -262,3 +262,41 @@ def test_gpd_tails_read_one_spliced_law():
     info = audit.calibration(information=True)["information"]
     assert info["outside_support"] == 1 and info["verdict"] == "too narrow or off-centre"
     assert np.isinf(audit.table().surprisal[0])
+
+
+def test_null_flags_counts_the_flags_of_clean_replicates():
+    """null_flags audits replicates drawn from the laws with the same partitions and settings: one row per
+    replicate, a replicate flagged at q exactly when its smallest adjusted p-value is at most q, the
+    summary in attrs computed from the rows, the same rows for the same seed; the smallest adjusted
+    p-value is that of Benjamini–Hochberg; values drawn from a datum's law have uniform positions in it;
+    an audit without refit refuses."""
+    from scipy.stats import kstest
+    from spatialize import SpatializeError
+    from spatialize.gs.spa import posterior_audit, PosteriorAudit
+    from spatialize.gs.spa._main import _min_qvalue, _bh
+    from spatialize.logging import singleton_null_callback as quiet
+    s, v, _ = DATA["2d"]
+    v = v.copy()
+    v[5] = v.max() + 5 * np.std(v)                               # one error, flagged
+    audit = posterior_audit(s, v, n_partitions=cases.T, alpha=cases.ALPHA, seed=cases.SEED, callback=quiet)
+    out = audit.null_flags(n_replicates=3, q=0.05)
+    assert len(out) == 3 and audit.flags()[5]
+    assert np.array_equal(out["flags"] > 0, out["min_qvalue"] <= 0.05)
+    a = out.attrs
+    assert a["observed"] == int(audit.flags().sum()) and np.isclose(a["expected"], out["flags"].mean())
+    assert np.isclose(a["share_with_flags"], np.mean(out["flags"] > 0))
+    assert np.isclose(a["p_value"], (1 + np.sum(out["flags"] >= a["observed"])) / 4)
+    assert out.equals(audit.null_flags(n_replicates=3, q=0.05))
+    p = np.random.default_rng(0).random(50) ** 3
+    for q in (0.01, 0.05, 0.2):
+        assert _bh(p, q).any() == (_min_qvalue(p) <= q)
+    for tails in ("t", "normal"):                     # the spliced laws of "gpd" draw in test_gpd_tails_...
+        points, members, values, _ = _laws_and_draws(n=40, T=150)
+        law = PosteriorAudit(members, points, values, widening=False, calibrate=False, tails=tails, callback=quiet)
+        rng = np.random.default_rng(1)
+        draws = np.array([law._draw_values(rng)[0] for _ in range(400)])
+        positions = [PosteriorAudit(members[:1], points[:1], [d], widening=False, calibrate=False, tails=tails,
+                                    callback=quiet).pit()[0] for d in draws]
+        assert kstest(positions, "uniform").pvalue > 1e-3
+    with pytest.raises(SpatializeError):
+        PosteriorAudit(audit.members, s, v).null_flags(1)

@@ -353,6 +353,38 @@ every clean field. With the generalized Pareto tails it exceeded 3 on 2 of them,
 kind of field where those tails flag clean data most often. The calibration of the laws is therefore part of the
 result. Spatialize reports it, with a verdict, in whose light the flags are to be read.
 
+Flags of clean replicates
+-------------------------
+
+Since no setting keeps the promise of the procedure everywhere, Spatialize measures the false flags
+on the data at hand. It draws replicates free of errors, every datum :math:`z^*_i` drawn on its own
+from its law :math:`\tilde F_i`, the law the readings use, audits each replicate with the same
+partitions, decoder and settings, and counts its flags. Every one of them is a false discovery. The
+replicates keep the centres of the laws and the spread around them, the spatial pattern coming from
+the centres.
+
+An erroneous datum pulls the laws of its neighbours towards it, so replicates drawn from those laws
+vary more than clean data would, which inflates their flags. The replicates are therefore drawn
+after each flagged datum is replaced by the median of its law, the laws being computed again. With
+:math:`F` the flags of the data and :math:`F_1, \dots, F_R` those of :math:`R` replicates, the mean
+of the :math:`F_r` estimates the false flags the data would get without errors, the share of
+replicates with some flag the chance that clean data get one, and
+
+.. math::
+
+   \hat p = \frac{1 + \#\{r : F_r \ge F\}}{R + 1}
+
+is the Monte Carlo p-value of the hypothesis that the data are as clean as the replicates.
+
+On the fields of the table, four of each kind, with 20 replicates each, the replicates predicted the
+share of clean fields with a false flag, 0.20 against an observed 0.19 with the default Student-t
+kernels and 0.92 against 0.94 with Gaussian kernels, and the mean number of false flags, 0.29
+against 0.25 and 3.0 against 3.1. On the same fields with three planted errors, the replicates drawn
+from the laws as they are gave 0.47 fields with a flag among the clean data, while those drawn
+after the flagged data were replaced gave 0.23, the rate of the clean fields. Drawing the replicates
+as a law's median plus the residual of another datum at random overestimated the false flags
+twofold to fivefold, since the residuals of the errors went into the replicates.
+
 An error or an unrepresented place
 ==================================
 

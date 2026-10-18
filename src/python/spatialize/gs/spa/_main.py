@@ -123,6 +123,15 @@ def _bh(p, q):
     return out
 
 
+def _min_qvalue(p):
+    """The smallest Benjamini–Hochberg adjusted p-value over the finite p-values: some datum is flagged
+    at rate q exactly when it is at most q."""
+    p = np.sort(np.asarray(p, dtype=float)[np.isfinite(p)])
+    if not p.size:
+        return np.nan
+    return float(np.min(p * p.size / np.arange(1, p.size + 1)))
+
+
 def _scale_maps(scale, values):
     """The map to the scale of the readings and its inverse, fitted to the data values."""
     identity = lambda a: np.asarray(a, dtype=np.float64)
@@ -439,6 +448,10 @@ class PosteriorAudit(Summarised):
         The base of the logarithms of the information readings (``surprisal``, ``entropy`` and
         ``excess`` of :meth:`table`, :meth:`evidence`, the information check of :meth:`calibration`):
         e for nats, 2 for bits, 10 for hartleys. Default: e.
+    refit : callable, optional
+        ``refit(values) -> members``, the cross-validation members of other values at the same
+        locations, with the same partitions and decoder; needed by :meth:`null_flags`.
+        :func:`posterior_audit` provides it. Default: None.
 
     Attributes
     ----------
@@ -466,7 +479,7 @@ class PosteriorAudit(Summarised):
 
     def __init__(self, members, points, values, fitted_model_factory=None, callback=None,
                  widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0,
-                 cells=None, base=np.e):
+                 cells=None, base=np.e, refit=None):
         self.members = np.asarray(members, dtype=np.float64)
         self.points = np.asarray(points)
         self.values = np.asarray(values, dtype=np.float64).ravel()
@@ -494,6 +507,7 @@ class PosteriorAudit(Summarised):
         self._factor = None
         self._readings = None
         self._cells = cells         # the cells of the data and of probe locations in the partitions
+        self._refit = refit         # the members of other values, with the same partitions and decoder
         self._weights = None
 
     def _widening_targets(self):
@@ -854,6 +868,117 @@ class PosteriorAudit(Summarised):
             nb = nb[np.isfinite(pos[nb])]
             if nb.size:
                 out[i] = float(np.mean(pos[nb]))
+        return out
+
+    def _settings(self):
+        """The arguments that read another audit the way this one reads its data."""
+        return dict(fitted_model_factory=self.fitted_model_factory, widening=self.widening,
+                    widening_knn=self.widening_knn, seed=self.seed, scale=self.scale, calibrate=self.calibrate,
+                    tails=self.tails, nu=self.nu, base=self.base)
+
+    def _draw_values(self, rng):
+        """One value per datum, drawn from the law its readings use (:meth:`law` under ``tails``), in
+        the units of the values; a datum without a law keeps its value."""
+        laws = [self.law(i) for i in range(len(self.values))]
+        out = self._tvalues.copy()
+        if self.tails == "gpd":
+            spliced = _spliced_laws(laws)
+            if spliced is not None:
+                for i, law in enumerate(spliced):
+                    if law is not None:
+                        out[i] = law.rvs(1, rng)[0]
+                return self._inv(out)
+        from spatialize.empirical import silverman_bandwidth
+        kernel = _kernel("normal" if self.tails == "gpd" else self.tails, self.nu)
+        for i, x in enumerate(laws):
+            if x.size >= 2:
+                out[i] = x[rng.integers(x.size)] + silverman_bandwidth(x) * float(
+                    kernel[0].rvs(*kernel[1], random_state=rng))
+        return self._inv(out)
+
+    def null_flags(self, n_replicates=20, q=0.05, seed=None, clean=True):
+        r"""How many flags clean data would get, at these locations and with these settings.
+
+        No theorem bounds the false discovery rate of the flags (:meth:`flags`), since the laws are
+        only approximately calibrated and neighbouring laws share data. This reading measures it on
+        the data at hand. It draws replicates of the data free of errors, each datum from its own law,
+        audits every replicate with the same partitions, decoder and settings, and counts its flags,
+        every one of them a false discovery.
+
+        Parameters
+        ----------
+        n_replicates : int, optional
+            The number of replicates, each one a full audit. Default: 20.
+        q : float, optional
+            The false discovery rate of the flags counted. Default: 0.05.
+        seed : int, optional
+            Seed of the draws. Default: the audit's ``seed``.
+        clean : bool, optional
+            Whether the replicates are drawn from the laws of the data with the flagged data replaced
+            by the median of their law, the laws being computed again. An erroneous datum pulls the
+            laws of its neighbours towards it, so replicates drawn from them vary more than clean
+            data would, which inflates their flags. Default: True.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per replicate: ``flags``, the number of flags at ``q``, and ``min_qvalue``, the
+            smallest Benjamini–Hochberg adjusted p-value, so that a replicate has some flag at a rate
+            ``q'`` exactly when ``min_qvalue`` ≤ ``q'``. ``attrs`` holds ``q``; ``observed``, the
+            flags of the data at ``q``; ``expected``, the mean number of flags of the replicates, the
+            false flags the data would get without errors; ``share_with_flags``, the share of
+            replicates with some flag, the chance that clean data get at least one; and ``p_value``,
+            the Monte Carlo p-value :math:`(1 + \#\{r : F_r \ge F\})/(R + 1)` of the hypothesis
+            that the data are as clean as the replicates, :math:`F` being the observed flags and
+            :math:`F_r` those of replicate :math:`r`.
+
+        Raises
+        ------
+        SpatializeError
+            When the audit was not built by :func:`posterior_audit`, which can compute the members of
+            other values.
+
+        Notes
+        -----
+        Each replicate draws every datum on its own from its law, the law the readings use, so the
+        replicates keep the centres of the laws and the spread around them, the spatial pattern
+        coming from the centres. On synthetic fields of 300 data, the replicates predicted the share
+        of clean fields with a false flag (0.20 against an observed 0.19 with the default Student-t
+        tails, 0.92 against 0.94 with Gaussian kernels), and with three planted errors in the data
+        they still gave the rate of the clean data (:doc:`/theory/posterior`). The partitions are
+        those of the audit, so the reading is conditional on them. With few replicates,
+        ``share_with_flags`` is coarse, its standard error being about
+        :math:`\sqrt{p(1 - p)/R}`, and ``p_value`` cannot fall below :math:`1/(R + 1)`, 0.048 with
+        20 replicates and 0.01 with 99. Each replicate costs one audit, about a second for 300 data
+        and 300 partitions with IDW.
+        """
+        if self._refit is None:
+            raise SpatializeError("null_flags needs to compute the members of other values: build the audit "
+                                  "with posterior_audit, or give PosteriorAudit its refit")
+        from spatialize.logging import singleton_null_callback
+        rng = np.random.default_rng(self.seed if seed is None else seed)
+        settings = self._settings()
+        observed = self.flags(q)
+        source = self
+        if clean and observed.any():
+            z = self.values.copy()
+            for i in np.flatnonzero(observed):
+                z[i] = float(self._inv(np.median(self.law(i))))
+            source = PosteriorAudit(self._refit(z), self.points, z, callback=singleton_null_callback, **settings)
+        rows = []
+        self.callback(logging.progress.init(int(n_replicates), 1, desc="replicates"))
+        for _ in range(int(n_replicates)):
+            z = source._draw_values(rng)
+            replicate = PosteriorAudit(self._refit(z), self.points, z, callback=singleton_null_callback, **settings)
+            p = replicate.tail_p()
+            rows.append({"flags": int(_bh(p, q).sum()), "min_qvalue": _min_qvalue(p)})
+            self.callback(logging.progress.inform())
+        self.callback(logging.progress.stop())
+        out = pd.DataFrame(rows)
+        n_obs = int(observed.sum())
+        out.attrs.update({"q": q, "observed": n_obs, "expected": float(out["flags"].mean()),
+                          "share_with_flags": float((out["flags"] > 0).mean()),
+                          "p_value": float((1 + np.sum(out["flags"] >= n_obs)) / (len(out) + 1))})
         return out
 
     def weights(self, n_probes=20000):
@@ -1688,7 +1813,8 @@ def posterior_audit(points, values, **kwargs):
     audit = PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"],
                            widening=kwargs["widening"], widening_knn=kwargs["widening_knn"], seed=kwargs["seed"],
                            scale=kwargs["scale"], calibrate=kwargs["calibrate"], tails=kwargs["tails"],
-                           nu=kwargs["nu"], cells=_cells_reader(points, kwargs), base=kwargs["base"])
+                           nu=kwargs["nu"], cells=_cells_reader(points, kwargs), base=kwargs["base"],
+                           refit=lambda z: _cv_members(points, z, points, kwargs))
     weak = int(np.sum(audit.support < 0.5))
     if weak:
         log_message(logging.logger.warning(

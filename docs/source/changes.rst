@@ -117,7 +117,8 @@ New
   base (``base``). ``calibration(information=True)`` adds a check of the whole density of the laws
   through the mean excess surprise, and ``evidence()`` with ``plot_evidence()`` tells how much the other
   data say about each datum, through the support of its law and the information it gains over the
-  distribution of all the data, a reading that does not depend on the units. Scenario P12 holds the analysis to
+  distribution of all the data, a reading that does not depend on the units. ``null_flags()`` measures
+  the false flags on the data at hand, auditing replicates free of errors drawn from the laws. Scenario P12 holds the analysis to
   planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.
 - **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
   cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without

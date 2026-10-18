@@ -87,10 +87,19 @@ measures its surprise with the strictly proper scoring rule the hyperparameter s
 
    \mathbb E_{Z \sim \tilde F_i}\big[-\log \tilde f_i(Z)\big] = H(\tilde F_i),
 
-estimated on the sample :math:`y_{i1}, \dots, y_{iN}` of the law by
-:math:`\hat H_i = -\frac1N \sum_j \log \tilde f_i(y_{ij})`. The *excess surprise*
-:math:`\ell_i - \hat H_i` is near 0 for a datum typical of its law and large for one its law does
-not expect, in nats.
+estimated from :math:`N` draws :math:`y^*_{i1}, \dots, y^*_{iN}` of the density
+:math:`\tilde f_i` itself, as many as the sample of the law holds,
+
+.. math::
+
+   \hat H_i = -\frac1N \sum_{j=1}^N \log \tilde f_i\big(y^*_{ij}\big).
+
+The draws come from the density, not from the sample it is built on, since the density read at the
+points of its own sample counts each point's own kernel and comes out too high. The *excess
+surprise* :math:`e_i = \ell_i - \hat H_i` then has mean 0 for a datum drawn from its law, while a
+datum its law does not expect has a large one. The logarithms are natural by default, the readings
+being in nats. With ``base=2`` they are in bits, one bit less of entropy for each halving of the
+spread of a law of given shape.
 
 Many data at once
 =================
@@ -232,16 +241,53 @@ is judged apart, since a law may be too wide in its centre with tails of the rig
 the drill holes of the Andes data bundled with Spatialize, whose 50 % intervals held 68 % of the
 data and whose 90 % and 99 % intervals held 90.5 % and 98.5 %.
 
-What the corrections achieve
-----------------------------
+The information check
+----------------------
+
+The coverage reads a few intervals of every law. The log score, the strictly proper score the
+hyperparameter searches minimise (:doc:`error`), reads its whole density, each part weighted by how
+probable the law makes it. For a datum drawn from its law the excess surprise :math:`e_i` has
+mean 0 and the variance
+
+.. math::
+
+   \operatorname{Var}(e_i) = v_i \Big(1 + \frac1N\Big),
+   \qquad
+   v_i = \operatorname{Var}_{Z \sim \tilde f_i}\big[\log \tilde f_i(Z)\big],
+
+the first term from the datum, the second from the draws that estimate the entropy, :math:`v_i`
+being read on the same draws. The information check compares the mean excess with its standard
+error,
+
+.. math::
+
+   \bar e = \frac1n \sum_{i=1}^n e_i,
+   \qquad
+   z_e = \frac{\bar e}{\frac1n \big(\sum_i \operatorname{Var}(e_i)\big)^{1/2}},
+
+and calls the laws too narrow or off-centre when :math:`z_e > 3`, too wide when :math:`z_e < -3`.
+A positive mean excess says that the data are less probable under their laws than the laws expect,
+because the laws are too narrow, centred away from the data or too light in their tails. The
+standard error treats the data as independent, as the binomial errors of the coverage do, while
+neighbouring laws share data. A few gross errors can carry the mean on their own, their excess
+growing with their distance to the law, slowly with Student-t kernels and as its square with
+Gaussian ones, so the excess of each datum tells whether the mean comes from the bulk of the data.
+With ``tails="gpd"`` the generalized Pareto tails give the probabilities only. The log scores keep
+the Gaussian kernels, so the check then reads the Gaussian density, not the tails the p-values use.
+
+The corrections on synthetic fields
+-----------------------------------
 
 The corrections were measured on synthetic fields, without a guarantee for other data. Each field
 holds 300 data with values :math:`\sin(2\pi x) + 0.5\cos(2\pi y)` plus Gaussian noise of standard
 deviation 0.1, or the exponential of that sum with noise 0.3 (a lognormal field). The data are
-placed uniformly, or half of them in four clusters. Each field is read clean and with three planted
-errors, a value multiplied by 10, a value shifted by 3 standard deviations and a value shifted down
-by 2.5 (multiplied by 0.1 on the lognormal field). Eight fields of each kind were read with IDW on
-Mondrian partitions (``alpha`` = 0.85, 300 partitions), flags at :math:`q = 0.05`.
+placed uniformly in the unit square, or half of them in four clusters, each datum of a cluster
+drawn from a normal law of standard deviation 0.04 around one of four centres placed uniformly in
+:math:`[0.1, 0.9]^2`. Each field is read clean and with three planted errors, a value multiplied by
+10, a value shifted by 3 standard deviations and a value shifted down by 2.5 (multiplied by 0.1 on
+the lognormal field). Eight fields of each kind were read with IDW on Mondrian partitions
+(``alpha`` = 0.85, 300 partitions), flags at :math:`q = 0.05` (measured with version 1.3, October
+2026).
 
 .. list-table:: Clean fields with a false flag, and planted errors found
    :header-rows: 1
@@ -254,44 +300,52 @@ Mondrian partitions (``alpha`` = 0.85, 300 partitions), flags at :math:`q = 0.05
      - lognormal, clustered
    * - Gaussian kernels, no correction
      - 8/8 · 23/24
-     - 8/8 · 23/24
-     - 8/8 · 23/24
+     - 8/8 · 24/24
+     - 8/8 · 24/24
      - 8/8 · 24/24
    * - Gaussian kernels
      - 8/8 · 23/24
-     - 8/8 · 21/24
-     - 7/8 · 15/24
-     - 6/8 · 14/24
+     - 7/8 · 22/24
+     - 5/8 · 13/24
+     - 8/8 · 17/24
    * - Student-t kernels (default)
-     - 5/8 · 22/24
-     - 4/8 · 17/24
-     - 1/8 · 12/24
-     - 4/8 · 12/24
+     - 1/8 · 23/24
+     - 0/8 · 22/24
+     - 1/8 · 11/24
+     - 2/8 · 16/24
    * - generalized Pareto tails
-     - 0/8 · 19/24
-     - 3/8 · 13/24
-     - 5/8 · 5/24
-     - 7/8 · 6/24
+     - 2/8 · 22/24
+     - 2/8 · 19/24
+     - 4/8 · 10/24
+     - 6/8 · 15/24
    * - Student-t, Yeo–Johnson scale
-     - 5/8 · 22/24
-     - 5/8 · 20/24
-     - 3/8 · 5/24
-     - 4/8 · 6/24
+     - 1/8 · 23/24
+     - 0/8 · 21/24
+     - 1/8 · 2/24
+     - 0/8 · 3/24
    * - Student-t, normal scores
-     - 4/8 · 20/24
-     - 3/8 · 13/24
-     - 3/8 · 4/24
-     - 2/8 · 3/24
+     - 4/8 · 18/24
+     - 0/8 · 15/24
+     - 1/8 · 4/24
+     - 2/8 · 10/24
 
 Each cell gives the clean fields with at least one flag, out of 8, and the planted errors flagged,
-out of 24. Without correction the laws flag between 140 and 1 041 clean data over the eight fields
-with planted errors, and the coverage of their central 99 % interval falls to between 0.63 and 0.91.
-With the corrections that coverage lies between 0.97 and 0.99.
+out of 24. Without correction the laws flag between 212 and 1 091 clean data over the eight clean
+fields of a kind, and the coverage of their central 99 % interval falls to between 0.57 and 0.91.
+With the default corrections that coverage lies between 0.96 and 1.
 
 On a clean field every flag is a false discovery, so the procedure promises that some flag appears
-on at most 5 % of clean fields. No setting keeps that promise on every kind of field, the tails of
-the laws remaining too light at the 99 % level. Heavier tails trade false flags for power. Clustered
-data and skewed values are the hardest cases. The calibration of the laws is therefore part of the
+on at most 5 % of clean fields. The default comes close, with 4 of the 32 clean fields flagged, and
+no setting keeps the promise on every kind of field. Heavier tails trade false flags for power.
+Skewed values are the hardest case, where the planted errors are found least often. A transformed
+scale loses most of them there, a decimal error looking ordinary once the values are brought
+towards normal.
+
+The information check sees what the coverage misses. With Gaussian kernels the coverage called the
+tails calibrated on 26 of the 32 clean fields, while the mean excess surprise exceeded 3 standard
+errors on 19 of them, the light tails of the kernels making the few data beyond them very
+improbable. With the default Student-t kernels the information check stayed between -3.5 and 2.1 on
+every clean field. The calibration of the laws is therefore part of the
 result. Spatialize reports it, with a verdict, in whose light the flags are to be read.
 
 An error or an unrepresented place
@@ -319,8 +373,8 @@ read together, tell the two cases apart.
 
 On replicate fields of 300 data with a raised square of about 12 data and one isolated error
 (scenario :ref:`scenario-P12`), the shift of the square's data exceeded that of the other data by
-0.22 (standard deviation 0.12 over 20 fields), while the isolated error, always in the far upper
-tail of its law, had a shift of -0.35 (standard deviation 0.19).
+0.23 (standard deviation 0.13 over 20 fields), while the isolated error, always in the far upper
+tail of its law, had a shift of -0.36 (standard deviation 0.19).
 
 The *coherence*, the share of the neighbours on the same side as the datum,
 
@@ -334,8 +388,32 @@ same evidence, the square's data exceeding the others by 0.06 to 0.10 only, sinc
 square are themselves hardly surprised. Posterior analysis gives the evidence and an order, from the
 most to the least surprising datum. The analyst, who knows the provenance, decides.
 
-How much of the domain each datum represents
-============================================
+The evidence behind each law
+============================
+
+A law may rest on little evidence in two ways. An isolated datum often sits alone in its cell, so
+its law rests on few partitions, a low support :math:`s_i`. A datum whose neighbours disagree gets a
+law nearly as wide as the distribution of all the data, even when every partition defines it. The
+entropy measures that width without assuming a shape. The *information gain*
+
+.. math::
+
+   g_i = H(\tilde f_0) - H(\tilde f_i)
+
+compares it with the entropy of the distribution of all the data, :math:`\tilde f_0` being the
+kernel density of the values :math:`z_1, \dots, z_n` with the kernels of the laws, its entropy
+estimated from draws as for the laws. An entropy depends on the units of the values, shifting by
+:math:`\log a` when they are multiplied by :math:`a`, while the gain, a difference of two
+entropies, does not, so gains can be compared across variables. In bits, a gain of one halves the
+spread of a law of given shape. A gain near 0, or below it, says that the other data tell no more
+about the datum than the distribution of all the data does. The laws are read after their
+widening and the factor of the calibration, which lower every gain.
+
+Support and gain separate the two kinds of weak evidence. An isolated datum has a low support,
+a datum among disagreeing neighbours a low gain with a high support.
+
+The share of the domain behind each datum
+=========================================
 
 Data are often taken where the values are high or of interest, so the plain summaries of the values
 lean towards those values. Classical declustering weighs each datum by the area it represents, with

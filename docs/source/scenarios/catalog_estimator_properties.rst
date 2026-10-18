@@ -539,11 +539,12 @@ uses 20 fields in ``ci`` and 40 in ``full``.
   domain than the plain mean, under the preferential design.
 - ``weights``, *almost-sure*. The declustering weights are positive and sum to 1.
 
-**Results.** On seeds 1 to 3 in ``ci`` and seed 1 in ``full`` every check passes, with 93 % to 95 %
-of the planted errors flagged, a shift of the square above the others by 0.22 (p at most
-:math:`2.1 \cdot 10^{-7}`), a shift of -0.36 at the isolated error and a declustered mean closer
-to the field's mean by 0.37. Between 30 % and 45 % of the clean fields carry a flag, the known
-failure.
+**Results.** On seeds 1 to 3 in ``ci`` every check passes, with 95 % to 98 % of the planted errors
+flagged, a shift of the square above the others by 0.22 to 0.23 (p at most
+:math:`2.8 \cdot 10^{-7}`), a shift of -0.36 to -0.37 at the isolated error and a declustered mean
+closer to the field's mean by 0.36 to 0.37. Between 20 % and 25 % of the clean fields carry a flag,
+the known failure (October 2026, after the widening of a variable was chosen once for all its data;
+30 % to 45 % before).
 
 **History.** The first version checked the coherence of the square, which passed at its limit, the
 coherence being a weak signal (0.06 to 0.10). Inside the square a datum's law is built from

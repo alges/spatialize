@@ -4,7 +4,7 @@
 Posterior analysis
 ******************
 
-The cross-validated predictive law at each datum and its analysis, which ranks the data by how far into the tails of their laws they fall (:doc:`../theory/posterior`).
+The cross-validated predictive law at each datum and its analysis, which ranks the data by how far into the tails of their laws they fall, checks the calibration of the laws and reads the evidence behind each of them (:doc:`../theory/posterior`).
 
 .. currentmodule:: spatialize.gs.spa
 

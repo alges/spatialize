@@ -83,4 +83,4 @@ provenance:
     pulls its neighbours' laws towards it. User decision (2026-10-08): add the shift reading, check
     it in P12, keep the coherence as a descriptive reading. Sized for an effect of 1.75 standard
     deviations, K ≈ (4.06 + 1.28)² / 1.75² ≈ 9.3, giving 20 fields in ci and 40 in full.
-  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged."
+  v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged. 2026-10-18: re-measured after widening='auto' was decided once per variable and the entropy of a law was read from its density (ci, seeds 1-3): errors found 0.95-0.98, clean fields flagged 0.20-0.25 (known failure; 0.30-0.45 before), shift of the patch 0.22-0.23, shift at the error -0.36 to -0.37, declustering 0.36-0.37. Checks, thresholds and sizes unchanged."

@@ -128,3 +128,95 @@ def test_auto_widening_is_decided_once_for_the_variable():
     laws = lambda widening: PosteriorAudit(members, points, values, widening=widening, seed=1, calibrate=False)._widened()
     auto, skew = laws("auto"), laws("skew_normal")
     assert all(np.allclose(a, b) for a, b in zip(auto, skew))
+
+
+def _laws_and_draws(n=300, T=200, seed=0, tails="t"):
+    """Members of n laws of different centres, spreads and skewness, and one value drawn from the
+    kernel density each law is read as (no widening, no spread factor)."""
+    from scipy.stats import norm, t as student
+    from spatialize.empirical import silverman_bandwidth
+    rng = np.random.default_rng(seed)
+    points = rng.random((n, 2))
+    centres = np.sin(4 * points[:, 0])
+    members = centres[:, None] + (0.1 + 0.5 * points[:, 1])[:, None] * rng.gamma(2, 1, (n, T))
+    kernel, args = (student, (3.0,)) if tails == "t" else (norm, ())
+    values = np.array([m[rng.integers(T)] + silverman_bandwidth(m) * kernel.rvs(*args, random_state=rng)
+                       for m in members])
+    return points, members, values, centres
+
+
+def test_information_check_is_centred_when_the_data_follow_their_laws():
+    """With every datum drawn from the density its law is read as, the excess surprise has mean 0:
+    the z of the information check stays within 3 in repeated draws, for both kernels; laws too
+    narrow give a large positive z, laws too wide a negative one."""
+    from spatialize.gs.spa import PosteriorAudit
+    from spatialize.logging import singleton_null_callback as quiet
+    zs = []
+    for seed in range(6):
+        for tails in ("t", "normal"):
+            points, members, values, _ = _laws_and_draws(seed=seed, tails=tails)
+            audit = PosteriorAudit(members, points, values, widening=False, calibrate=False, tails=tails,
+                                   callback=quiet, seed=seed)
+            info = audit.calibration(information=True)["information"]
+            assert info["n"] == len(values) and info["se"] > 0
+            zs.append(info["z"])
+    assert np.all(np.abs(zs) < 3) and abs(np.mean(zs)) < 1.5
+    points, members, values, centres = _laws_and_draws(seed=10)
+    read = lambda v: PosteriorAudit(members, points, v, widening=False, calibrate=False, callback=quiet
+                                    ).calibration(information=True)["information"]
+    narrow, wide = read(centres + 2 * (values - centres)), read(centres + 0.5 * (values - centres))
+    assert narrow["z"] > 10 and narrow["verdict"] == "too narrow or off-centre"
+    assert wide["z"] < -3 and wide["verdict"] == "too wide"
+    assert "information" not in PosteriorAudit(members, points, values, callback=quiet).calibration()
+
+
+def test_information_readings_follow_the_base_and_not_the_units():
+    """base changes only the unit of the information readings; the excess and the information gain do
+    not depend on the units of the values, while an entropy shifts by log(a) when they are multiplied
+    by a; a bad base is refused; the gain is the entropy of all the data minus that of the law."""
+    from spatialize import SpatializeError
+    from spatialize.gs.spa import PosteriorAudit
+    from spatialize.logging import singleton_null_callback as quiet
+    points, members, values, _ = _laws_and_draws(n=120, T=100)
+    audit = lambda m, v, base: PosteriorAudit(m, points, v, widening=False, calibrate=False, callback=quiet,
+                                              base=base)
+    nats, bits = audit(members, values, np.e), audit(members, values, 2)
+    for column in ("surprisal", "entropy", "excess"):
+        assert np.allclose(bits.table()[column], nats.table()[column] / np.log(2))
+    scaled = audit(100 * members, 100 * values, 2)
+    assert np.allclose(scaled.table().excess, bits.table().excess)
+    assert np.allclose(scaled.evidence().gain, bits.evidence().gain)
+    assert np.allclose(scaled.table().entropy - bits.table().entropy, np.log2(100))
+    ev = bits.evidence()
+    assert np.allclose(ev.gain, ev.attrs["prior_entropy"] - ev.entropy)
+    assert np.array_equal(ev.support, bits.support)
+    for base in (1, 0, -2, np.nan):
+        with pytest.raises(SpatializeError):
+            audit(members, values, base)
+
+
+def test_entropy_of_a_kernel_density_is_read_from_the_density():
+    """The entropy of a law is that of its kernel density: for a large normal sample read with Gaussian
+    kernels, the density is normal of variance 1 + h^2, whose entropy is known."""
+    from spatialize.gs.spa._main import _kde_entropy, _kernel
+    from spatialize.empirical import silverman_bandwidth
+    x = np.random.default_rng(3).normal(size=4000)
+    h = silverman_bandwidth(x)
+    expected = 0.5 * np.log(2 * np.pi * np.e * (np.var(x) + h ** 2))
+    entropy, var = _kde_entropy(x, _kernel("normal", 3.0), np.random.default_rng(4))
+    assert abs(entropy - expected) < 0.03 and abs(var - 0.5) < 0.05
+
+
+def test_plot_evidence_draws_support_and_gain():
+    """plot_evidence returns a figure with a panel for the support and one for the gain, each with its
+    colour bar, without showing it."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from spatialize.gs.spa import PosteriorAudit
+    from spatialize.logging import singleton_null_callback as quiet
+    points, members, values, _ = _laws_and_draws(n=60, T=40)
+    members[:5, :30] = np.nan                                    # five data with little support
+    fig = PosteriorAudit(members, points, values, callback=quiet, base=2).plot_evidence()
+    titles = [a.get_title() for a in fig.axes]
+    assert "Support of each law" in titles and "Information from the other data" in titles
+    assert len(fig.axes) == 4

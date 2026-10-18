@@ -196,22 +196,45 @@ def _fit_spread(laws, values, target=0.9):
     return float(np.sqrt(lo * hi))
 
 
-def _tail_readings(laws, values, tails, nu, q=0.9):
-    """Per datum, under the tail model: log density at the datum, entropy read on the law's sample,
-    and the probabilities of the law below and above the datum."""
+def _kernel(tails, nu):
+    """The kernel of the densities the readings use: Student-t of ``nu`` degrees of freedom, or Gaussian
+    (``"normal"``, and ``"gpd"``, whose densities keep Gaussian kernels)."""
+    from scipy.stats import norm, t as student
+    return (norm, ()) if tails in ("normal", "gpd") else (student, (nu,))
+
+
+def _kde_entropy(x, kernel, rng):
+    """The entropy, in nats, of the kernel density of the sample ``x`` (Silverman bandwidth), and the
+    variance of its log density under itself, both by ``x.size`` draws from that density."""
     from scipy.special import logsumexp
-    from scipy.stats import norm, t as student, genpareto
+    from spatialize.empirical import silverman_bandwidth
+    h = silverman_bandwidth(x)
+    draws = x + h * kernel[0].rvs(*kernel[1], size=x.size, random_state=rng)
+    logs = np.concatenate([logsumexp(kernel[0].logpdf((d[:, None] - x[None, :]) / h, *kernel[1]), axis=1)
+                           for d in np.array_split(draws, max(1, x.size // 2000))]) - np.log(x.size * h)
+    return -float(np.mean(logs)), float(np.var(logs))
+
+
+def _tail_readings(laws, values, tails, nu, q=0.9, seed=0):
+    """Per datum, under the tail model: log density at the datum, the entropy of the law's density
+    and the variance of its log density under itself (both by draws from that density, seeded by
+    ``seed`` plus the datum's index), and the probabilities of the law below and above the datum."""
+    from scipy.special import logsumexp
+    from scipy.stats import genpareto
     from spatialize.empirical import silverman_bandwidth
     n = len(values)
-    logf, ent, below, above = (np.full(n, np.nan) for _ in range(4))
-    kernel = (norm, ()) if tails in ("normal", "gpd") else (student, (nu,))
+    logf, ent, var, below, above = (np.full(n, np.nan) for _ in range(5))
+    kernel = _kernel(tails, nu)
     for i, (x, z) in enumerate(zip(laws, values)):
         if x.size < 2:
             continue
         h = silverman_bandwidth(x)
-        u = (np.append(x, z)[:, None] - x[None, :]) / h
+        # the draws that read the entropy are drawn from the density itself, not its sample: then the
+        # expected log score of a datum drawn from its law is the entropy, exactly
+        draws = x + h * kernel[0].rvs(*kernel[1], size=x.size, random_state=np.random.default_rng(seed + i))
+        u = (np.append(draws, z)[:, None] - x[None, :]) / h
         logs = logsumexp(kernel[0].logpdf(u, *kernel[1]), axis=1) - np.log(x.size * h)
-        logf[i], ent[i] = logs[-1], -float(np.mean(logs[:-1]))
+        logf[i], ent[i], var[i] = logs[-1], -float(np.mean(logs[:-1])), float(np.var(logs[:-1]))
         uz = (z - x) / h
         below[i] = float(np.exp(logsumexp(kernel[0].logcdf(uz, *kernel[1])) - np.log(x.size)))
         above[i] = float(np.exp(logsumexp(kernel[0].logsf(uz, *kernel[1])) - np.log(x.size)))
@@ -244,7 +267,7 @@ def _tail_readings(laws, values, tails, nu, q=0.9):
                 below[i] = (1 - q) * float(genpareto.sf(ul - xz, *fit_lo))
             else:
                 below[i] = float(np.mean(w <= xz))
-    return logf, ent, below, above
+    return logf, ent, var, below, above
 
 
 class PosteriorAudit(Summarised):
@@ -306,6 +329,10 @@ class PosteriorAudit(Summarised):
         shape (n, T), and of ``n_probes`` locations drawn uniformly in the box of the partitions,
         shape (n_probes, T), in the partitions of the members; needed by :meth:`weights`.
         :func:`posterior_audit` provides it. Default: None.
+    base : float, optional
+        The base of the logarithms of the information readings (``surprisal``, ``entropy`` and
+        ``excess`` of :meth:`table`, :meth:`evidence`, the information check of :meth:`calibration`):
+        e for nats, 2 for bits, 10 for hartleys. Default: e.
 
     Attributes
     ----------
@@ -333,7 +360,7 @@ class PosteriorAudit(Summarised):
 
     def __init__(self, members, points, values, fitted_model_factory=None, callback=None,
                  widening="auto", widening_knn=12, seed=None, scale="raw", calibrate=True, tails="t", nu=3.0,
-                 cells=None):
+                 cells=None, base=np.e):
         self.members = np.asarray(members, dtype=np.float64)
         self.points = np.asarray(points)
         self.values = np.asarray(values, dtype=np.float64).ravel()
@@ -352,6 +379,9 @@ class PosteriorAudit(Summarised):
         if tails not in ("t", "gpd", "normal"):
             raise SpatializeError(f"tails must be 't', 'gpd' or 'normal'; got {tails!r}")
         self.scale, self.calibrate, self.tails, self.nu = scale, bool(calibrate), tails, float(nu)
+        if not (np.isfinite(base) and base > 0 and base != 1):
+            raise SpatializeError(f"base must be a positive number other than 1; got {base!r}")
+        self.base = float(base)
         self._fwd, self._inv = _scale_maps(scale, self.values)
         self._tvalues = self._fwd(self.values)
         self._laws = None
@@ -530,16 +560,17 @@ class PosteriorAudit(Summarised):
             The probability of the law (:meth:`law`, with the kernels or tails of ``tails``) below
             the datum, the same law the p-values read. NaN for a datum without defined members.
         """
-        _, _, below, above = self._kde()
+        _, _, _, below, above = self._kde()
         with np.errstate(invalid="ignore", divide="ignore"):
             return below / (below + above)
 
     def _kde(self):
-        """Per datum: the log density of its law at the datum, the entropy of the law read on its
-        sample, and the probabilities of the law below and above the datum, under ``tails``."""
+        """Per datum, in nats: the log density of its law at the datum, the entropy of the law and the
+        variance of its log density under itself; and the probabilities of the law below and above
+        the datum, under ``tails``."""
         if self._readings is None:
             laws = [self.law(i) for i in range(len(self.values))]
-            self._readings = _tail_readings(laws, self._tvalues, self.tails, self.nu)
+            self._readings = _tail_readings(laws, self._tvalues, self.tails, self.nu, seed=self.seed)
         return self._readings
 
     def tail_p(self):
@@ -554,7 +585,7 @@ class PosteriorAudit(Summarised):
             distance warrants, where counting the members could not go below one over their
             number. NaN for a datum without defined members.
         """
-        _, _, below, above = self._kde()
+        _, _, _, below, above = self._kde()
         # a probability below the smallest float (a datum hundreds of spreads away) is kept positive
         return np.clip(2.0 * np.minimum(below, above), np.finfo(float).tiny, 1.0)
 
@@ -625,22 +656,25 @@ class PosteriorAudit(Summarised):
         pandas.DataFrame
             ``value``; ``pit`` (:meth:`pit`); ``tail_p`` (:meth:`tail_p`); ``flag`` (:meth:`flags`);
             ``level`` (:meth:`levels`); ``surprisal``, the log score :math:`-\log \hat f_{-i}(z_i)`
-            of the datum under its law (with the kernels of ``tails``); ``entropy``, the entropy of
-            that law read on its sample, so that ``excess`` = ``surprisal`` − ``entropy`` is near 0
-            for a datum typical of its law; ``width90``, the width of the central 90 % interval of
+            of the datum under its law (the density of :meth:`law` with the kernels of ``tails``);
+            ``entropy``, the entropy of that density, the expected log score of a value drawn from
+            it, so that ``excess`` = ``surprisal`` − ``entropy`` has mean 0 for a datum drawn from
+            its law (:meth:`calibration`, ``information``); ``width90``, the width of the central 90 % interval of
             the law, in the units of the values; ``support`` (:attr:`support`); ``coherence``
             (:meth:`coherence`); ``shift`` (:meth:`shift`); ``weight`` (:meth:`weights`, NaN when the audit does not hold its
             partitions). The log scores and the entropy are on the scale of the readings
-            (``scale``).
+            (``scale``), in the units of ``base``. The entropy depends on the units of the values,
+            shifting by :math:`\log a` when they are multiplied by :math:`a`; the excess does not.
         """
-        logf, ent, below, above = self._kde()
+        logf, ent, _, below, above = self._kde()
+        nats = np.log(self.base)
         tail = np.clip(2.0 * np.minimum(below, above), np.finfo(float).tiny, 1.0)
         q5 = np.array([np.percentile(self.law(i), 5) if self.law(i).size else np.nan for i in range(len(self.values))])
         q95 = np.array([np.percentile(self.law(i), 95) if self.law(i).size else np.nan for i in range(len(self.values))])
         lo, hi = self._inv(q5), self._inv(q95)
         return pd.DataFrame({"value": self.values, "pit": self.pit(), "tail_p": tail,
-                             "flag": _bh(tail, q), "level": self.levels(alphas), "surprisal": -logf,
-                             "entropy": ent, "excess": -logf - ent, "width90": hi - lo,
+                             "flag": _bh(tail, q), "level": self.levels(alphas), "surprisal": -logf / nats,
+                             "entropy": ent / nats, "excess": (-logf - ent) / nats, "width90": hi - lo,
                              "support": self.support, "coherence": self.coherence(), "shift": self.shift(),
                              "weight": self.weights() if self._cells is not None else np.nan})
 
@@ -809,6 +843,42 @@ class PosteriorAudit(Summarised):
         rho = float(spearmanr(centre[ok], spread[ok]).statistic) if ok.sum() > 2 else np.nan
         return {"centre": centre, "spread": spread, "spearman": rho}
 
+    def evidence(self):
+        r"""How much the other data tell about each datum: the support of its law and the information
+        the law carries beyond the distribution of all the data.
+
+        The law of a datum may rest on little evidence in two ways. An isolated datum shares its cell
+        with no other datum in many partitions, so its law rests on few of them (a low ``support``).
+        A datum whose neighbours disagree gets a law spread nearly as widely as the data themselves
+        (a low ``gain``), even when every partition defines it.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per datum: ``support`` (:attr:`support`); ``entropy``, the entropy of its law
+            (as in :meth:`table`); ``gain``, the entropy of the distribution of all the data minus
+            that of the law, the information the other data give about the datum, in the units of
+            ``base``. The entropy of the distribution of all the data, read as a kernel density of
+            the values with the kernels of ``tails``, is in ``attrs["prior_entropy"]``.
+
+        Notes
+        -----
+        An entropy depends on the units of the values, shifting by :math:`\log a` when they are
+        multiplied by :math:`a`. The gain, a difference of two entropies, does not, so it can be
+        compared across variables. A gain of one bit (``base=2``) halves the spread a law of normal
+        shape would have; a gain near 0, or below it, says that the law of the datum is as wide as
+        the distribution of all the data. The laws are read as :meth:`law` gives them, widened and
+        spread by the factor of ``calibrate``, which lowers every gain.
+        """
+        _, ent, _, _, _ = self._kde()
+        nats = np.log(self.base)
+        z = self._tvalues[np.isfinite(self._tvalues)]
+        prior = (_kde_entropy(z, _kernel(self.tails, self.nu), np.random.default_rng(self.seed + len(self.values)))[0]
+                 if z.size >= 2 else np.nan)
+        out = pd.DataFrame({"support": self.support, "entropy": ent / nats, "gain": (prior - ent) / nats})
+        out.attrs["prior_entropy"] = prior / nats
+        return out
+
     def duplicates(self, tol=0.0):
         """The pairs of data closer than ``tol`` (co-located when ``tol`` is 0), with their values.
 
@@ -837,7 +907,7 @@ class PosteriorAudit(Summarised):
         return out.sort_values("difference", ascending=False, ignore_index=True)
 
     # ------------------------------------------------------------------ global readings
-    def calibration(self, alphas=(0.5, 0.8, 0.9, 0.95, 0.99)):
+    def calibration(self, alphas=(0.5, 0.8, 0.9, 0.95, 0.99), information=False):
         r"""Whether the laws are calibrated: read it before the flags.
 
         A datum lies inside the central interval of probability :math:`\alpha` of its law with
@@ -849,6 +919,9 @@ class PosteriorAudit(Summarised):
         ----------
         alphas : sequence of float, optional
             The probabilities of the intervals compared. Default: ``(0.5, 0.8, 0.9, 0.95, 0.99)``.
+        information : bool, optional
+            Whether to add the information check, which reads the whole density of every law
+            through the log score instead of a few of its intervals (see Notes). Default: False.
 
         Returns
         -------
@@ -861,13 +934,40 @@ class PosteriorAudit(Summarised):
             calibration of the tails, the intervals of probability 0.9 or more, which the flags read:
             ``"calibrated"``, ``"too narrow"`` or ``"too wide"`` (an interval more than 3 standard
             errors off), logged as a warning when not calibrated; ``centre``, the same for the
-            intervals of probability below 0.9.
+            intervals of probability below 0.9. With ``information``, also ``information``, a dict
+            with ``mean_excess``, the mean over the data of the excess surprise (the ``excess``
+            column of :meth:`table`), its standard error under calibration ``se``, ``z`` =
+            mean_excess/se, ``n``, ``base`` and ``verdict``: ``"calibrated"``, ``"too narrow or
+            off-centre"`` (z above 3) or ``"too wide"`` (z below −3), logged as a warning when not
+            calibrated.
 
         Notes
         -----
         No theorem makes the cross-validated laws of an ensemble calibrated, so this is a reading,
         not a property. Too narrow laws can be widened (:class:`~spatialize.empirical.FittedModelFactory`,
         ``widening``) or obtained from coarser partitions (a smaller ``alpha``).
+
+        **The information check.** The log score of datum :math:`i` under its law,
+        :math:`\ell_i = -\log \tilde f_i(z_i)`, has expectation :math:`H(\tilde f_i)`, the entropy of
+        the law, when :math:`z_i` is drawn from it. The excess surprise
+        :math:`e_i = \ell_i - \hat H_i` then has mean 0, with :math:`\hat H_i` the entropy estimated
+        from :math:`N_i` draws of the law's density (as many as its members), and its variance is
+        :math:`v_i (1 + 1/N_i)`, with :math:`v_i` the variance of :math:`\log \tilde f_i` under
+        :math:`\tilde f_i`, read on the same draws. The check compares the mean excess
+        :math:`\bar e = \frac1n \sum_i e_i` with its standard error
+        :math:`\frac1n \big(\sum_i v_i (1 + 1/N_i)\big)^{1/2}`.
+
+        The coverage reads a few intervals of every law, the information check its whole density,
+        each part weighted by the log score, the strictly proper score the hyperparameter searches
+        minimise. A positive mean excess says that the data are less probable under their laws than
+        the laws expect: laws too narrow, centred away from the data, or with tails too light. A
+        negative one says that the laws are too wide. Two cautions apply. The standard error
+        assumes independent data, as the binomial errors of the coverage do, while neighbouring
+        laws share data, so it is a lower bound and :math:`|z|` an upper one. A few gross errors
+        can carry the mean on their own, their excess growing with the distance to the law (slowly
+        with the Student-t kernels, as the square of the distance with the Gaussian ones): the
+        ``excess`` column of :meth:`table` tells whether the mean comes from the bulk of the data or
+        from a few of them.
         """
         from scipy import stats
         pit = self.pit()
@@ -900,8 +1000,30 @@ class PosteriorAudit(Summarised):
                     f"{r.alpha:g} → {r.observed:.3f}" for r in cov.itertuples()) +
                 ("; flags are inflated, consider widening or coarser partitions" if verdict == "too narrow"
                  else "; surprises may be hidden")))
-        return {"coverage": cov, "ks_p": ks_p, "n": n, "verdict": verdict, "centre": centre,
-                "spread_factor": self.spread_factor}
+        out = {"coverage": cov, "ks_p": ks_p, "n": n, "verdict": verdict, "centre": centre,
+               "spread_factor": self.spread_factor}
+        if information:
+            out["information"] = self._information_check()
+        return out
+
+    def _information_check(self):
+        """The mean excess surprise against its standard error under calibration (:meth:`calibration`)."""
+        logf, ent, var, _, _ = self._kde()
+        draws = np.array([self.law(i).size for i in range(len(self.values))], dtype=float)
+        ok = np.isfinite(logf) & np.isfinite(ent) & np.isfinite(var)
+        n, nats = int(ok.sum()), np.log(self.base)
+        if not n:
+            return {"mean_excess": np.nan, "se": np.nan, "z": np.nan, "n": 0, "base": self.base,
+                    "verdict": "calibrated"}
+        mean = float(np.mean(-logf[ok] - ent[ok])) / nats
+        se = float(np.sqrt(np.sum(var[ok] * (1 + 1 / draws[ok])))) / n / nats
+        z = mean / se if se > 0 else np.nan
+        verdict = "too narrow or off-centre" if z > 3 else "too wide" if z < -3 else "calibrated"
+        if verdict != "calibrated":
+            log_message(logging.logger.warning(
+                f"the laws look {verdict} by the information check: mean excess surprise {mean:.3f} "
+                f"(standard error {se:.3f}, z = {z:.1f})"))
+        return {"mean_excess": mean, "se": se, "z": z, "n": n, "base": self.base, "verdict": verdict}
 
     # ------------------------------------------------------------------ plots
     def plot_calibration(self, alphas=None, theme='alges', color=None, **figargs):
@@ -989,6 +1111,55 @@ class PosteriorAudit(Summarised):
             ax.set_title("Surprise of each datum")
             if flag.any():
                 ax.legend(loc="best", fontsize=8)
+            fig.tight_layout()
+        return fig
+
+    def plot_evidence(self, theme='alges', cmap=None, **figargs):
+        """The data on their first two coordinates, coloured by the support of their laws and by the
+        information gain (:meth:`evidence`), the data with a support below 0.5 circled in both.
+
+        Parameters
+        ----------
+        theme : str, optional
+            Plot theme (:class:`~spatialize.viz.PlotStyle`). Default: ``'alges'``.
+        cmap : str or Colormap, optional
+            Colour map of the support. Default: the theme's. The gain uses the diverging palette
+            ``vik``, centred at 0.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        from matplotlib.colors import TwoSlopeNorm
+        from spatialize.viz import get_palette_colormap
+        ev = self.evidence()
+        pts = np.asarray(self.points, dtype=float)
+        y = pts[:, 1] if pts.shape[1] > 1 else np.zeros(len(pts))
+        weak = ev["support"].to_numpy() < 0.5
+        gain = ev["gain"].to_numpy()
+        finite = gain[np.isfinite(gain)]
+        span = max(float(np.max(np.abs(finite))) if finite.size else 1.0, 1e-9)
+        unit = {2.0: "bits", 10.0: "hartleys"}.get(self.base, "nats" if np.isclose(self.base, np.e) else f"log base {self.base:g}")
+        figargs.setdefault("figsize", (13, 5.5))
+        with PlotStyle(theme=theme, cmap=cmap) as style:
+            fig, ax = plt.subplots(1, 2, **figargs)
+            panels = [(ax[0], ev["support"].to_numpy(), style.cmap, dict(vmin=0, vmax=1), "support (share of partitions)",
+                       "Support of each law"),
+                      (ax[1], gain, get_palette_colormap("vik"), dict(norm=TwoSlopeNorm(0, -span, span)),
+                       f"information gain, {unit}", "Information from the other data")]
+            for a, c, cm, scale, label, title in panels:
+                sc = a.scatter(pts[:, 0], y, c=c, cmap=cm, s=25, zorder=3, **scale)
+                a.scatter(pts[weak, 0], y[weak], s=110, facecolors='none', edgecolors=plt.rcParams['text.color'],
+                          linewidths=1.0, zorder=4, label="support < 0.5")
+                plt.colorbar(sc, ax=a, label=label)
+                a.set_aspect('equal', adjustable='box')
+                a.set_xlabel("X")
+                a.set_ylabel("Y")
+                a.set_title(title)
+                if weak.any():
+                    a.legend(loc="best", fontsize=8)
             fig.tight_layout()
         return fig
 
@@ -1327,7 +1498,7 @@ class PosteriorSampleAnalyzer(PosteriorAudit):
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
                     common_args=dict(_COMMON, widening="auto", widening_knn=12, scale="raw", calibrate=True,
-                                     tails="t", nu=3.0),
+                                     tails="t", nu=3.0, base=np.e),
                     specific_args=_SPECIFIC)
 def posterior_audit(points, values, **kwargs):
     """The predictive law of each datum built from the other data.
@@ -1370,6 +1541,9 @@ def posterior_audit(points, values, **kwargs):
         The model of the laws' tails (:class:`PosteriorAudit`). Default: ``"t"``.
     nu : float, optional
         The degrees of freedom of the Student-t kernels. Default: 3.
+    base : float, optional
+        The base of the logarithms of the information readings: e for nats, 2 for bits
+        (:class:`PosteriorAudit`). Default: e.
     fitted_model_factory : FittedModelFactory, optional
         The density model of :meth:`PosteriorAudit.model`, for plots. Default: a variational
         Gaussian mixture of three components.
@@ -1399,7 +1573,7 @@ def posterior_audit(points, values, **kwargs):
     audit = PosteriorAudit(members, points, values, kwargs["fitted_model_factory"], callback=kwargs["callback"],
                            widening=kwargs["widening"], widening_knn=kwargs["widening_knn"], seed=kwargs["seed"],
                            scale=kwargs["scale"], calibrate=kwargs["calibrate"], tails=kwargs["tails"],
-                           nu=kwargs["nu"], cells=_cells_reader(points, kwargs))
+                           nu=kwargs["nu"], cells=_cells_reader(points, kwargs), base=kwargs["base"])
     weak = int(np.sum(audit.support < 0.5))
     if weak:
         log_message(logging.logger.warning(

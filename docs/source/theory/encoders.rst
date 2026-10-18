@@ -8,8 +8,8 @@ The encoder cuts the domain into cells at random, in a way that fixes the co-occ
 :math:`e(S)` of :doc:`sde`, hence how the estimate couples nearby locations. Choosing a process is
 choosing which spatial symmetry to assume.
 
-The box and the granularity
-===========================
+The box, the granularity
+========================
 
 The cells are drawn on a box :math:`H = \prod_{c=1}^d [a_c, b_c]`. By default :math:`H` is the
 smallest box holding the data and the locations to estimate. The granularity is measured on the data

@@ -53,8 +53,8 @@ a cell with data, one per cell, and under ``"coarsen"`` the classifier of the ne
 data predicts it (:doc:`blockmark`). The hyperparameter search reports the share of the data left
 without a category, and warns above the session's ``max_left_out``.
 
-What categories cannot fix
---------------------------
+The limit of categorical data
+-----------------------------
 
 In the block-mark model (:doc:`blockmark`) a field is a random partition of the domain into blocks with
 one value drawn independently in each. With continuous values, two locations show the same value only if
@@ -254,8 +254,8 @@ log-likelihood that EM reports is the one of the non-spatial model, which does n
 so it cannot choose :math:`\beta`. The effect of the constraint is read on the map instead, through the
 contacts that remain.
 
-Reproducibility and computation
--------------------------------
+Reproducibility, computation
+----------------------------
 
 A fixed seed makes the result of Dawid–Skene reproducible. The E-step, the M-step and the
 log-likelihood run on the session's threads, with their sums in a fixed order, so that the result is

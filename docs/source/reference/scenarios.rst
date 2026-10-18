@@ -55,8 +55,8 @@ Spatialize's runner
 .. automodule:: spatialize.scenarios.runners.spatialize
    :members:
 
-Statistical tests and error budget
-----------------------------------
+Statistical tests, error budget
+-------------------------------
 
 .. automodule:: spatialize.scenarios.stats.families
    :members:
@@ -70,8 +70,8 @@ Map functionals
 .. automodule:: spatialize.scenarios.stats.maps
    :members:
 
-Truth fields and pinned data
-----------------------------
+Truth fields, pinned data
+-------------------------
 
 .. automodule:: spatialize.scenarios.generators.fields
    :members:

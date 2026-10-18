@@ -10,8 +10,8 @@ theory reads the estimator through it. Through it the theory writes the law the 
 to, the *higher-order predictive law*, and says what a member should be at a location whose cell
 holds no datum, which is how Spatialize fills such cells.
 
-The estimator and its limit
-===========================
+The limit of the estimator
+==========================
 
 Recall the estimator of :doc:`sde`. From data :math:`O = \{(v_i, z_i)\}_{i \le n}` it draws
 :math:`T` partitions :math:`\Pi^{(1)}, \dots, \Pi^{(T)}`, predicts at a location :math:`v` from
@@ -78,8 +78,8 @@ two and three locations the joint cumulant of order :math:`k` is exactly
 with :math:`\kappa_k` the :math:`k`-th cumulant of :math:`\nu`, so the partition law plays the
 role a covariance plays for a Gaussian field, at every order.
 
-The model and the decoders
---------------------------
+The decoders under the model
+----------------------------
 
 The uniform draw decoder of :doc:`decoders` is the block-mark model read from the data. It returns
 a datum of the cell drawn uniformly. When the data of a cell share one mark, every draw returns it,
@@ -151,8 +151,8 @@ the covariance between two locations without data is
 the probability that they share a block, times the variance of the marks. If each location received
 its own draw from :math:`\nu` instead, two locations in one empty block would come out independent, which would distort every quantity that involves several locations at once, such as the area above a threshold, a block average or a simulated field.
 
-How Spatialize fills cells without data
-=======================================
+Cells without data in Spatialize
+================================
 
 The session setting ``empty_cells`` (:mod:`spatialize.session`) chooses what a member is when the
 cell of its location holds no datum.

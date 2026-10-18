@@ -83,8 +83,8 @@ Linux, then reinstall Spatialize from source,
 To run on one thread on purpose and silence the warning, set
 ``spatialize.session.set(parallel=False)`` (:doc:`reference/session`).
 
-Messages and progress bars
-==========================
+Messages, progress bars
+=======================
 
 - **Warnings do not appear, or too many messages do.** The session setting ``verbosity`` sets the
   lowest level shown, warnings by default. ``spatialize.session.set(verbosity="info")`` adds what

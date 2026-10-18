@@ -267,8 +267,8 @@ The conformance tests (:doc:`../scenarios/index`) name their estimators by catal
 parameters in a file, so they apply to decoders of the catalogue, the built-in ones and those added
 in C++.
 
-When to move to C++
-===================
+Moving to C++
+=============
 
 A Python decoder becomes a candidate for C++ when it is meant to be part of the library, when it
 must run on every core, or when it draws random numbers. The C++ route starts from the same

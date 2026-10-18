@@ -27,8 +27,8 @@ random partitions behaves as the theory says it must. Spatialize runs it on itse
 implementation of the same concepts can run it through a small adapter (a
 :class:`~spatialize.scenarios.protocol.Runner`).
 
-How to run the tests
-====================
+Running the tests
+=================
 
 .. code-block:: bash
 
@@ -40,8 +40,8 @@ and 1 otherwise. :doc:`running` covers the options (``--mode full``, ``--seed``,
 ``--list``), running from Python, with pytest or from a source checkout, how to read the report and
 what to do when a check fails.
 
-Why scenarios, and why statistics
-=================================
+The reasons for scenarios, for statistics
+=========================================
 
 The estimators of Spatialize are random objects. An ensemble estimate combines many random
 partitions of the domain (the *encoder*), a local model fitted inside each cell (the *decoder*) and,

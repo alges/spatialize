@@ -278,8 +278,8 @@ Reproducibility under parallel execution
   depend on where it runs. New Python loops should use the same function. The ranking of SPA
   became a direct reading in version 1.3 and no longer uses it.
 
-Progress and messages
-=====================
+Progress, messages
+==================
 
 The compiled code and the Python functions report through one protocol of JSON messages,
 ``spatialize.logging`` (``{"message": {...}}`` for a log line, ``{"progress": {"init": n, "step": s,

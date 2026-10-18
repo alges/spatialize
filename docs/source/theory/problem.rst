@@ -35,8 +35,8 @@ Many practical questions are functionals of these laws and not of a map.
 - The tonnage above a cut-off grade, again a functional of the joint law, which a map of averages
   gets wrong by smoothing the extremes away.
 
-What kriging sees
-=================
+The view of kriging
+===================
 
 Ordinary kriging predicts with a linear combination of the data,
 

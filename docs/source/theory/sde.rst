@@ -33,8 +33,8 @@ The estimate at :math:`v` is their empirical law, the *predictive law*
 Each :math:`\hat F_v^{(T)}` is a distribution function by construction, which settles the first
 requirement of :doc:`problem`.
 
-Why the laws fit together
-=========================
+The consistency of the laws
+===========================
 
 The members at different locations are computed under the same partitions, so the vector
 :math:`\big(\hat z^{(t)}(v_1), \dots, \hat z^{(t)}(v_N)\big)` is one field drawn under
@@ -133,8 +133,8 @@ with :math:`\sigma_v` the spread of the members at :math:`v`. A few hundred part
 it negligible. More partitions do not change what the ensemble estimates, so they cannot remove a
 bias that comes from the partition scale or from the decoder.
 
-What the ensemble converges to
-==============================
+The limit of the ensemble
+=========================
 
 As :math:`T \to \infty` the predictive law converges to the law of :math:`g(v; O_\Pi(v))` under
 :math:`\Pi \sim \Pr_\Pi`, with the data held fixed. As the data grow denser, filling the cells, that law converges in turn. Its limit describes how the predictions from this one realisation of the

@@ -270,8 +270,8 @@ Reading the report
        known failure that passed: the run fails until the record is updated), followed by the
        check's details: sample sizes, statistics, estimates and margins.
 
-What to do when a check fails
-=============================
+A failing check
+===============
 
 1. **Reproduce it** with the printed seed and mode. Runs are deterministic given the seed.
 2. **Do not reroll the seed until it passes.** With a correct implementation a run fails

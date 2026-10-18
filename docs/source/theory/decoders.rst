@@ -8,8 +8,8 @@ The decoder :math:`g` predicts at :math:`v` from the data :math:`(v_j, z_j)_{j \
 alone. Since the cells are small and change from one partition to the next, a decoder can be cheap,
 and the choice among them changes what the ensemble is good at.
 
-Averaging and drawing
-=====================
+Averaging, drawing
+==================
 
 Every decoder of Spatialize starts from non-negative weights :math:`w_j(v)` on the data of the cell
 and does one of two things with them.

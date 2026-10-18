@@ -1,8 +1,8 @@
 .. _theory-error:
 
-###############################
-Error and the choice of a model
-###############################
+########################
+The error of an ensemble
+########################
 
 Two sources of error
 ====================
@@ -41,8 +41,8 @@ The two move in opposite directions as the cells shrink. Finer cells are more ho
 lowers :math:`\varepsilon`, but they hold fewer data, which raises :math:`\delta`. The total is
 minimised at an intermediate granularity, which model selection looks for.
 
-What cross-validation sees
-==========================
+The view of cross-validation
+============================
 
 Cross-validation predicts each datum from the others. Scored with the logarithmic score, the
 negative log-likelihood of the held-out value, its risk :math:`R_{\mathrm{CV}}(\lambda)` for a

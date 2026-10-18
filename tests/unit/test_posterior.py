@@ -286,6 +286,9 @@ def test_null_flags_counts_the_flags_of_clean_replicates():
     assert a["observed"] == int(audit.flags().sum()) and np.isclose(a["expected"], out["flags"].mean())
     assert np.isclose(a["share_with_flags"], np.mean(out["flags"] > 0))
     assert np.isclose(a["p_value"], (1 + np.sum(out["flags"] >= a["observed"])) / 4)
+    strongest = _min_qvalue(audit.tail_p())
+    assert np.isclose(a["p_value_strongest"], (1 + np.sum(out["min_qvalue"] <= strongest)) / 4)
+    assert a["p_value_strongest"] == 0.25                        # the error lies beyond every replicate
     assert out.equals(audit.null_flags(n_replicates=3, q=0.05))
     p = np.random.default_rng(0).random(50) ** 3
     for q in (0.01, 0.05, 0.2):
@@ -341,3 +344,25 @@ def test_cross_reads_each_datum_given_a_second_variable():
         clean.cross(v[:-1])
     with pytest.raises(SpatializeError):
         PosteriorAudit(clean.members, points, u).cross(v)
+
+
+def test_cross_is_robust_to_a_gross_error_among_the_pairs():
+    """A datum the audit of the values flags takes no part in the others' laws given the covariate, so a
+    value shifted next to a decimal error is still flagged, the error too, and the clean data are not;
+    the local line is exact on pairs on a line."""
+    from spatialize.gs.spa import posterior_audit
+    from spatialize.gs.spa._main import _local_line
+    from spatialize.logging import singleton_null_callback as quiet
+    points, u, v, _ = _two_variables()
+    i = 7
+    j = int(np.argsort(np.linalg.norm(points - points[i], axis=1))[1])      # its nearest neighbour
+    bad = u.copy()
+    bad[j] *= 10
+    bad[i] += 1.2
+    audit = posterior_audit(points, bad, n_partitions=150, alpha=0.85, seed=1, callback=quiet)
+    assert audit.flags()[j]
+    t = audit.cross(v)
+    assert t.flag[i] and t.flag[j] and t.flag.sum() == 2
+    x = np.linspace(-1, 1, 30)
+    lever, centre, r, scale = _local_line(x - 0.3, 2 * x + 1, np.ones(30))
+    assert np.isclose(centre, 1.6) and np.allclose(r, 0) and scale < 1e-12 and np.isclose(lever.sum(), 1)

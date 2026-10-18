@@ -133,6 +133,18 @@ def _weighted_silverman(x, w):
     return 0.9 * max(sd, 1e-12) * n_eff ** -0.2, n_eff
 
 
+def _local_line(x, y, w):
+    """A line of ``y`` on ``x`` by weighted least squares: the leverage of each pair in its value at
+    x = 0, that value, the residuals and their standard deviation under the weights ``w``."""
+    w = w / w.sum()
+    X = np.column_stack([np.ones(x.size), x])
+    A = np.linalg.pinv(X.T @ (w[:, None] * X))
+    lever = (A @ (X * w[:, None]).T)[0]
+    r = y - X @ (A @ (X.T @ (w * y)))
+    scale = float(np.sqrt(np.sum(w * r ** 2) / max(1.0 - np.sum(w ** 2), 1e-12)))
+    return lever, float(lever @ y), r, scale
+
+
 def _kernel_logpdf(z, nu):
     """The log density of the standard Student-t law of ``nu`` degrees of freedom, Gaussian for an
     infinite ``nu``, in closed form."""
@@ -963,7 +975,11 @@ class PosteriorAudit(Summarised):
             replicates with some flag, the chance that clean data get at least one; and ``p_value``,
             the Monte Carlo p-value :math:`(1 + \#\{r : F_r \ge F\})/(R + 1)` of the hypothesis
             that the data are as clean as the replicates, :math:`F` being the observed flags and
-            :math:`F_r` those of replicate :math:`r`.
+            :math:`F_r` those of replicate :math:`r`; and ``p_value_strongest``, the same hypothesis
+            read through the most surprising datum, :math:`(1 + \#\{r : Q_r \le Q\})/(R + 1)` with
+            :math:`Q` the smallest adjusted p-value of the data and :math:`Q_r` that of replicate
+            :math:`r`. The count weighs every flag alike, so one datum a hundred spreads away counts
+            as one; the strongest datum weighs how far it lies.
 
         Raises
         ------
@@ -1009,9 +1025,11 @@ class PosteriorAudit(Summarised):
         self.callback(logging.progress.stop())
         out = pd.DataFrame(rows)
         n_obs = int(observed.sum())
+        strongest = _min_qvalue(self.tail_p())
         out.attrs.update({"q": q, "observed": n_obs, "expected": float(out["flags"].mean()),
                           "share_with_flags": float((out["flags"] > 0).mean()),
-                          "p_value": float((1 + np.sum(out["flags"] >= n_obs)) / (len(out) + 1))})
+                          "p_value": float((1 + np.sum(out["flags"] >= n_obs)) / (len(out) + 1)),
+                          "p_value_strongest": float((1 + np.sum(out["min_qvalue"] <= strongest)) / (len(out) + 1))})
         return out
 
     def weights(self, n_probes=20000):
@@ -1143,7 +1161,7 @@ class PosteriorAudit(Summarised):
         out.attrs["prior_entropy"] = prior / nats
         return out
 
-    def cross(self, covariate, alpha=0.9, nu=10.0, knn=20, q=0.05, n_draws=400):
+    def cross(self, covariate, alpha=0.9, nu=10.0, knn=20, q=0.05, n_draws=400, passes=3):
         r"""Each datum read against its law given a second variable measured at the same locations.
 
         Two variables measured on one sample share what the sample holds, which its neighbours do not
@@ -1172,6 +1190,9 @@ class PosteriorAudit(Summarised):
             The false discovery rate of the flags. Default: 0.05.
         n_draws : int, optional
             The draws that read each entropy. Default: 400.
+        passes : int, optional
+            The most readings of the data in turn, each leaving the data flagged by the previous one
+            out of the others' laws (see Notes). Default: 3.
 
         Returns
         -------
@@ -1192,6 +1213,13 @@ class PosteriorAudit(Summarised):
 
         Notes
         -----
+        An error among the pairs would pull the line of its neighbours, widening their residuals,
+        which hides their own errors. The data flagged by the audit of the values (:meth:`flags` at ``q``)
+        therefore take no part in the others' laws, nor do, in a further reading, those flagged given
+        the covariate, the readings repeated until the flags no longer change, ``passes`` at most.
+        A datum's own law never holds the datum. A robust line was tried first, without success, since
+        it treats the smaller of two branches of a relation, as with a link through a square, as errors.
+
         The values are read on the scale of the audit (``scale``), the covariate as given. The
         covariate must be measured at the locations of the data: what the two variables share at
         the scale of the sample, which the reading uses, is lost when one of them is predicted from
@@ -1201,8 +1229,9 @@ class PosteriorAudit(Summarised):
 
         On synthetic pairs of variables sharing a component of the sample, 300 data per field,
         the reading flagged 1 of 64 clean fields. With a linear link, and four planted errors, it
-        found a shifted value in 8 of 16 fields and each of two swapped values in 7 and 8 of 16,
-        which the audit of the values alone never flagged. A link through the square of the shared
+        found a shifted value in 13 of 16 fields and each of two swapped values in 8 and 10 of 16,
+        which the audit of the values alone never flagged, while 5 of its 50 flags fell on clean
+        data, a share the false discovery rate allows once true errors are flagged. A link through the square of the shared
         component, which gives its size and not its sign, gave little power. A link whose sign
         changes across the domain was followed only in part, the partitions of 300 data mixing the
         two relations (:doc:`/theory/posterior`).
@@ -1222,17 +1251,14 @@ class PosteriorAudit(Summarised):
         usable = np.isfinite(u) & np.isfinite(v)
         v_raw, v = v, np.where(usable, v, 0.0)          # missing values take no part, with weight 0
         u = np.where(usable, u, 0.0)
-        cols = {name: np.full(n, np.nan) for name in ("pit", "tail_p", "surprisal", "entropy", "gain", "pairs")}
-        self.callback(logging.progress.init(n, 1, desc="cross readings"))
-        for i in range(n):
-            self.callback(logging.progress.inform())
-            if not usable[i]:
-                continue
+
+        def read(i, partner, full, cols, rng=None):
+            # the law of datum i given its covariate, from the pairs of the data in ``partner``
             w = np.mean(labels == labels[i], axis=1)
             w[i] = 0.0
-            w[~usable] = 0.0
+            w[~partner] = 0.0
             if np.count_nonzero(w) < 3:
-                continue
+                return
             hv, _ = _weighted_silverman(v, w)
             dv = np.sort(np.abs(v[w > 0] - v[i]))
             hv = max(hv, dv[min(int(knn), dv.size) - 1], 1e-12)     # at least knn pairs within the width
@@ -1241,29 +1267,47 @@ class PosteriorAudit(Summarised):
             cc, uu, vv = c[keep] / c[keep].sum(), u[keep], v[keep] - v[i]
             # a weighted line of u on v: its value at v_i is the centre, its residuals the shape, and the
             # variance of the fitted centre widens the law where the pairs do not reach v_i
-            X = np.column_stack([np.ones(vv.size), vv])
-            A = np.linalg.pinv(X.T @ (cc[:, None] * X))
-            lever = (A @ (X * cc[:, None]).T)[0]
-            centre = float(lever @ uu)
-            r = uu - X @ (A @ (X.T @ (cc * uu)))
-            s2 = float(np.sum(cc * r ** 2) / max(1.0 - np.sum(cc ** 2), 1e-12))
+            lever, centre, r, scale = _local_line(vv, uu, cc)
             hu, n_eff = _weighted_silverman(r, cc)
-            hu = float(np.sqrt(hu ** 2 + s2 * np.sum(lever ** 2)))
+            hu = float(np.sqrt(hu ** 2 + scale ** 2 * np.sum(lever ** 2)))
             z = (u[i] - centre - r) / hu
             below = float(np.sum(cc * kernel[0].cdf(z, *kernel[1])))
             above = float(np.sum(cc * kernel[0].sf(z, *kernel[1])))
-            rng = np.random.default_rng(self.seed + i)
-            centres = centre + r
-            cols["surprisal"][i] = -(float(logsumexp(_kernel_logpdf(z, nu) + np.log(cc))) - np.log(hu))
-            cols["entropy"][i] = _mixture_entropy(centres, cc, hu, nu, int(n_draws), rng)
-            # the law of u among the pairs the partitions weigh, whatever their covariate
-            near = w > 1e-8 * w.max()
-            wm = w[near] / w[near].sum()
-            hm, _ = _weighted_silverman(u[near], wm)
-            cols["gain"][i] = _mixture_entropy(u[near], wm, hm, nu, int(n_draws), rng) - cols["entropy"][i]
             cols["pit"][i] = below / (below + above)
             cols["tail_p"][i] = min(1.0, 2.0 * min(below, above))
             cols["pairs"][i] = n_eff
+            if full:
+                cols["surprisal"][i] = -(float(logsumexp(_kernel_logpdf(z, nu) + np.log(cc))) - np.log(hu))
+                cols["entropy"][i] = _mixture_entropy(centre + r, cc, hu, nu, int(n_draws), rng)
+                # the law of u among the pairs the partitions weigh, whatever their covariate
+                near = w > 1e-8 * w.max()
+                um, wm = u[near], w[near] / w[near].sum()
+                hm, _ = _weighted_silverman(um, wm)
+                cols["gain"][i] = _mixture_entropy(um, wm, hm, nu, int(n_draws), rng) - cols["entropy"][i]
+
+        def blank():
+            return {name: np.full(n, np.nan) for name in ("pit", "tail_p", "surprisal", "entropy", "gain", "pairs")}
+
+        # the flagged data take no part in the others' laws, since an error would pull the line of its
+        # neighbours and widen their residuals, hiding their own errors: first the data the audit of the
+        # values flags, then those flagged given the covariate, until the flags no longer change
+        univariate = self.flags(q)
+        partner = usable & ~univariate
+        self.callback(logging.progress.init(int(passes) * n, 1, desc="cross readings"))
+        for _ in range(int(passes) - 1):
+            cols = blank()
+            for i in np.flatnonzero(usable):
+                read(i, partner, False, cols)
+                self.callback(logging.progress.inform())
+            tail = np.where(np.isfinite(cols["tail_p"]), np.clip(cols["tail_p"], np.finfo(float).tiny, 1.0), np.nan)
+            updated = usable & ~univariate & ~_bh(tail, q)
+            if np.array_equal(updated, partner):
+                break
+            partner = updated
+        cols = blank()
+        for i in np.flatnonzero(usable):
+            read(i, partner, True, cols, np.random.default_rng(self.seed + i))
+            self.callback(logging.progress.inform())
         self.callback(logging.progress.stop())
         nats = np.log(self.base)
         tail = np.where(np.isfinite(cols["tail_p"]), np.clip(cols["tail_p"], np.finfo(float).tiny, 1.0), np.nan)

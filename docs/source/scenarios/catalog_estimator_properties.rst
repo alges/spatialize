@@ -551,8 +551,8 @@ flagged, a shift of the square above the others by 0.22 to 0.23 (p at most
 :math:`2.8 \cdot 10^{-7}`), a shift of -0.36 to -0.37 at the isolated error and a declustered mean
 closer to the field's mean by 0.36 to 0.37. Between 20 % and 25 % of the clean fields carry a flag,
 the known failure (October 2026, after the widening of a variable was chosen once for all its data;
-30 % to 45 % before). Given the second variable, the reading flagged 63 % more of the shifted and
-swapped values than the audit of the values alone (seed 1, :math:`p = 1.6 \cdot 10^{-10}`).
+30 % to 45 % before). Given the second variable, the reading flagged 70 % more of the shifted and
+swapped values than the audit of the values alone (seed 1, :math:`p = 5.4 \cdot 10^{-10}`).
 
 **History.** The first version checked the coherence of the square, which passed at its limit, the
 coherence being a weak signal (0.06 to 0.10). Inside the square a datum's law is built from

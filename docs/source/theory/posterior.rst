@@ -374,7 +374,16 @@ replicates with some flag the chance that clean data get one, and
 
    \hat p = \frac{1 + \#\{r : F_r \ge F\}}{R + 1}
 
-is the Monte Carlo p-value of the hypothesis that the data are as clean as the replicates.
+is the Monte Carlo p-value of the hypothesis that the data are as clean as the replicates. The
+count weighs every flag alike, so one datum a hundred spreads away counts as one flag. Read through
+the most surprising datum instead, with :math:`Q` the smallest Benjamini–Hochberg adjusted p-value
+of the data and :math:`Q_r` that of replicate :math:`r`, the same hypothesis has the p-value
+
+.. math::
+
+   \hat p_{\min} = \frac{1 + \#\{r : Q_r \le Q\}}{R + 1},
+
+which weighs how far the strongest datum lies. Neither can fall below :math:`1/(R + 1)`.
 
 On the fields of the table, four of each kind, with 20 replicates each, the replicates predicted the
 share of clean fields with a false flag, 0.20 against an observed 0.19 with the default Student-t
@@ -485,6 +494,14 @@ the covariate, where the line would otherwise be extended beyond its data. The d
 as in the rest of the analysis, by its position, its tail probability, a Benjamini–Hochberg flag
 and its log score.
 
+An error among the pairs pulls the line of its neighbours, widening their residuals, which hides
+their own errors. The data the audit of the values flags therefore take no part in the others'
+laws. Nor do, in a further reading, the data flagged given the covariate, the readings being
+repeated until the flags no longer change, three times at most. A robust line, which gives no
+weight to the pairs far from it, was tried first, without success. It treats the smaller of two
+branches of a relation as errors, so with a link through a square it flagged 14 of 16 clean
+fields.
+
 The covariate gives no power where it says nothing about the datum. The *gain*, the entropy of the
 law of :math:`u` among the pairs the partitions weigh minus that of the law given :math:`v_i`,
 measures what it says. It is near 0 for an unrelated covariate, while it exceeds the mutual
@@ -493,8 +510,9 @@ field within the neighbourhood.
 
 On synthetic fields of 300 data, the two variables sharing a component of the sample of standard
 deviation 0.5 besides measurement errors of 0.15, the reading flagged 1 of 64 clean fields. With a
-linear link it found a value shifted by 1 in 8 of 16 fields and each of two swapped values in 7 and
-8 of 16, where the audit of the values alone found none of them. A link through the square of the
+linear link it found a value shifted by 1 in 13 of 16 fields and each of two swapped values in 8
+and 10 of 16, where the audit of the values alone found none of them. Five of its 50 flags fell on
+clean data, a share the false discovery rate allows once true errors are flagged. A link through the square of the
 shared component tells its size and not its sign, which left little power. A link whose sign
 changes across the domain was followed only in part, the partitions of 300 data mixing the two
 relations near their border. Kernels of 5 degrees of freedom lost power, while Gaussian kernels

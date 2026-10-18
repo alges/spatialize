@@ -118,7 +118,8 @@ New
   through the mean excess surprise, and ``evidence()`` with ``plot_evidence()`` tells how much the other
   data say about each datum, through the support of its law and the information it gains over the
   distribution of all the data, a reading that does not depend on the units. ``null_flags()`` measures
-  the false flags on the data at hand, auditing replicates free of errors drawn from the laws.
+  the false flags on the data at hand, auditing replicates free of errors drawn from the laws, with
+  p-values read through the number of flags and through the most surprising datum.
   ``cross(covariate)`` reads each datum given a second variable measured at the same locations, which
   finds shifted or swapped values that the neighbours alone do not show. Scenario P12 holds the analysis to
   planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.

@@ -449,6 +449,57 @@ widening and the factor of the calibration, which lower every gain.
 Support and gain separate the two kinds of weak evidence. An isolated datum has a low support,
 a datum among disagreeing neighbours a low gain with a high support.
 
+A second variable
+=================
+
+Two variables measured on one sample share what the sample holds, a mineral grain, a patch of
+polluted soil, the water of one bottle. The neighbours of the sample do not see that part, which
+widens the law of a datum built from them. The other variable at the same location sees it, so a
+value plausible among its neighbours may be implausible given the other variable, a shifted value,
+two values swapped between samples or a unit misread in one variable.
+
+The law of :math:`u_i` given the covariate :math:`v_i` is built from the pairs :math:`(u_j, v_j)`
+of the other data. Each pair weighs
+
+.. math::
+
+   c_{ij} = \pi_{ij}\, \exp\Big(-\frac{(v_j - v_i)^2}{2 h_i^2}\Big),
+
+with :math:`\pi_{ij}` the share of partitions, of granularity 0.9 by default, in which
+:math:`x_j` shares the cell of :math:`x_i`, and :math:`h_i` the larger of Silverman's bandwidth of
+the covariate and the distance from :math:`v_i` to its 20th nearest :math:`v_j`, so that the law
+always rests on a few pairs. A line fitted to the pairs by weighted least squares gives the centre
+:math:`\hat u_i = \sum_j \ell_j u_j` at :math:`v_i`, and its residuals :math:`r_j` the shape,
+
+.. math::
+
+   \tilde f(u \mid v_i) = \sum_j \frac{c_{ij}}{\sum_k c_{ik}}\, \frac1{b_i}\,
+   K_\nu\Big(\frac{u - \hat u_i - r_j}{b_i}\Big),
+   \qquad
+   b_i^2 = h_{r,i}^2 + s_i^2 \sum_j \ell_j^2,
+
+with :math:`K_\nu` the Student-t kernel of 10 degrees of freedom, :math:`h_{r,i}` Silverman's
+bandwidth of the weighted residuals and :math:`s_i^2` their variance. The last term, the variance
+of the fitted centre, widens the law where the pairs do not reach :math:`v_i`, at the extremes of
+the covariate, where the line would otherwise be extended beyond its data. The datum is then read
+as in the rest of the analysis, by its position, its tail probability, a Benjamini–Hochberg flag
+and its log score.
+
+The covariate gives no power where it says nothing about the datum. The *gain*, the entropy of the
+law of :math:`u` among the pairs the partitions weigh minus that of the law given :math:`v_i`,
+measures what it says. It is near 0 for an unrelated covariate, while it exceeds the mutual
+information of the two variables at a location, since the first law also holds the variation of the
+field within the neighbourhood.
+
+On synthetic fields of 300 data, the two variables sharing a component of the sample of standard
+deviation 0.5 besides measurement errors of 0.15, the reading flagged 1 of 64 clean fields. With a
+linear link it found a value shifted by 1 in 8 of 16 fields and each of two swapped values in 7 and
+8 of 16, where the audit of the values alone found none of them. A link through the square of the
+shared component tells its size and not its sign, which left little power. A link whose sign
+changes across the domain was followed only in part, the partitions of 300 data mixing the two
+relations near their border. Kernels of 5 degrees of freedom lost power, while Gaussian kernels
+flagged a quarter of the clean fields with a linear link.
+
 The share of the domain behind each datum
 =========================================
 

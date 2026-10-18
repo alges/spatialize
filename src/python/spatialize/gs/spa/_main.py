@@ -63,14 +63,15 @@ def _with_best_params(kwargs):
 
 def _cells_reader(points, kwargs):
     """A function giving the cells of the data and of uniform probe locations in the partitions of
-    the cross-validation: ``(n_probes, seed) -> (data cells (n, T), probe cells (n_probes, T))``."""
+    the cross-validation, or in partitions of another granularity ``alpha`` drawn the same way:
+    ``(n_probes, seed, alpha=None) -> (data cells (n, T), probe cells (n_probes, T))``."""
     from spatialize import session
     points = np.asarray(points, dtype=np.float32)
-    alpha = kwargs["alpha"]
-    if kwargs["p_process"] == partitioning_process.VORONOI and not kwargs["data_cond"]:
-        alpha = -alpha
+    negative = kwargs["p_process"] == partitioning_process.VORONOI and not kwargs["data_cond"]
 
-    def read(n_probes, seed):
+    def read(n_probes, seed, alpha=None):
+        alpha = kwargs["alpha"] if alpha is None else alpha
+        alpha = -alpha if negative else alpha
         domain = session.get("domain")
         box = (np.asarray(domain, dtype=float) if domain is not None
                else np.stack([points.min(axis=0), points.max(axis=0)], axis=1).astype(float))
@@ -121,6 +122,37 @@ def _bh(p, q):
     if passed.size:
         out[idx[: passed[-1] + 1]] = True
     return out
+
+
+def _weighted_silverman(x, w):
+    """Silverman's bandwidth of ``x`` under the weights ``w``, with the effective number of values."""
+    w = w / w.sum()
+    m = float(np.sum(w * x))
+    sd = float(np.sqrt(np.sum(w * (x - m) ** 2)))
+    n_eff = 1.0 / float(np.sum(w ** 2))
+    return 0.9 * max(sd, 1e-12) * n_eff ** -0.2, n_eff
+
+
+def _kernel_logpdf(z, nu):
+    """The log density of the standard Student-t law of ``nu`` degrees of freedom, Gaussian for an
+    infinite ``nu``, in closed form."""
+    from scipy.special import gammaln
+    if not np.isfinite(nu):
+        return -0.5 * z * z - 0.5 * np.log(2 * np.pi)
+    const = gammaln((nu + 1) / 2) - gammaln(nu / 2) - 0.5 * np.log(nu * np.pi)
+    return const - 0.5 * (nu + 1) * np.log1p(z * z / nu)
+
+
+def _mixture_entropy(centres, weights, h, nu, size, rng):
+    """The entropy, in nats, of the mixture of Student-t kernels (``nu`` degrees of freedom, Gaussian
+    for an infinite ``nu``) of scale ``h`` at ``centres``, by ``size`` draws."""
+    from scipy.special import logsumexp
+    pick = rng.choice(centres.size, size=size, p=weights)
+    eps = rng.standard_normal(size) if not np.isfinite(nu) else rng.standard_t(nu, size)
+    draws = centres[pick] + h * eps
+    logs = logsumexp(_kernel_logpdf((draws[:, None] - centres[None, :]) / h, nu) + np.log(weights)[None, :],
+                     axis=1) - np.log(h)
+    return -float(np.mean(logs))
 
 
 def _min_qvalue(p):
@@ -440,9 +472,10 @@ class PosteriorAudit(Summarised):
     nu : float, optional
         The degrees of freedom of the Student-t kernels. Default: 3.
     cells : callable, optional
-        ``cells(n_probes, seed) -> (data_cells, probe_cells)``, the labels of the cells of the data,
-        shape (n, T), and of ``n_probes`` locations drawn uniformly in the box of the partitions,
-        shape (n_probes, T), in the partitions of the members; needed by :meth:`weights`.
+        ``cells(n_probes, seed, alpha=None) -> (data_cells, probe_cells)``, the labels of the cells
+        of the data, shape (n, T), and of ``n_probes`` locations drawn uniformly in the box of the
+        partitions, shape (n_probes, T), in the partitions of the members, or in partitions of
+        granularity ``alpha`` drawn the same way; needed by :meth:`weights` and :meth:`cross`.
         :func:`posterior_audit` provides it. Default: None.
     base : float, optional
         The base of the logarithms of the information readings (``surprisal``, ``entropy`` and
@@ -1109,6 +1142,134 @@ class PosteriorAudit(Summarised):
         out = pd.DataFrame({"support": self.support, "entropy": ent / nats, "gain": (prior - ent) / nats})
         out.attrs["prior_entropy"] = prior / nats
         return out
+
+    def cross(self, covariate, alpha=0.9, nu=10.0, knn=20, q=0.05, n_draws=400):
+        r"""Each datum read against its law given a second variable measured at the same locations.
+
+        Two variables measured on one sample share what the sample holds, which its neighbours do not
+        see. A value plausible among its neighbours may then be implausible given the other variable
+        at the same place: a shifted value, two values swapped between samples, a unit misread in one
+        variable. The law of datum :math:`i` given the covariate :math:`v_i` is built from the pairs
+        :math:`(u_j, v_j)` of the other data, each weighted by the share of partitions of granularity
+        ``alpha`` in which its location shares the cell of :math:`x_i` and by a Gaussian kernel in
+        :math:`v_j - v_i`, whose width holds at least ``knn`` of them. A weighted line of :math:`u`
+        on :math:`v` gives the centre of the law at :math:`v_i`, and its residuals, spread by
+        Student-t kernels of ``nu`` degrees of freedom with the variance of the fitted centre added,
+        give its shape (:doc:`/theory/posterior`).
+
+        Parameters
+        ----------
+        covariate : array_like of shape (n,)
+            The second variable at the locations of the data, NaN where it was not measured.
+        alpha : float, optional
+            The granularity of the partitions that weigh the pairs. Default: 0.9.
+        nu : float, optional
+            The degrees of freedom of the Student-t kernels; ``numpy.inf`` for Gaussian kernels.
+            Default: 10.
+        knn : int, optional
+            The least number of pairs within the width of the kernel in the covariate. Default: 20.
+        q : float, optional
+            The false discovery rate of the flags. Default: 0.05.
+        n_draws : int, optional
+            The draws that read each entropy. Default: 400.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per datum: ``covariate``; ``pit``, ``tail_p`` and ``flag``, the position, the
+            two-sided tail probability and the Benjamini–Hochberg flag at ``q`` under the law given
+            the covariate; ``surprisal`` and ``entropy`` of that law, in the units of ``base``;
+            ``gain``, the entropy of the law of :math:`u` among the weighted pairs minus that of the
+            law given the covariate, the information the covariate gives about the datum, near 0 where
+            it gives none, so that the cross reading has no power there; ``pairs``, the effective
+            number of pairs the law rests on. NaN for a datum without a covariate.
+
+        Raises
+        ------
+        SpatializeError
+            When the audit was not built by :func:`posterior_audit`, which holds its partitions, or
+            the covariate has another length than the data.
+
+        Notes
+        -----
+        The values are read on the scale of the audit (``scale``), the covariate as given. The
+        covariate must be measured at the locations of the data: what the two variables share at
+        the scale of the sample, which the reading uses, is lost when one of them is predicted from
+        its own neighbours. The gain compares the law given the covariate with the law of the
+        values among the weighted pairs, which also holds the variation of the field within the
+        neighbourhood, so it exceeds the mutual information of the two variables at a location.
+
+        On synthetic pairs of variables sharing a component of the sample, 300 data per field,
+        the reading flagged 1 of 64 clean fields. With a linear link, and four planted errors, it
+        found a shifted value in 8 of 16 fields and each of two swapped values in 7 and 8 of 16,
+        which the audit of the values alone never flagged. A link through the square of the shared
+        component, which gives its size and not its sign, gave little power. A link whose sign
+        changes across the domain was followed only in part, the partitions of 300 data mixing the
+        two relations (:doc:`/theory/posterior`).
+        """
+        if self._cells is None:
+            raise SpatializeError("the cross reading needs the partitions: build the audit with posterior_audit, "
+                                  "or give PosteriorAudit its cells")
+        from scipy.special import logsumexp
+        from scipy.stats import norm, t as student
+        v = np.asarray(covariate, dtype=np.float64).ravel()
+        u = self._tvalues
+        n = len(u)
+        if v.size != n:
+            raise SpatializeError(f"covariate has {v.size} values for {n} data")
+        kernel = (norm, ()) if not np.isfinite(nu) else (student, (float(nu),))
+        labels = self._cells(0, self.seed, alpha)[0]
+        usable = np.isfinite(u) & np.isfinite(v)
+        v_raw, v = v, np.where(usable, v, 0.0)          # missing values take no part, with weight 0
+        u = np.where(usable, u, 0.0)
+        cols = {name: np.full(n, np.nan) for name in ("pit", "tail_p", "surprisal", "entropy", "gain", "pairs")}
+        self.callback(logging.progress.init(n, 1, desc="cross readings"))
+        for i in range(n):
+            self.callback(logging.progress.inform())
+            if not usable[i]:
+                continue
+            w = np.mean(labels == labels[i], axis=1)
+            w[i] = 0.0
+            w[~usable] = 0.0
+            if np.count_nonzero(w) < 3:
+                continue
+            hv, _ = _weighted_silverman(v, w)
+            dv = np.sort(np.abs(v[w > 0] - v[i]))
+            hv = max(hv, dv[min(int(knn), dv.size) - 1], 1e-12)     # at least knn pairs within the width
+            c = w * np.exp(-0.5 * ((v - v[i]) / hv) ** 2)
+            keep = c > 1e-8 * c.max()                     # pairs of negligible weight left out
+            cc, uu, vv = c[keep] / c[keep].sum(), u[keep], v[keep] - v[i]
+            # a weighted line of u on v: its value at v_i is the centre, its residuals the shape, and the
+            # variance of the fitted centre widens the law where the pairs do not reach v_i
+            X = np.column_stack([np.ones(vv.size), vv])
+            A = np.linalg.pinv(X.T @ (cc[:, None] * X))
+            lever = (A @ (X * cc[:, None]).T)[0]
+            centre = float(lever @ uu)
+            r = uu - X @ (A @ (X.T @ (cc * uu)))
+            s2 = float(np.sum(cc * r ** 2) / max(1.0 - np.sum(cc ** 2), 1e-12))
+            hu, n_eff = _weighted_silverman(r, cc)
+            hu = float(np.sqrt(hu ** 2 + s2 * np.sum(lever ** 2)))
+            z = (u[i] - centre - r) / hu
+            below = float(np.sum(cc * kernel[0].cdf(z, *kernel[1])))
+            above = float(np.sum(cc * kernel[0].sf(z, *kernel[1])))
+            rng = np.random.default_rng(self.seed + i)
+            centres = centre + r
+            cols["surprisal"][i] = -(float(logsumexp(_kernel_logpdf(z, nu) + np.log(cc))) - np.log(hu))
+            cols["entropy"][i] = _mixture_entropy(centres, cc, hu, nu, int(n_draws), rng)
+            # the law of u among the pairs the partitions weigh, whatever their covariate
+            near = w > 1e-8 * w.max()
+            wm = w[near] / w[near].sum()
+            hm, _ = _weighted_silverman(u[near], wm)
+            cols["gain"][i] = _mixture_entropy(u[near], wm, hm, nu, int(n_draws), rng) - cols["entropy"][i]
+            cols["pit"][i] = below / (below + above)
+            cols["tail_p"][i] = min(1.0, 2.0 * min(below, above))
+            cols["pairs"][i] = n_eff
+        self.callback(logging.progress.stop())
+        nats = np.log(self.base)
+        tail = np.where(np.isfinite(cols["tail_p"]), np.clip(cols["tail_p"], np.finfo(float).tiny, 1.0), np.nan)
+        return pd.DataFrame({"covariate": v_raw, "pit": cols["pit"], "tail_p": tail, "flag": _bh(tail, q),
+                             "surprisal": cols["surprisal"] / nats, "entropy": cols["entropy"] / nats,
+                             "gain": cols["gain"] / nats, "pairs": cols["pairs"]})
 
     def duplicates(self, tol=0.0):
         """The pairs of data closer than ``tol`` (co-located when ``tol`` is 0), with their values.

@@ -300,3 +300,44 @@ def test_null_flags_counts_the_flags_of_clean_replicates():
         assert kstest(positions, "uniform").pvalue > 1e-3
     with pytest.raises(SpatializeError):
         PosteriorAudit(audit.members, s, v).null_flags(1)
+
+
+def _two_variables(n=240, seed=1):
+    """Two variables at the same locations sharing a component of the sample, which the neighbours do
+    not see: u and v both follow it, w is independent of u."""
+    rng = np.random.default_rng(seed)
+    points = rng.random((n, 2))
+    shared = np.sin(2 * np.pi * points[:, 0]) + rng.normal(0, 0.5, n)
+    return points, shared + rng.normal(0, 0.15, n), shared + rng.normal(0, 0.15, n), rng.normal(size=n)
+
+
+def test_cross_reads_each_datum_given_a_second_variable():
+    """The cross reading flags a value shifted against the covariate measured with it, which the audit of
+    the values alone does not flag, and no datum of the clean data; its information gain is large for a
+    linked covariate and near 0 for an independent one; a datum without covariate gets NaN readings and
+    takes no part in the others' laws; the readings follow base; a covariate of another length, or an
+    audit without partitions, is refused. Clean data get a false flag by chance on about 2 % of fields
+    (1 of 64 in the study of the method), so the data are drawn from a seed without one."""
+    from spatialize import SpatializeError
+    from spatialize.gs.spa import posterior_audit, PosteriorAudit
+    from spatialize.logging import singleton_null_callback as quiet
+    points, u, v, w = _two_variables()
+    kw = dict(n_partitions=150, alpha=0.85, seed=1, callback=quiet)
+    clean = posterior_audit(points, u, **kw)
+    linked = clean.cross(v)
+    assert not linked.flag.any() and np.all((linked.pit > 0) & (linked.pit < 1))
+    assert np.median(linked.gain) > 0.8 and abs(np.median(clean.cross(w).gain)) < 0.2
+    shifted = u.copy()
+    shifted[7] += 1.2
+    audit = posterior_audit(points, shifted, **kw)
+    assert audit.cross(v).flag[7] and not audit.flags()[7]
+    partial = v.copy()
+    partial[3] = np.nan
+    t = clean.cross(partial)
+    assert t.loc[3, ["pit", "tail_p", "gain"]].isna().all() and t.drop(index=3)[["pit", "tail_p"]].notna().all().all()
+    bits = posterior_audit(points, u, base=2, **kw).cross(v)
+    assert np.allclose(bits.entropy, linked.entropy / np.log(2)) and np.allclose(bits.gain, linked.gain / np.log(2))
+    with pytest.raises(SpatializeError):
+        clean.cross(v[:-1])
+    with pytest.raises(SpatializeError):
+        PosteriorAudit(clean.members, points, u).cross(v)

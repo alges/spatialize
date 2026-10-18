@@ -302,10 +302,14 @@ runner's optional methods ``loo`` and ``cells`` (:doc:`extending`), with the rea
 :class:`~spatialize.gs.spa.PosteriorAudit`.
 
 - ``data``: ``n`` data uniform in the domain, their ``noise``, the ``patch`` (``side`` and
-  ``shift``), the ``preferential`` design (half of the data where the field exceeds ``above``), the
-  false discovery rate ``q``, ``fields`` (per mode) and ``generator_seed``.
+  ``shift``), the ``preferential`` design (half of the data where the field exceeds ``above``),
+  optionally ``cross``, two variables at the same locations (``shared``, the standard deviation of
+  the component of the sample they share, ``noise``, the error of each, and ``shift``, the planted
+  shift of a value of the first, which also has two values swapped), the false discovery rate
+  ``q``, ``fields`` (per mode) and ``generator_seed``.
 - per check, ``kind`` (``errors_found``, ``clean_flags``, ``shift_patch``, ``shift_error``,
-  ``declustering``, ``weights``), ``estimator`` and, for the one-sided kinds on shares, ``bound``.
+  ``declustering``, ``weights``, ``cross_power``), ``estimator``, for the one-sided kinds on
+  shares ``bound``, and for ``cross_power`` the ``cross_estimator`` whose partitions weigh the pairs.
 
 Evaluator ``draw_laws``
 -----------------------

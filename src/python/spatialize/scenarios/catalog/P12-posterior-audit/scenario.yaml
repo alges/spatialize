@@ -1,5 +1,5 @@
 id: P12-posterior-audit
-version: 2
+version: 3
 tier: T2
 evaluator: posterior_audit
 book:
@@ -9,7 +9,8 @@ purpose: >
   Posterior analysis reads each datum against the law the other data give it. On replicate fields it
   must find planted errors, tell a raised patch (neighbours surprised the same way) from an isolated
   error (neighbours surprised the other way, their laws pulled towards it), and
-  decluster a preferential design. The share of clean fields with a false flag is checked against the
+  decluster a preferential design. Read given a second variable measured at the same locations, it
+  must find shifted and swapped values that the neighbours alone do not show. The share of clean fields with a false flag is checked against the
   false discovery rate, a promise the laws cannot keep while their tails are too light, which the
   check records as a known failure.
 domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
@@ -19,6 +20,7 @@ data:
   noise: 0.1
   patch: {side: 0.2, shift: 1.5}      # a raised square of data: a sub-population
   preferential: {above: 0.8}          # half of the data where the field exceeds 0.8
+  cross: {shared: 0.5, noise: 0.15, shift: 1.0}   # two variables sharing a component of the sample
   q: 0.05                             # false discovery rate of the flags
   fields: {ci: 20, full: 40}         # sized for the shift checks (see provenance)
   generator_seed: 20261012
@@ -27,6 +29,9 @@ estimators:
   # Mondrian rate 10/3 on the unit square: Spatialize's alpha = 0.85, as in the measurements of the
   # theory page.
   - {id: idw, encoder: mondrian, rate: 3.3333333, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
+  # The partitions that weigh the pairs of the cross reading: rate 5, Spatialize's alpha = 0.9, the
+  # default of PosteriorAudit.cross.
+  - {id: idw-cross, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: nan}
 checks:
   - id: errors-found
     title: "the planted errors are flagged (share above one half)"
@@ -42,9 +47,9 @@ checks:
     bound: 0.05
     known_failure: >
       the laws' tails stay too light at the 99 % level after widening, the spread factor and Student-t
-      tails (coverage 0.97-0.99), so clean fields carry false flags (5 of 8 in the measurements of
-      the theory page); the false discovery rate is not controlled (theory page, "What the corrections
-      achieve")
+      tails (coverage 0.96-1), so clean fields carry false flags (4 of 32 in the measurements of
+      the theory page, October 2026); the false discovery rate is not controlled (theory page, "The
+      corrections on synthetic fields")
   - id: shift-patch
     title: "the neighbours of a raised patch's data are surprised the same way (shift above the others')"
     kind: shift_patch
@@ -65,6 +70,12 @@ checks:
     kind: weights
     family: almost-sure
     estimator: idw
+  - id: cross-power
+    title: "read given a second variable, shifted and swapped values are flagged more often than by their neighbours alone"
+    kind: cross_power
+    family: paired-relation
+    estimator: idw
+    cross_estimator: idw-cross
 provenance:
   v1: >
     2026-10-08: first version, with the posterior analysis (steps 1-3). Checks, bounds and sizes fixed
@@ -84,3 +95,4 @@ provenance:
     it in P12, keep the coherence as a descriptive reading. Sized for an effect of 1.75 standard
     deviations, K ≈ (4.06 + 1.28)² / 1.75² ≈ 9.3, giving 20 fields in ci and 40 in full.
   v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged. 2026-10-18: re-measured after widening='auto' was decided once per variable and the entropy of a law was read from its density (ci, seeds 1-3): errors found 0.95-0.98, clean fields flagged 0.20-0.25 (known failure; 0.30-0.45 before), shift of the patch 0.22-0.23, shift at the error -0.36 to -0.37, declustering 0.36-0.37. Checks, thresholds and sizes unchanged."
+  v3: "2026-10-18: check cross-power and the two-variable data (data.cross, estimator idw-cross), with the cross reading of the posterior analysis. The two variables are drawn after the other data, which do not change. Effect measured in the study of the method (16 fields, linear link): a shifted value found in 8 of 16, swapped values in 7 and 8 of 16, none by the audit of the values alone; a paired difference near 0.5 needs a handful of fields, so the 20 of ci suffice. known_failure text updated to the measurements of October 2026."

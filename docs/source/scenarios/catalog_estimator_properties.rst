@@ -507,7 +507,8 @@ P12 — Posterior analysis of the data
   part of the domain, which only its provenance decides (:doc:`../theory/posterior`)
 :Claim: read against the laws the other data give, planted errors are flagged, the neighbours of an
   isolated error and of a raised patch are surprised in opposite ways, and the partitions decluster
-  a preferential design. The flags of clean fields stay within the false discovery rate, a claim
+  a preferential design. Read given a second variable measured at the same locations, shifted and
+  swapped values are flagged more often than by their neighbours alone. The flags of clean fields stay within the false discovery rate, a claim
   recorded as a known failure.
 
 **Setup.** Each replicate field holds 300 data uniform on the unit square, with values
@@ -518,13 +519,17 @@ versions:
 - with three planted errors, a value multiplied by 10, one raised by 3 standard deviations and one
   lowered by 2.5;
 - with a square of side 0.2 raised by 1.5 (about 12 data) and one isolated error, raised by 2.5;
-- preferential, half of the data drawn where the field exceeds 0.8.
+- preferential, half of the data drawn where the field exceeds 0.8;
+- two variables at the same locations, each the field plus a component of the sample of standard
+  deviation 0.5 plus its own error of 0.15, the first with one value raised by 1 and two values
+  swapped. These data are drawn after the others, which they leave unchanged.
 
 The leave-one-out ensembles come from the runner's optional method ``loo``, with IDW on the Mondrian
 partition of rate :math:`10/3` (Spatialize's ``alpha`` = 0.85) and :math:`T = 300` members, and the
 cells of the partitions from ``cells``. The readings are those of
 :class:`~spatialize.gs.spa.PosteriorAudit` with its defaults, flags at :math:`q = 0.05`. The scenario
-uses 20 fields in ``ci`` and 40 in ``full``.
+uses 20 fields in ``ci`` and 40 in ``full``. The cross reading weighs its pairs with the cells of
+the Mondrian partition of rate 5 (``alpha`` = 0.9).
 
 **Checks.**
 
@@ -538,13 +543,16 @@ uses 20 fields in ``ci`` and 40 in ``full``.
 - ``declustering``, *paired-relation*. The declustered mean lies closer to the field's mean over the
   domain than the plain mean, under the preferential design.
 - ``weights``, *almost-sure*. The declustering weights are positive and sum to 1.
+- ``cross-power``, *paired-relation*. The share of the shifted and swapped values flagged by the
+  reading given the second variable exceeds the share flagged by the audit of the values alone.
 
 **Results.** On seeds 1 to 3 in ``ci`` every check passes, with 95 % to 98 % of the planted errors
 flagged, a shift of the square above the others by 0.22 to 0.23 (p at most
 :math:`2.8 \cdot 10^{-7}`), a shift of -0.36 to -0.37 at the isolated error and a declustered mean
 closer to the field's mean by 0.36 to 0.37. Between 20 % and 25 % of the clean fields carry a flag,
 the known failure (October 2026, after the widening of a variable was chosen once for all its data;
-30 % to 45 % before).
+30 % to 45 % before). Given the second variable, the reading flagged 63 % more of the shifted and
+swapped values than the audit of the values alone (seed 1, :math:`p = 1.6 \cdot 10^{-10}`).
 
 **History.** The first version checked the coherence of the square, which passed at its limit, the
 coherence being a weak signal (0.06 to 0.10). Inside the square a datum's law is built from

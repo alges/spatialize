@@ -1184,7 +1184,10 @@ def _audit_fields(s, k):
     """The data of field ``k`` of a posterior_audit scenario, drawn from ``data.generator_seed + k``:
     ``clean``, ``planted`` (three planted errors), ``patch`` (a raised square of data plus one
     isolated error) and ``preferential`` (half of the data where the field is high), with the indices
-    of the planted errors, the mask of the patch and the field's mean over the domain."""
+    of the planted errors, the mask of the patch and the field's mean over the domain; and, when the
+    scenario declares ``data.cross``, two variables at the same locations sharing a component of the
+    sample, the first with a shifted value and two swapped ones (``cross_u``, ``cross_v``,
+    ``cross_bad``), drawn after the rest so that the other data do not change."""
     d = s["data"]
     rng = np.random.default_rng(int(d["generator_seed"]) + k)
     box = np.asarray(s["domain"]["box"], float)
@@ -1218,7 +1221,17 @@ def _audit_fields(s, k):
     pref = np.vstack([uniform(n - len(hot)), hot])
     pref_values = field(pref) + noise * rng.standard_normal(len(pref))
     mean = float(np.mean(field(uniform(200000))))
-    return {"points": pts.astype(np.float32), "clean": clean.astype(np.float32),
+    out = {}
+    if "cross" in d:
+        cr = d["cross"]
+        shared = field(pts) + float(cr["shared"]) * rng.standard_normal(n)
+        cu = shared + float(cr["noise"]) * rng.standard_normal(n)
+        cv = shared + float(cr["noise"]) * rng.standard_normal(n)
+        cbad = rng.choice(n, 3, replace=False)
+        cu[cbad[0]] += float(cr["shift"])
+        cu[cbad[1]], cu[cbad[2]] = cu[cbad[2]], cu[cbad[1]]
+        out = {"cross_u": cu.astype(np.float32), "cross_v": cv, "cross_bad": cbad}
+    return {**out, "points": pts.astype(np.float32), "clean": clean.astype(np.float32),
             "planted": planted.astype(np.float32), "bad": bad, "patched": patched.astype(np.float32),
             "patch": patch, "lone": lone, "pref_points": pref.astype(np.float32),
             "pref_values": pref_values.astype(np.float32), "mean": mean}
@@ -1242,9 +1255,13 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
       laws being pulled towards it;
     - ``declustering`` (paired-relation) — the declustered mean is closer to the field's mean than
       the plain mean, under the preferential design;
-    - ``weights`` (almost-sure) — the declustering weights are positive and sum to 1.
+    - ``weights`` (almost-sure) — the declustering weights are positive and sum to 1;
+    - ``cross_power`` (paired-relation) — the share of the shifted and swapped values of the first of
+      two variables flagged by the reading given the second (:meth:`PosteriorAudit.cross
+      <spatialize.gs.spa.PosteriorAudit.cross>`, its partitions those of the check's
+      ``cross_estimator``) exceeds the share the audit of the values alone flags.
 
-    Reads ``data.n``, ``data.noise``, ``data.patch``, ``data.preferential``, ``data.q``,
+    Reads ``data.n``, ``data.noise``, ``data.patch``, ``data.preferential``, ``data.cross``, ``data.q``,
     ``data.fields`` (per mode), ``data.generator_seed`` and ``estimators_T``.
     """
     from spatialize.gs.spa import PosteriorAudit
@@ -1255,15 +1272,17 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
     ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
     cache = {}
 
-    def audit(est, pts, vals, key):
+    def audit(est, pts, vals, key, cross_est=None):
         if key not in cache:
             members = np.asarray(runner.loo(est, pts, vals, n_members=T, seed=seed), float)
             box = np.asarray(est.domain, float)
 
-            def cells(n_probes, probe_seed):
+            def cells(n_probes, probe_seed, alpha=None):
+                # alpha given: the partitions of the cross reading, declared by the check's estimator
+                part = est if alpha is None else cross_est
                 rng = np.random.default_rng(probe_seed)
                 probes = (box[:, 0] + rng.random((n_probes, len(box))) * (box[:, 1] - box[:, 0])).astype(np.float32)
-                lab = np.asarray(runner.cells(est, pts, np.vstack([pts, probes]), n_members=T, seed=seed))
+                lab = np.asarray(runner.cells(part, pts, np.vstack([pts, probes]), n_members=T, seed=seed))
                 return lab[: len(pts)], lab[len(pts):]
             cache[key] = PosteriorAudit(members, pts, vals, seed=seed, cells=cells)
         return cache[key]
@@ -1305,6 +1324,10 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
                 w = a.weights()
                 bad_w += int(np.sum(~(w > 0)) + (abs(w.sum() - 1) > 1e-9))
                 n_w += len(w) + 1
+            elif kind == "cross_power":
+                a = audit(est, f["points"], f["cross_u"], ("cross", est.id, k), ests[check["cross_estimator"]])
+                x.append(float(np.mean(a.cross(f["cross_v"], q=q).flag.to_numpy()[f["cross_bad"]])))
+                y.append(float(np.mean(a.flags(q)[f["cross_bad"]])))
             else:
                 raise ValueError(f"unknown check kind {kind}")
         if kind == "errors_found":
@@ -1317,6 +1340,8 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
             r = families.mean_less(x, 0.0)
         elif kind == "declustering":
             r = families.paired_relation(x, y, better="less")
+        elif kind == "cross_power":
+            r = families.paired_relation(x, y, better="greater")
         else:
             r = families.almost_sure(bad_w, n_w)
         out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),

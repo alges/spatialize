@@ -58,6 +58,11 @@ A runner may also give leave-one-out ensembles, through a method
 ``loo(est, samples, values, *, n_members, seed)`` returning an array of shape
 ``(n_samples, n_members)``, each datum predicted from the other data. Scenarios P11 and P12 need it, P12 together with ``cells``.
 
+A runner may also give leave-one-out ensembles of classes, through a method
+``cat_loo(est, samples, codes, *, n_members, seed)`` returning an array of shape
+``(n_samples, n_members)`` of class codes, each datum's class predicted from the other data by the
+classifier the estimator's ``decoder`` names. Scenario P13 needs it, together with ``cells``.
+
 A runner may also give the readings of its law, through a method
 ``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an
 array of shape ``(n_queries, n_thresholds)``. It holds the cumulative distribution function that

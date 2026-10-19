@@ -100,6 +100,10 @@ def alpha_from_intensity(intensity, domain, n_samples):
     return 2.0 * float(intensity) * vol / int(n_samples)
 
 
+# the classifiers of categorical ensembles a categorical estimator may name as its decoder
+CLASSIFIERS = ("knn", "knn_pca", "svm", "rf", "dt")
+
+
 class SpatializeRunner:
     """:class:`~spatialize.scenarios.protocol.Runner` for spatialize's compiled estimators.
 
@@ -173,6 +177,35 @@ class SpatializeRunner:
         if not self.supports(est):
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
         return self._run(est, samples, values, samples, n_members, seed, "loo")
+
+    def cat_loo(self, est, samples, codes, *, n_members, seed):
+        """Leave-one-out categorical ensemble: each datum's class predicted from the other data, one member
+        per partition, with the classifier named by the estimator's ``decoder`` (as the categorical
+        hyperparameter search cross-validates).
+
+        Parameters
+        ----------
+        codes : array_like of int
+            The class of each datum, as a code.
+
+        Returns
+        -------
+        ndarray of shape (n, n_members)
+            Class codes, NaN where the datum's cell held no other datum.
+        """
+        from spatialize.gs.cat_esi.classifiers import get_classifier_fns
+        if est.encoder not in PROFILES or est.decoder not in CLASSIFIERS:
+            raise NotImplementedError(f"{est.encoder}/{est.decoder}")
+        set_fn, clf_fn = get_classifier_fns(est.decoder, **dict(est.params or {}))
+        partition, alpha, q = self._partition(est, samples, samples)
+        try:
+            with self._session.override(empty_cells=est.empty_cells):
+                _, out = self._gs.lib_spatialize_facade.run(
+                    np.float64(samples), np.asarray(codes, np.float64), np.float64(q), partition, "custom",
+                    {"post_creation": set_fn, "estimation": clf_fn}, alpha, int(n_members), int(seed), method="loo")
+        except RuntimeError as e:
+            raise ValueError(f"{est.id}: {e}") from None
+        return np.asarray(out)
 
     def _run(self, est, samples, values, queries, n_members, seed, method):
         partition, alpha, q = self._partition(est, samples, queries)

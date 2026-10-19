@@ -1887,7 +1887,8 @@ class PosteriorAudit(Summarised):
         Parameters
         ----------
         recommendations : pandas.DataFrame
-            The result of :meth:`recommend` on this audit.
+            The result of :meth:`recommend` on this audit (or on a
+            :class:`~spatialize.gs.spa.CategoricalPosteriorAudit`).
         labels : bool, optional
             Whether to write the number of each datum to measure again, check or measure as one of a
             pair beside it, as in the ``datum`` column. Default: True.
@@ -1906,6 +1907,10 @@ class PosteriorAudit(Summarised):
                   "check provenance": dict(marker="o", s=110, facecolors="none", edgecolors="#e67e22", linewidths=1.8),
                   "measure one of the pair again": dict(marker="D", s=90, facecolors="none", edgecolors="#7d3c98",
                                                         linewidths=1.6),
+                  # the actions of the audit of categories
+                  "check first": dict(marker="o", s=100, facecolors="none", edgecolors="#d81b60", linewidths=1.6),
+                  "classify one of the pair again": dict(marker="D", s=90, facecolors="none", edgecolors="#7d3c98",
+                                                         linewidths=1.6),
                   "sample more nearby": dict(marker="s", s=60, facecolors="none", edgecolors="#2e86c1", linewidths=1.2),
                   "none": dict(marker="o", s=70, facecolors="none", edgecolors="0.55", linewidths=1.0)}
         figargs.setdefault("figsize", (8, 7))
@@ -1918,9 +1923,10 @@ class PosteriorAudit(Summarised):
                     continue
                 idx = rows["datum"].to_numpy(dtype=int)
                 ax.scatter(pts[idx, 0], y[idx], zorder=3, label=f"{action} ({len(idx)})", **style)
-                if labels and action in ("measure again", "check provenance", "measure one of the pair again"):
+                if labels and action in ("measure again", "check provenance", "measure one of the pair again",
+                                         "check first", "classify one of the pair again"):
                     # below the point for a pair, whose other datum shares the location and is labelled above
-                    offset = (7, -12) if action == "measure one of the pair again" else (7, 5)
+                    offset = (7, -12) if action.endswith("of the pair again") else (7, 5)
                     for i in idx:
                         ax.annotate(str(i), (pts[i, 0], y[i]), xytext=offset, textcoords="offset points",
                                     fontsize=8, color=style["edgecolors"])

@@ -36,7 +36,8 @@ Top-level keys
      - string
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
-       ``cv_selection``, ``posterior_audit``, ``mark_law``, ``convergence``, ``law_validity`` or
+       ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
+       ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
      - mapping
@@ -310,6 +311,21 @@ runner's optional methods ``loo`` and ``cells`` (:doc:`extending`), with the rea
 - per check, ``kind`` (``errors_found``, ``clean_flags``, ``shift_patch``, ``shift_error``,
   ``declustering``, ``weights``, ``errors_recommended``, ``cross_power``), ``estimator``, for the one-sided kinds on
   shares ``bound``, and for ``cross_power`` the ``cross_estimator`` whose partitions weigh the pairs.
+
+Evaluator ``cat_posterior_audit``
+---------------------------------
+
+This evaluator reads categorical data against the laws of the classes the other data give (scenario
+P13), through the runner's optional methods ``cat_loo`` and ``cells`` (:doc:`extending`), with the
+readings of :class:`~spatialize.gs.spa.CategoricalPosteriorAudit`. Its estimators name a classifier as
+their ``decoder``.
+
+- ``data``: ``n`` data uniform in the domain, the number of ``classes`` (cuts of a latent field at its
+  quantiles), the ``noise`` of the latent field, the ``covariate_noise``, the number of ``mislabels``
+  (two distant data of different classes are swapped besides), the ``review_share`` of the list to check
+  first, ``fields`` (per mode) and ``generator_seed``.
+- per check, ``kind`` (``errors_ranked``, ``tail_calibrated``, ``cross_ranked``), ``estimator``,
+  ``bound`` and, for ``cross_ranked``, the ``cross_estimator`` whose partitions weigh the data.
 
 Evaluator ``draw_laws``
 -----------------------

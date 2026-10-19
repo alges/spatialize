@@ -13,6 +13,16 @@ The cross-validated predictive law at each datum and its analysis, which ranks t
 .. autoclass:: PosteriorAudit
    :members:
 
+Categorical data
+================
+
+The law of the classes at each datum, read as an order of review (:ref:`posterior-categorical`).
+
+.. autofunction:: cat_posterior_audit
+
+.. autoclass:: CategoricalPosteriorAudit
+   :members:
+
 Version 1.2 interface
 =====================
 

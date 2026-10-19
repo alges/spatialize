@@ -652,9 +652,81 @@ suit. Co-located data, the pairs with :math:`\lVert x_i - x_j \rVert \le \vareps
 :math:`\varepsilon`, are listed with their values, since two different values at one location cannot
 both be right while each sees the other as a neighbour.
 
+.. _posterior-categorical:
+
+Categorical data
+================
+
+A category, a rock type, a land cover, a species, is read against the law of the classes the other data
+give it. Cross-validation with the classifier of categorical ensembles (:doc:`categorical`) predicts the
+class of each datum from the other data, one member per partition, which gives the shares
+:math:`m_i(c)` of the classes :math:`c` among the members of datum :math:`i`. These shares give a class
+that no member predicts no probability at all, while a clean datum at the edge of a unit, or in a thin
+unit, often gets no member of its class. The law of the datum therefore mixes three laws of the classes,
+none of which holds the datum,
+
+.. math::
+
+   p_i(c) = w_1\, m_i(c) + w_2\, \ell_i(c) + w_3\, \pi(c),
+   \qquad w_1 + w_2 + w_3 = 1,
+
+with :math:`\ell_i(c)` the share of class :math:`c` among the :math:`k` nearest other data (8 by default)
+and :math:`\pi(c)` its share among all the data. The weights maximise the mean log score of the observed
+classes, :math:`\frac1n \sum_i \log p_i(z_i)`, a strictly proper score, so the laws are calibrated on the
+data themselves. The nearest data give a class present nearby a probability no member gives it, the whole
+data set a floor to every class.
+
+The position of a datum in its law is randomised over ties, so that it is uniform on :math:`[0, 1]` when
+the class follows its law. For nominal classes it is the probability of the classes less probable than the
+observed one, plus a uniform share :math:`U` of the classes as probable,
+
+.. math::
+
+   u_i = \sum_{c : p_i(c) < p_i(z_i)} p_i(c) + U \sum_{c : p_i(c) = p_i(z_i)} p_i(c).
+
+The position is itself the p-value. For ordered classes it is the probability of the classes below plus a
+share of the observed one, :math:`u_i = \sum_{c < z_i} p_i(c) + U\, p_i(z_i)`, read on both sides as for
+amounts. The log score, the entropy, the excess surprise and the information check are those of amounts,
+the entropy and the variance of the log probability being exact sums over the classes.
+
+The limit of a single category
+------------------------------
+
+A category carries little information. A calibrated law gives no class much less than the floor
+:math:`w_3\, \pi(c)`, a few hundredths at most, since clean data do fall in classes their neighbours do
+not predict. One flag among :math:`n` data at the false discovery rate :math:`q` needs a p-value below
+:math:`q/n`, :math:`1.7 \cdot 10^{-4}` for 300 data at 0.05. The flags therefore find gross errors only.
+On the lithology of the Golden map, 300 samples drawn ten times with three mislabels and one pair of
+swapped classes each, the calibrated laws flagged 2 of the 50 errors. Reading the flags at a rate of 0.3
+found 14 of them with 15 clean data. Fitting the floor without the 2 % least probable data found 23,
+while it flagged clean data on 9 of the 10 clean samples. No law gives the flags power without breaking
+their promise.
+
+The laws order the data well all the same. On the same samples, 88 % of the planted errors, 90 % of the
+mislabels, fell among the 5 % most surprising data. The main reading of categorical data is therefore an
+order of review, the data ranked by the surprise of their class. For the datum of p-value :math:`p_i`,
+the number :math:`n\, p_i` tells how many data would be at least as surprising by chance alone. A datum
+well below 1 stands out, while further down the list that number reaches the rank.
+
+A second variable measured with the sample gives the law of the class given that variable,
+:math:`\tilde p_i(c)`, from the other data weighted by the partitions and by the closeness of their
+covariate, a Gaussian kernel for a number, equality for a category, mixed with :math:`\pi(c)` by the log
+score. On the Golden samples, with the age of the map unit as the covariate, 90 % of the planted errors
+fell among the 5 % most surprising data. The errors themselves raise the fitted floor, from 0.003 on clean
+samples to 0.02, so the flags gain no power there either.
+
+The list of actions for categories follows that of amounts with three differences. A datum among the
+most surprising, a share of the data chosen by the analyst (5 % by default), is to be *checked first*,
+since it seldom reaches a flag. Neighbouring data listed together with the same class form a group whose
+provenance is to be checked. Two co-located data of different classes are always in conflict, with no
+test needed. The suspects are not cleaned before the list is drawn, a flag being rare. The effect of measuring
+again is not computed either.
+
 In Spatialize
 =============
 
 Posterior analysis is :func:`~spatialize.gs.spa.posterior_audit`, whose result
-:class:`~spatialize.gs.spa.PosteriorAudit` holds the readings of every datum
+:class:`~spatialize.gs.spa.PosteriorAudit` holds the readings of every datum, and for categorical data
+:func:`~spatialize.gs.spa.cat_posterior_audit`, whose result
+:class:`~spatialize.gs.spa.CategoricalPosteriorAudit` holds the readings of the classes
 (:doc:`../reference/spa`).

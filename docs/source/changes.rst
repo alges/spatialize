@@ -125,7 +125,11 @@ New
   readings into a list of actions, the data to measure again, groups of suspects to check, conflicting
   duplicates, places to sample more and flags that only a neighbouring suspect caused, found by cleaning
   the suspects and reading the data again, which ``plot_recommendations()`` draws on the map of the
-  data. Scenario P12 holds the analysis to
+  data. Categorical data have their own audit,
+  :func:`~spatialize.gs.spa.cat_posterior_audit`, whose laws of the classes mix the members, the nearest
+  data and all the data. A single category carrying little information, its main reading is an order of
+  review (``review()``), with the same calibration, evidence, ``cross``, ``null_flags``,
+  ``recommend()`` and maps. Scenario P12 holds the analysis to
   planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.
 - **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
   cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without

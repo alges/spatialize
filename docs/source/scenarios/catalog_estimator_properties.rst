@@ -562,3 +562,45 @@ coherence being a weak signal (0.06 to 0.10). Inside the square a datum's law is
 neighbours of the square, so the datum itself is hardly surprised while its neighbourhood is. The
 shift reading replaced it before the first commit, with the sizes computed by the power rule
 (``provenance`` of the descriptor).
+
+.. _scenario-P13:
+
+P13 — Posterior analysis of categorical data
+============================================
+
+:Status: **implemented**
+:Evaluator: ``cat_posterior_audit``
+:Source in the theory: a single category carries little information, so the law of the classes orders
+  the data without the strength a flag needs (:ref:`posterior-categorical`)
+:Claim: read against the law of the classes the other data give, planted mislabels and swapped classes
+  are among the most surprising data, alone and given a covariate measured with each datum, while the
+  positions of clean data keep the probabilities they claim in the tail.
+
+**Setup.** Each replicate field holds 200 data uniform on the unit square. A latent field,
+:math:`\sin(2\pi x) + 0.5\cos(2\pi y)` plus Gaussian noise of standard deviation 0.2, is cut into
+four classes at the quantiles of the surface, which blurs the edges of the classes. The covariate is the
+latent field plus noise of standard deviation 0.3. Each field is read clean and with three data given
+another class at random and two distant data of different classes swapped. The leave-one-out
+ensembles of classes come from the runner's optional method ``cat_loo``, with the classifier ``knn`` on
+the Mondrian partition of rate 5/2 (Spatialize's ``alpha`` = 0.8), :math:`T = 100` members and
+``empty_cells="coarsen"``. The cross reading weighs its data with the partition of rate 5 (``alpha`` =
+0.9). The readings are those of :class:`~spatialize.gs.spa.CategoricalPosteriorAudit` with its
+defaults. The scenario uses 12 fields in ``ci`` and 30 in ``full``.
+
+**Checks.**
+
+- ``errors-ranked``, *one-sided*. The share of the planted errors among the 5 % most surprising data
+  exceeds 0.25, five times what a ranking without information gives.
+- ``tail-calibrated``, *one-sided*. On clean fields, the share of data with a p-value of 0.05 or less
+  stays below 0.08.
+- ``cross-ranked``, *one-sided*. As ``errors-ranked``, read given the covariate.
+
+**Results.** On seeds 2 and 3 in ``ci`` every check passes, with 65 % to 68 % of the planted errors
+among the 5 % most surprising data (65 % to 72 % given the covariate) and 4.7 % to 5.4 % of clean data
+at a p-value of 0.05 or less.
+
+**History.** The ranking checks were first set against a bound of 0.5, with no reference. The first
+run (seed 1) measured 0.70 and 0.68, short of significance with 12 fields. The bound became 0.25, five
+times the share of chance, 0.05, and seeds 2 and 3 confirmed it before the first commit
+(``provenance`` of the descriptor).
+

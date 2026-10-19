@@ -82,6 +82,11 @@ class Runner(Protocol):
     shape ``(n, n_members)``: each datum predicted from the other data, one member per partition, as
     the hyperparameter searches cross-validate. Scenario P11 needs it.
 
+    It may also provide ``cat_loo(estimator, samples, codes, *, n_members, seed)``, returning an array
+    of shape ``(n, n_members)``: each datum's class, given as an integer code, predicted from the other
+    data by the classifier the estimator's ``decoder`` names, one member per partition, NaN where the
+    datum's cell held no other datum. Scenario P13 needs it.
+
     It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
     n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function
     that the implementation's reading ``reading`` of the law gives at each query and threshold.

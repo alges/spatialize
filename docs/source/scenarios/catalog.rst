@@ -124,6 +124,10 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - posterior analysis finds planted errors and declusters a preferential design
      - **implemented**
      - the false discovery rate on clean fields (known failure)
+   * - :ref:`P13 <scenario-P13>`
+     - posterior analysis of categories ranks planted errors first, its positions calibrated
+     - **implemented**
+     - —
    * - 
      - **T3 — geostatistical scenarios**
      - 

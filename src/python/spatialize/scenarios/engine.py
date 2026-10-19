@@ -1360,6 +1360,130 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def _cat_audit_fields(s, k):
+    """The data of field ``k`` of a cat_posterior_audit scenario, drawn from ``data.generator_seed + k``:
+    ``data.n`` locations uniform in the domain, a latent field (a smooth surface plus noise
+    ``data.noise``) cut into ``data.classes`` classes at its quantiles, the ``clean`` codes, the
+    ``planted`` ones (``data.mislabels`` data given another class at random and two distant data of
+    different classes swapped), the indices ``bad`` of the planted errors and a ``covariate`` measured with
+    each datum (the latent field plus noise ``data.covariate_noise``)."""
+    d = s["data"]
+    rng = np.random.default_rng(int(d["generator_seed"]) + k)
+    box = np.asarray(s["domain"]["box"], float)
+    lo, hi = box[:, 0], box[:, 1]
+    n, K = int(d["n"]), int(d["classes"])
+
+    def surface(p):
+        u = (p - lo) / (hi - lo)
+        return np.sin(2 * np.pi * u[:, 0]) + 0.5 * np.cos(2 * np.pi * u[:, -1])
+
+    pts = lo + rng.random((n, len(box))) * (hi - lo)
+    latent = surface(pts) + float(d["noise"]) * rng.standard_normal(n)
+    pool = lo + rng.random((20000, len(box))) * (hi - lo)
+    cuts = np.quantile(surface(pool), np.arange(1, K) / K)
+    clean = np.digitize(latent, cuts)
+    covariate = latent + float(d["covariate_noise"]) * rng.standard_normal(n)
+    planted = clean.copy()
+    bad = list(rng.choice(n, int(d["mislabels"]), replace=False))
+    for i in bad:
+        planted[i] = rng.choice([c for c in range(K) if c != clean[i]])
+    side = float(np.min(hi - lo))
+    a = int(rng.choice([i for i in range(n) if i not in bad]))
+    b = next(int(j) for j in rng.permutation(n) if j not in bad and j != a and clean[j] != clean[a]
+             and np.linalg.norm(pts[j] - pts[a]) > 0.3 * side)
+    planted[a], planted[b] = clean[b], clean[a]
+    return {"points": pts.astype(np.float64), "clean": clean, "planted": planted, "bad": np.array(bad + [a, b]),
+            "covariate": covariate, "classes": K}
+
+
+def eval_cat_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
+                             save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``cat_posterior_audit``: quality control of categorical data by their own laws (P13).
+
+    Each replicate field gives categorical data, clean and with planted errors (mislabels and two
+    swapped classes), with a numeric covariate measured with each datum. The leave-one-out ensembles of
+    classes come from the runner's optional method ``cat_loo`` and the cells from ``cells``; the readings
+    are those of :class:`~spatialize.gs.spa.CategoricalPosteriorAudit` with its defaults. Kinds (key
+    ``kind``):
+
+    - ``errors_ranked`` (one-sided) — the share of the planted errors among the ``data.review_share``
+      most surprising data exceeds ``bound``;
+    - ``tail_calibrated`` (one-sided) — on clean fields, the share of data with a p-value of at most 0.05
+      stays below ``bound``;
+    - ``cross_ranked`` (one-sided) — as ``errors_ranked``, read given the covariate
+      (:meth:`CategoricalPosteriorAudit.cross <spatialize.gs.spa.CategoricalPosteriorAudit.cross>`, its
+      partitions those of the check's ``cross_estimator``).
+
+    Reads ``data.n``, ``data.classes``, ``data.noise``, ``data.covariate_noise``, ``data.mislabels``,
+    ``data.review_share``, ``data.fields`` (per mode), ``data.generator_seed`` and ``estimators_T``.
+    """
+    from spatialize.gs.spa import CategoricalPosteriorAudit
+    s = sc.spec
+    K = int(_mode_value(s["data"]["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    share = float(s["data"]["review_share"])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    cross_of = {}       # the partitions of the cross reading of each cached audit, set by the check using it
+
+    def audit(est, f, codes, key, cross_est=None):
+        if cross_est is not None:
+            cross_of[key] = cross_est
+        if key not in cache:
+            pts = f["points"]
+            members = np.asarray(runner.cat_loo(est, pts, codes, n_members=T, seed=seed), float)
+            box = np.asarray(est.domain, float)
+
+            def cells(n_probes, probe_seed, alpha=None):
+                part = est if alpha is None else cross_of[key]
+                rng = np.random.default_rng(probe_seed)
+                probes = box[:, 0] + rng.random((n_probes, len(box))) * (box[:, 1] - box[:, 0])
+                lab = np.asarray(runner.cells(part, pts, np.vstack([pts, probes]), n_members=T, seed=seed))
+                return lab[: len(pts)], lab[len(pts):]
+            classes = [str(c) for c in range(f["classes"])]
+            cache[key] = CategoricalPosteriorAudit(members, pts, [str(c) for c in codes], classes, seed=seed,
+                                                   cells=cells)
+        return cache[key]
+
+    def first(p, m):
+        return set(np.argsort(np.where(np.isfinite(p), p, np.inf), kind="stable")[:m].tolist())
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+        cid, title = check["id"], f"{check['title']} [{profile}]"
+        if not hasattr(runner, "cat_loo") or not hasattr(runner, "cells"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no categorical leave-one-out ensembles or cells"))
+            continue
+        x = []
+        for k in range(K):
+            f = _cat_audit_fields(s, k)
+            m = max(1, int(round(share * len(f["clean"]))))
+            if kind == "errors_ranked":
+                a = audit(est, f, f["planted"], ("planted", est.id, k))
+                x.append(float(np.mean([int(b) in first(a.tail_p(), m) for b in f["bad"]])))
+            elif kind == "tail_calibrated":
+                a = audit(est, f, f["clean"], ("clean", est.id, k))
+                x.append(float(np.mean(a.tail_p() <= 0.05)))
+            elif kind == "cross_ranked":
+                a = audit(est, f, f["planted"], ("planted", est.id, k), ests[check["cross_estimator"]])
+                c = a.cross(f["covariate"])
+                x.append(float(np.mean([int(b) in first(c["tail_p"].to_numpy(), m) for b in f["bad"]])))
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+        if kind == "tail_calibrated":
+            r = families.mean_less(x, float(check["bound"]))
+        else:
+            r = families.mean_greater(x, float(check["bound"]))
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                known_failure=check.get("known_failure", "")))
+    return out
+
+
 def _mark_data(d, box, rng):
     """Data of a mark_law scenario: ``d["n"]`` data uniform in ``d["box"]`` (default the domain) plus
     ``d["cluster"]["n"]`` uniform in ``d["cluster"]["box"]``, with distinct values (smooth field
@@ -1736,7 +1860,8 @@ def eval_uncorrelated_covariance(sc: Scenario, runner: Runner, mode: str, seed: 
 EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_map_visual,
               "edge_cases": eval_edge_cases, "draw_laws": eval_draw_laws, "partition_law": eval_partition_law,
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
-              "posterior_audit": eval_posterior_audit, "mark_law": eval_mark_law,
+              "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
+              "mark_law": eval_mark_law,
               "convergence": eval_convergence, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 

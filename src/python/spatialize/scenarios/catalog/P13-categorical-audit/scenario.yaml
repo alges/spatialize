@@ -1,0 +1,63 @@
+id: P13-categorical-audit
+version: 1
+tier: T2
+evaluator: cat_posterior_audit
+book:
+  topic: "categories carry little information: the law of the classes orders the data, a flag needs more than one category gives"
+  draft_2026_10: "ch 11, categorical variables (the limit of categorical data); ch 7, scoring the predictive law"   # the book is a draft
+purpose: >
+  Posterior analysis of categorical data reads each datum's class against the law of the classes the
+  other data give it. On replicate fields it must place planted mislabels and swapped classes among the
+  most surprising data, read alone and given a covariate measured with each datum, while its positions on
+  clean fields keep the probabilities they claim in the tail.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth: {generator: smooth_plus_noise}
+data:
+  n: 200
+  classes: 4                          # cuts of the latent field at its quantiles
+  noise: 0.2                          # of the latent field, which blurs the edges of the classes
+  covariate_noise: 0.3                # the covariate is the latent field plus this noise
+  mislabels: 3                        # plus two distant data of different classes swapped
+  review_share: 0.05                  # the list to check first
+  fields: {ci: 12, full: 30}         # sized for the tail check (see provenance)
+  generator_seed: 20261019
+estimators_T: {ci: 100, full: 100}
+estimators:
+  # Mondrian rate 5/2 on the unit square: Spatialize's alpha = 0.8; the decoder names the classifier.
+  - {id: knn, encoder: mondrian, rate: 2.5, decoder: knn, params: {}, empty_cells: coarsen}
+  # The partitions that weigh the data of the cross reading: rate 5, alpha = 0.9.
+  - {id: knn-cross, encoder: mondrian, rate: 5.0, decoder: knn, params: {}, empty_cells: coarsen}
+checks:
+  - id: errors-ranked
+    title: "the planted errors are among the 5 % most surprising data (share above five times chance)"
+    kind: errors_ranked
+    family: one-sided
+    estimator: knn
+    bound: 0.25
+  - id: tail-calibrated
+    title: "on clean fields, at most 8 % of the data have a p-value of 0.05 or less"
+    kind: tail_calibrated
+    family: one-sided
+    estimator: knn
+    bound: 0.08
+  - id: cross-ranked
+    title: "given the covariate, the planted errors are among the 5 % most surprising data (share above five times chance)"
+    kind: cross_ranked
+    family: one-sided
+    estimator: knn
+    cross_estimator: knn-cross
+    bound: 0.25
+provenance:
+  v1: >
+    2026-10-19: first version, with the categorical posterior analysis. Checks and bounds from the study
+    of the method on the Golden lithology (300 samples, 10 draws): 88 % of planted errors among the 5 %
+    most surprising data, 90 % given the age of the unit, positions uniform on clean draws. Sizes: a
+    ranking share near 0.85 against a bound of 0.5 with a standard deviation near 0.2 needs a few fields;
+    the tail share near 0.05 against 0.08, its standard error over 12 fields of 200 data near 0.0045,
+    lies about 6 standard errors inside the bound, so 12 fields in ci and 30 in full. One audit of 200
+    data with 100 partitions takes about 7 s with the Python classifier.
+    The first run (ci, seed 1) measured 0.70 and 0.68 for the two ranking checks against a bound of 0.5
+    set without a reference, p = 0.012 and 0.001 against Holm levels of 0.001 and 0.0005: the effect held,
+    the power did not (about 38 fields needed). User decision (2026-10-19): bound 0.25, five times the
+    share a ranking without information gives (0.05, the share of the data in the list), against which
+    0.70 lies well inside with 12 fields; confirmed on fresh seeds (2 and 3) before the first commit.

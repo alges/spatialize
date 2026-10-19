@@ -1903,12 +1903,13 @@ class PosteriorAudit(Summarised):
         """
         pts = np.asarray(self.points, dtype=float)
         y = pts[:, 1] if pts.shape[1] > 1 else np.zeros(len(pts))
+        # one colour family and one shape per action, so no two actions look alike
         styles = {"measure again": dict(marker="o", s=110, facecolors="none", edgecolors="#c0392b", linewidths=1.8),
-                  "check provenance": dict(marker="o", s=110, facecolors="none", edgecolors="#e67e22", linewidths=1.8),
+                  "check provenance": dict(marker="h", s=130, facecolors="none", edgecolors="#e67e22", linewidths=1.8),
                   "measure one of the pair again": dict(marker="D", s=90, facecolors="none", edgecolors="#7d3c98",
                                                         linewidths=1.6),
                   # the actions of the audit of categories
-                  "check first": dict(marker="o", s=100, facecolors="none", edgecolors="#d81b60", linewidths=1.6),
+                  "check first": dict(marker="^", s=110, facecolors="none", edgecolors="#00897b", linewidths=1.6),
                   "classify one of the pair again": dict(marker="D", s=90, facecolors="none", edgecolors="#7d3c98",
                                                          linewidths=1.6),
                   "sample more nearby": dict(marker="s", s=60, facecolors="none", edgecolors="#2e86c1", linewidths=1.2),

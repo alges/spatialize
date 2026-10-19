@@ -715,12 +715,61 @@ score. On the Golden samples, with the age of the map unit as the covariate, 90 
 fell among the 5 % most surprising data. The errors themselves raise the fitted floor, from 0.003 on clean
 samples to 0.02, so the flags gain no power there either.
 
-The list of actions for categories follows that of amounts with three differences. A datum among the
-most surprising, a share of the data chosen by the analyst (5 % by default), is to be *checked first*,
-since it seldom reaches a flag. Neighbouring data listed together with the same class form a group whose
-provenance is to be checked. Two co-located data of different classes are always in conflict, with no
-test needed. The suspects are not cleaned before the list is drawn, a flag being rare. The effect of measuring
-again is not computed either.
+The list for categories
+-----------------------
+
+The list of actions for categories follows that of amounts, with an order of review where flags are
+rare. Write :math:`q_i` for the q-value of datum :math:`i`, :math:`L` for the *list to check first*,
+the share ``share`` of the data whose class is most surprising (5 % by default) under the audit, joined
+by the same share under the law given a second variable when one is read, and :math:`N_k(i)` for the
+:math:`k` nearest other data (8 by default). Each datum that calls for an action gets one row, with one
+of five actions.
+
+Measure again
+   *Rule.* Datum :math:`i` is flagged at the rate :math:`q`, by the audit or given a second variable
+   measured with it. *Evidence.* Its law, or its law given the second variable, makes its class very
+   improbable, beyond the floor that clean data at the edges of units leave. The strength is the q-value
+   of that reading. *Meaning.* A gross error, a class misread or misrecorded, or a class held by one or
+   two samples of the whole data set, which is improbable everywhere. *What it does not mean.* It does
+   not prove an error, since the single sample of a rare class is flagged as well. *Action.* Classify the
+   sample again or check its record, keeping the class if the new classification agrees.
+
+Check first
+   *Rule.* Datum :math:`i` belongs to :math:`L`, is not flagged, and no other datum of :math:`L` among
+   :math:`N_k(i)` has its class. *Evidence.* Its class is among the least probable under its law, without
+   the strength of a flag, which a single category seldom has. *Meaning.* A candidate error, ranked by the
+   surprise of its class. *What it does not mean.* It is not a suspect as such. The number
+   :math:`n\, p_i` tells how many data would be at least as surprising by chance, so most data far down
+   the list are clean, the edges of units giving many of them. *Action.* Check these data first, in the
+   order of their q-value, and stop when :math:`n\, p_i` reaches the number already checked.
+
+Check provenance
+   *Rule.* Datum :math:`i` belongs to :math:`L`, is not flagged, and is linked to other data of
+   :math:`L` with the same class, each among the :math:`k` nearest of another. *Evidence.* Neighbouring
+   data share the same surprising class. *Meaning.* A batch of samples logged the same wrong way, or a
+   small unit that the other data do not represent, such as a thin layer or a narrow channel. *What it
+   does not mean.* The group is not necessarily a set of errors, a real unit showing the same pattern.
+   *Action.* Check the campaign or the logging of the group, and sample around it before deciding.
+
+Classify one of the pair again
+   *Rule.* Datum :math:`i` lies within a distance ``tol`` of another datum of a different class (0 by
+   default, the same location). *Evidence.* Two classes at one location, which cannot both be right,
+   with no test needed. *Meaning.* A duplicated sample, a second logging of the same place, or a
+   coordinate error. *What it does not mean.* It does not say which of the two classes is wrong.
+   *Action.* Classify the location again, or find the original record.
+
+Sample more nearby
+   *Rule.* Datum :math:`i` calls for no other action, while its law rests on a share of partitions below
+   ``min_support`` (0.5 by default) or has an information gain below ``min_gain`` (0 by default).
+   *Evidence.* The other data say little about the datum's class. *Meaning.* A place where the data do
+   not pin the classes down, far from other data or among neighbours of many classes. *What it does not
+   mean.* The class is not suspect. *Action.* Take more samples there, the lowest gain first.
+
+A datum takes the first action that applies in the order above, with the readings that point to it
+gathered in its reason. Within each action the rows are sorted by the q-value, strongest first, except
+the places to sample more, sorted by the information gain, least first. Unlike amounts, the suspects are
+not cleaned before the list is drawn, a flag being rare, so no datum is cleared as flagged only beside
+a suspect. The effect of measuring again is not computed either.
 
 In Spatialize
 =============

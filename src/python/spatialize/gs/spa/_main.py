@@ -999,7 +999,9 @@ class PosteriorAudit(Summarised):
             read through the most surprising datum, :math:`(1 + \#\{r : Q_r \le Q\})/(R + 1)` with
             :math:`Q` the smallest adjusted p-value of the data and :math:`Q_r` that of replicate
             :math:`r`. The count weighs every flag alike, so one datum a hundred spreads away counts
-            as one; the strongest datum weighs how far it lies.
+            as one; the strongest datum weighs how far it lies. ``attrs`` also holds ``data``, a digest
+            of the locations and values read, by which :meth:`recommend` checks that the replicates
+            belong to its audit.
 
         Raises
         ------
@@ -1223,7 +1225,9 @@ class PosteriorAudit(Summarised):
             ``gain``, the entropy of the law of :math:`u` among the weighted pairs minus that of the
             law given the covariate, the information the covariate gives about the datum, near 0 where
             it gives none, so that the cross reading has no power there; ``pairs``, the effective
-            number of pairs the law rests on. NaN for a datum without a covariate.
+            number of pairs the law rests on. NaN for a datum without a covariate. ``attrs`` holds
+            ``q`` and ``data``, a digest of the locations and values read, by which :meth:`recommend`
+            checks that the reading belongs to its audit.
 
         Raises
         ------
@@ -1374,19 +1378,41 @@ class PosteriorAudit(Summarised):
         Returns
         -------
         pandas.DataFrame
-            One row per datum that calls for an action, sorted by action and strength: ``datum``,
+            One row per datum that calls for an action, sorted by action, then by the q-value, or by the
+            gain for the places to sample more, least first: ``datum``,
             ``value``, ``action``, ``reason``, ``q_value`` (the Benjamini–Hochberg adjusted p-value
-            behind the action, NaN for a place to sample more) and ``group`` (the suspects linked as
-            neighbours surprised the same way share a number). The actions:
+            behind the action, for a place to sample more that of the datum once the suspects are
+            cleaned, usually near 1, since such a datum is not a suspect), ``gain`` (the information the
+            other data give about the datum, :meth:`evidence`, low where sampling more helps) and
+            ``group`` (the suspects linked as neighbours surprised the same way share a number). Each
+            datum takes the first action that applies, in this order, with the readings that point to
+            it gathered in ``reason``:
 
-            - ``"measure again"``: a suspect alone, still surprising once its neighbours are cleaned, or
-              a datum inconsistent with the second variable measured with it (``cross``);
-            - ``"check provenance"``: one of a group of neighbouring suspects surprised the same way, a
-              batch error or a small part of the domain the other data do not represent;
-            - ``"measure one of the pair again"``: a datum co-located with another of a different value,
-              which no law can settle;
-            - ``"sample more nearby"``: a law resting on little evidence, not a suspect value;
-            - ``"none"``: a datum flagged by the audit only because a suspect beside it pulled its law.
+            - ``"measure again"``. *Rule*: a suspect (flagged at ``q`` once the cleaning settles, see
+              Notes) with no other suspect among its ``k`` nearest data on the same side of its law;
+              or a datum flagged at ``q`` by ``cross``. *Evidence*: its value lies far in the tail of
+              the law the other data give it, or far from what the second variable at the same place
+              allows. *Not*: a proof of error, since a true value of a part of the domain the other
+              data do not represent can stand alone in its tail. *Action*: measure the sample again
+              or check its records, replacing the value only if the new measurement disagrees.
+            - ``"check provenance"``. *Rule*: a suspect linked to other suspects, each among the
+              ``k`` nearest of another and on the same side of its law. *Evidence*: neighbouring data
+              surprising in the same direction. *Not*: necessarily errors, since a real part of the
+              domain shows the same pattern. *Action*: check the campaign, the laboratory batch or the
+              instrument, and sample around the group before deciding.
+            - ``"measure one of the pair again"``. *Rule*: a datum within ``tol`` of another whose
+              pair passes Benjamini–Hochberg at ``q`` on :math:`\min\{1, 2\min(p_i, p_j)\}` over the
+              co-located pairs. *Evidence*: two values at one location differ beyond what their laws
+              allow. *Not*: a verdict on which value is wrong, since each law sees the other datum as
+              a neighbour. *Action*: measure the location again, or find the original record.
+            - ``"sample more nearby"``. *Rule*: no other action applies, and the law rests on a share
+              of partitions below ``min_support`` or has an information gain below ``min_gain``.
+              *Evidence*: the other data say little about the datum. *Not*: a suspect value, its
+              q-value lying near 1. *Action*: take more samples there, the lowest gain first.
+            - ``"none"``. *Rule*: flagged by the audit at ``q``, not a suspect once the cleaning
+              settles, and no other action applies. *Evidence*: a suspect beside it pulled its law.
+              *Not*: cleared for good, only on the condition that the suspect beside it is an error.
+              *Action*: none, until that suspect is measured again.
 
             ``attrs`` holds ``q``, ``passes`` (the cleaning passes run), ``settled`` (whether the
             suspects stopped changing), ``counts`` (data per action), ``context`` (with ``null``: the
@@ -1402,6 +1428,10 @@ class PosteriorAudit(Summarised):
         SpatializeError
             When the audit was not built by :func:`posterior_audit`, which can compute the members of
             other values, or ``cross`` or ``null`` were read on other data or at another ``q``.
+
+        See Also
+        --------
+        plot_recommendations : the list drawn on the map of the data.
 
         Notes
         -----
@@ -1520,13 +1550,16 @@ class PosteriorAudit(Summarised):
             if i not in rows:
                 add(i, "sample more nearby",
                     f"law resting on little evidence (support {ev['support'][i]:.2f}, gain {ev['gain'][i]:.2f})",
-                    np.nan)
+                    q_final[i])
 
         order = {"measure again": 0, "check provenance": 1, "measure one of the pair again": 2,
                  "sample more nearby": 3, "none": 4}
         out = pd.DataFrame(list(rows.values()), columns=["datum", "value", "action", "reason", "q_value", "group"])
-        out = out.sort_values(["action", "q_value"], key=lambda c: c.map(order) if c.name == "action" else c,
-                              na_position="last", ignore_index=True)
+        out.insert(5, "gain", ev["gain"].to_numpy()[out["datum"].to_numpy(dtype=int)] if len(out) else [])
+        # by action, then by strength: the q-value, or for the places to sample more the gain, least first
+        out["_rank"] = np.where(out["action"] == "sample more nearby", out["gain"], out["q_value"])
+        out = out.sort_values(["action", "_rank"], key=lambda c: c.map(order) if c.name == "action" else c,
+                              na_position="last", ignore_index=True).drop(columns="_rank")
         out.attrs.update({"q": q, "passes": used, "settled": settled,
                           "counts": out["action"].value_counts().to_dict(), "context": None})
         if null is not None:
@@ -1844,6 +1877,58 @@ class PosteriorAudit(Summarised):
                 a.set_title(title)
                 if weak.any():
                     a.legend(loc="best", fontsize=8)
+            fig.tight_layout()
+        return fig
+
+    def plot_recommendations(self, recommendations, labels=True, theme='alges', **figargs):
+        """The data on their first two coordinates, each datum of a list of :meth:`recommend` marked by
+        its action.
+
+        Parameters
+        ----------
+        recommendations : pandas.DataFrame
+            The result of :meth:`recommend` on this audit.
+        labels : bool, optional
+            Whether to write the number of each datum to measure again, check or measure as one of a
+            pair beside it, as in the ``datum`` column. Default: True.
+        theme : str, optional
+            Plot theme (:class:`~spatialize.viz.PlotStyle`). Default: ``'alges'``.
+        **figargs
+            Passed to :func:`matplotlib.pyplot.subplots`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        pts = np.asarray(self.points, dtype=float)
+        y = pts[:, 1] if pts.shape[1] > 1 else np.zeros(len(pts))
+        styles = {"measure again": dict(marker="o", s=110, facecolors="none", edgecolors="#c0392b", linewidths=1.8),
+                  "check provenance": dict(marker="o", s=110, facecolors="none", edgecolors="#e67e22", linewidths=1.8),
+                  "measure one of the pair again": dict(marker="D", s=90, facecolors="none", edgecolors="#7d3c98",
+                                                        linewidths=1.6),
+                  "sample more nearby": dict(marker="s", s=60, facecolors="none", edgecolors="#2e86c1", linewidths=1.2),
+                  "none": dict(marker="o", s=70, facecolors="none", edgecolors="0.55", linewidths=1.0)}
+        figargs.setdefault("figsize", (8, 7))
+        with PlotStyle(theme=theme):
+            fig, ax = plt.subplots(1, 1, **figargs)
+            ax.scatter(pts[:, 0], y, s=8, c="0.75", zorder=1, label="data")
+            for action, style in styles.items():
+                rows = recommendations[recommendations["action"] == action]
+                if not len(rows):
+                    continue
+                idx = rows["datum"].to_numpy(dtype=int)
+                ax.scatter(pts[idx, 0], y[idx], zorder=3, label=f"{action} ({len(idx)})", **style)
+                if labels and action in ("measure again", "check provenance", "measure one of the pair again"):
+                    # below the point for a pair, whose other datum shares the location and is labelled above
+                    offset = (7, -12) if action == "measure one of the pair again" else (7, 5)
+                    for i in idx:
+                        ax.annotate(str(i), (pts[i, 0], y[i]), xytext=offset, textcoords="offset points",
+                                    fontsize=8, color=style["edgecolors"])
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
+            ax.set_title("Recommended actions")
+            ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=8, frameon=False)
             fig.tight_layout()
         return fig
 

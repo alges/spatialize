@@ -458,6 +458,8 @@ widening and the factor of the calibration, which lower every gain.
 Support and gain separate the two kinds of weak evidence. An isolated datum has a low support,
 a datum among disagreeing neighbours a low gain with a high support.
 
+.. _posterior-second-variable:
+
 A second variable
 =================
 
@@ -539,11 +541,71 @@ hid, while it cleared 6 of the 12 clean data flagged beside an error.
 
 The list therefore recommends measuring a suspect again, never removing it. A measurement taken
 again confirms a true value, that of a part of the domain the other data do not represent included,
-while it corrects an error. Neighbouring suspects surprised the same way form a group to check, a
-batch of samples or such a part. A datum inconsistent with a second variable measured with it, or
-co-located with another of a different value, is listed too, as is a law resting on little evidence,
-a place to sample more. The effect of measuring again is read on the cross-validated predictions of
-the other data, with the suspects replaced by the medians of their laws. With the replicates of
+while it corrects an error.
+
+The categories of the list
+--------------------------
+
+Write :math:`F_0` for the data flagged by the audit at the rate :math:`q`, :math:`S` for those
+flagged once the cleaning settles, the *suspects*, :math:`q_i` for the q-value of datum :math:`i`, the
+smallest rate at which it would be flagged, and :math:`N_k(i)` for its :math:`k` nearest other data
+(8 by default). Each datum that calls for an action gets one row, with one of five actions.
+
+Measure again
+   *Rule.* Datum :math:`i` belongs to :math:`S` and no other suspect of :math:`N_k(i)` lies on the
+   same side of its law, or datum :math:`i` is flagged at the rate :math:`q` given a second variable
+   measured with it (:ref:`a second variable <posterior-second-variable>`). *Evidence.* Its value
+   lies far in the tail of the law the other data give it, once the suspects around it are cleaned,
+   or far from what the second variable at the same place allows. The strength is the q-value of
+   that reading. *Meaning.* The datum may be an error, a misplaced decimal point, a value copied from
+   another sample, a unit misread. *What it does not mean.* It does not prove an error. A true value
+   of a part of the domain the other data do not represent can stand alone in its tail. *Action.*
+   Measure the sample again, or check its records. Replace the value if the new measurement
+   disagrees, keep it if it agrees.
+
+Check provenance
+   *Rule.* Datum :math:`i` belongs to :math:`S` and is linked to other suspects, each among the
+   :math:`k` nearest of another and on the same side of its law, the linked suspects forming a
+   group. *Evidence.* Several neighbouring data are surprising in the same direction. *Meaning.* A
+   batch of samples handled the same wrong way, a calibration drift in one campaign, or a small part
+   of the domain that the other data do not represent. *What it does not mean.* The group is not
+   necessarily a set of errors, since a real part of the domain shows the same pattern. *Action.*
+   Check the provenance of the group, the campaign, the laboratory batch, the instrument. Sample
+   around it before deciding.
+
+Measure one of the pair again
+   *Rule.* Datum :math:`i` lies within a distance ``tol`` of datum :math:`j` (0 by default, the same
+   location), the pair passing the Benjamini–Hochberg procedure at the rate :math:`q` on the
+   p-values :math:`\min\{1,\ 2\min(p_i, p_j)\}` of the co-located pairs. *Evidence.* Two values at one
+   location differ beyond what their laws allow. *Meaning.* A duplicated sample, a re-assay or a
+   coordinate error. *What it does not mean.* It does not say which of the two values is wrong. Each
+   law sees the other datum as a neighbour, so neither law can settle it. *Action.* Measure the
+   location again, or check which record is the original.
+
+Sample more nearby
+   *Rule.* Datum :math:`i` calls for no other action, while its law rests on a share of partitions below
+   ``min_support`` (0.5 by default) or has an information gain below ``min_gain`` (0 by default),
+   the law then being as wide as the distribution of all the data or wider. *Evidence.* The other
+   data say little about the datum, being far, few or in disagreement. *Meaning.* A place where the
+   data do not pin the field down, often an edge, a sparse area or a place where the field changes
+   abruptly, around a part of the domain the rest of the data do not represent included. *What it
+   does not mean.* The value is not suspect, its q-value lying near 1. *Action.* Take more samples
+   there, starting with the lowest gain.
+
+None
+   *Rule.* Datum :math:`i` belongs to :math:`F_0` and not to :math:`S`, and calls for no other
+   action. *Evidence.* It was flagged at first, but not once the suspects around it were cleaned.
+   *Meaning.* A suspect beside it pulled its law, so the surprise belonged to the suspect. *What it
+   does not mean.* The datum is not cleared for good. It is cleared on the condition that the
+   suspect beside it is an error. *Action.* None, until the suspect is measured again.
+
+A datum takes the first action that applies in the order above, with the readings that point to it
+gathered in its reason, so a decimal error flagged by the audit and by the second variable is to be
+measured again for both reasons. Within each action the rows are sorted by the q-value, strongest
+first, except the places to sample more, sorted by the information gain, least first.
+
+The effect of measuring again is read on the cross-validated predictions of the other data, with
+every datum to measure again replaced by the median of its law. With the replicates of
 :meth:`~spatialize.gs.spa.PosteriorAudit.null_flags`, the list says whether its flags exceed what
 clean data get or give an order of review only.
 

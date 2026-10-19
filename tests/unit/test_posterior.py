@@ -395,6 +395,14 @@ def test_recommend_lists_the_actions_the_readings_call_for():
     assert "effect" not in audit.recommend(effect=False).attrs
     order = ["measure again", "check provenance", "measure one of the pair again", "sample more nearby", "none"]
     assert list(rec.action) == sorted(rec.action, key=order.index)
+    assert rec.q_value.notna().all() and np.allclose(rec.gain, audit.evidence().gain[rec.datum])
+    more = rec[rec.action == "sample more nearby"]
+    assert more.gain.is_monotonic_increasing
+    import matplotlib
+    matplotlib.use("Agg")
+    fig = audit.plot_recommendations(rec)
+    legend = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+    assert any(t.startswith("measure again (") for t in legend)
     with pytest.raises(SpatializeError):
         audit.recommend(cross=audit.cross(v, q=0.1))
     other = posterior_audit(points[:-1], u[:-1], n_partitions=150, alpha=0.85, seed=1, callback=quiet)

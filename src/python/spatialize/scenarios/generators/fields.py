@@ -149,6 +149,83 @@ def vbm(rng, n_cells, mark_sampler, dim=2):
     return field
 
 
+def mondrian_cells(rng, rate, dim=2):
+    r"""The cells of the theory's Mondrian process of budget ``rate`` on the unit cube.
+
+    A cell of linear dimension :math:`L` (the sum of its sides) is cut after an exponential time of rate
+    :math:`L`, along an axis chosen with probability proportional to its side, at a uniform position,
+    while the remaining budget allows; the two halves carry on independently. Two points share a cell
+    with probability :math:`\exp(-\lambda \lVert x - y \rVert_1)`, and on the unit square the expected
+    number of cells is :math:`(1 + \lambda)^2`.
+
+    Parameters
+    ----------
+    rng : numpy.random.Generator
+        Random generator.
+    rate : float
+        The budget :math:`\lambda`.
+    dim : int, default 2
+        Dimension.
+
+    Returns
+    -------
+    list of tuple of ndarray
+        The cells, as ``(lower corner, upper corner)``.
+    """
+    cells = []
+    stack = [(np.zeros(dim), np.ones(dim), float(rate))]
+    while stack:
+        lo, hi, budget = stack.pop()
+        sides = hi - lo
+        t = rng.exponential(1.0 / sides.sum())
+        if t > budget:
+            cells.append((lo, hi))
+            continue
+        d = rng.choice(dim, p=sides / sides.sum())
+        cut = rng.uniform(lo[d], hi[d])
+        left_hi, right_lo = hi.copy(), lo.copy()
+        left_hi[d] = right_lo[d] = cut
+        stack.append((right_lo, hi, budget - t))
+        stack.append((lo, left_hi, budget - t))
+    return cells
+
+
+def mbm(rng, rate, mark_sampler, dim=2):
+    r"""Mondrian block-mark field: one mark per cell of the theory's Mondrian process of budget ``rate``
+    on the unit cube (:func:`mondrian_cells`), the marks independent of the cells.
+
+    Parameters
+    ----------
+    rng : numpy.random.Generator
+        Random generator (cells, then marks).
+    rate : float
+        The budget :math:`\lambda`; on the unit square the expected number of cells is
+        :math:`(1 + \lambda)^2`.
+    mark_sampler : callable
+        ``mark_sampler(rng, n)`` returns ``n`` marks.
+    dim : int, default 2
+        Dimension.
+
+    Returns
+    -------
+    callable
+        ``field(x)``: the mark of the cell holding each row of ``x``.
+    """
+    cells = mondrian_cells(rng, rate, dim)
+    marks = mark_sampler(rng, len(cells))
+    lows = np.array([c[0] for c in cells])
+    highs = np.array([c[1] for c in cells])
+
+    def field(x):
+        x = np.asarray(x, float)
+        inside = np.all((x[:, None, :] >= lows[None]) & (x[:, None, :] < highs[None]), axis=2)
+        # a point on the upper edge of the cube belongs to the cell that reaches it
+        inside |= np.all((x[:, None, :] >= lows[None]) & (x[:, None, :] <= highs[None]), axis=2) & ~inside.any(axis=1)[:, None]
+        return marks[np.argmax(inside, axis=1)]
+    field.n_cells = len(cells)
+    return field
+
+
 def simple_kriging_exponential_local(samples, values, queries, k, a1, a2=None, theta_deg=0.0, jitter=1e-8):
     r"""Simple kriging as :func:`simple_kriging_exponential`, each query from its ``k`` nearest data.
 

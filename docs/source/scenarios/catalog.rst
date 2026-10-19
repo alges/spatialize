@@ -138,8 +138,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - runner method for simulated fields
    * - :ref:`S02 <scenario-S02>`
      - error stops decreasing beyond some ensemble size
-     - ready · priority 1
-     - Mondrian block-mark generator
+     - **implemented**
+     - —
    * - :ref:`S03 <scenario-S03>`
      - anisotropic field (visual criteria V1, V4 and V5, the order of the decoders)
      - **implemented**

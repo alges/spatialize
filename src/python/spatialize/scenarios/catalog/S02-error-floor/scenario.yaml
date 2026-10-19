@@ -1,0 +1,53 @@
+id: S02-error-floor
+version: 1
+tier: T3
+evaluator: error_floor
+book:
+  topic: "convergence of the ensemble and its error floor: the estimate converges to its limit, whose error against the truth is not zero"
+  draft_2026_10: "ch 3, the estimator as the mean over partitions"   # the book is a draft
+purpose: >
+  The members of an ensemble are independent given the data, so the ensemble mean keeps converging to
+  its limit as the number of partitions grows (P1). Its error against the truth converges with it, to the
+  error of the limit, which more partitions cannot lower. On a Mondrian block-mark field the variance of
+  the ensemble mean must fall as one over the number of members, while the error against the truth
+  reaches a floor.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: mbm
+  rate: 4.9                         # (1 + 4.9)^2 = 35 cells on average
+  marks: {gaussian: [0.0, 1.0]}
+data:
+  design: {type: uniform, n: 250}
+  grid: 30                          # queries: 30×30 cell centres, row-major
+  mode: pinned
+  fields: {ci: 8, full: 16}
+  sizes: [5, 10, 20, 50, 100, 200, 500, 1000, 3000]
+  replicates: {ci: 30, full: 60}
+  generator_seed: 20261019
+estimators:
+  # Mondrian rate 5 on the unit square, as in P1; coarsen, so every member is defined
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: spread
+    title: "the variance of the ensemble mean falls as 1/T"
+    kind: spread
+    family: identity
+    estimator: idw
+    bootstrap: 300
+  - id: floor
+    title: "beyond T0 the error against the truth stops falling (slope within ±0.01)"
+    kind: floor
+    family: equivalence
+    estimator: idw
+    margin: 0.01
+    bootstrap: 0
+provenance:
+  v1: >
+    2026-10-19: first version. The study before the first run (8 fields, 30 replicates, sizes 5 to 3000)
+    measured the slope of the variance-based spread at -0.502 (fields -0.496 to -0.506); P1's estimator,
+    the mean over the queries of the logarithm of the standard deviation, gave -0.481 on the same
+    ensembles, biased by the kurtosis of the members on a block-mark field, which changes with T. Beyond
+    T0 (50 to 500 members) the slope of the error against the truth was -0.0003 per field (standard error
+    0.0004): the error approaches its floor without reaching it exactly, so the check is an equivalence
+    with a margin of 0.01 (less than 1 % of error per e-fold of members) rather than an identity, which
+    more fields would reject on a slope of no practical consequence. One field takes about 11 s.

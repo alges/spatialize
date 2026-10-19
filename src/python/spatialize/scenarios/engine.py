@@ -1738,6 +1738,85 @@ def eval_convergence(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_error_floor(sc: Scenario, runner: Runner, mode: str, seed: int,
+                     save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``error_floor``: the estimate keeps converging while its error stops falling (S02).
+
+    On each pinned field, for each ensemble size of ``data.sizes``, ``data.replicates`` independent
+    ensembles (seeds derived from the run's seed) give the ensemble mean on the grid. Kinds (key
+    ``kind``):
+
+    - ``spread`` (identity) — the slope against :math:`\log T` of :math:`\tfrac12 \log` of the
+      variance of the ensemble mean across the replicates, averaged over the grid, is :math:`-1/2`. The
+      variance is averaged before the logarithm, since the mean of the logarithms of standard deviations
+      is biased when the members are far from normal, as on a block-mark field. One standardised
+      difference per field, its standard error from ``bootstrap`` resamples of the replicates;
+    - ``floor`` (equivalence) — beyond the size :math:`T_0`, the smallest whose mean error against the
+      truth (root mean square over the grid) lies within one combined standard error of the error at
+      the largest size, the slope of the logarithm of the error against :math:`\log T` lies within
+      ``margin`` of 0 (two sizes at least enter the fit).
+
+    Reads ``data.sizes``, ``data.replicates`` (per mode) and ``data.fields`` (per mode).
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    R = int(_mode_value(d["replicates"], mode))
+    sizes = np.array([int(t) for t in d["sizes"]])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    queries = generators.grid(int(d["grid"])).astype(np.float32)
+    cache = {}
+
+    def ensembles(est, k):
+        if (est.id, k) not in cache:
+            f = sc.field(k)
+            means = np.array([[np.nanmean(np.asarray(runner.members(est, f["samples"], f["values"], queries,
+                                                                   n_members=int(T), seed=_sub_seed(seed, k, j, r)),
+                                                     float), axis=1)
+                               for r in range(R)] for j, T in enumerate(sizes)])        # (sizes, R, grid)
+            cache[(est.id, k)] = (means, f["truth"].astype(float))
+        return cache[(est.id, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        profile = runner.profile(est.encoder) if hasattr(runner, "profile") else est.encoder
+        cid, title = check["id"], f"{check['title']} [{profile}]"
+        if not runner.supports(est):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+            continue
+        x = np.log(sizes)
+        values = []
+        for k in range(K):
+            means, truth = ensembles(est, k)
+            rng = np.random.default_rng(_sub_seed(seed, 7, k))
+            boot_idx = [[rng.integers(0, R, R) for _ in sizes] for _ in range(int(check.get("bootstrap", 300)))]
+            if kind == "spread":
+                def slope(m):
+                    return float(np.polyfit(x, 0.5 * np.log(m.var(axis=1, ddof=1).mean(axis=1)), 1)[0])
+                b = slope(means)
+                boot = [slope(np.stack([means[j, idx[j]] for j in range(len(sizes))])) for idx in boot_idx]
+                values.append((b + 0.5) / np.std(boot, ddof=1))
+            elif kind == "floor":
+                err = np.sqrt(np.mean((means - truth[None, None, :]) ** 2, axis=2))       # (sizes, R)
+                m, se = err.mean(axis=1), err.std(axis=1, ddof=1) / np.sqrt(R)
+                j0 = next(j for j in range(len(sizes)) if abs(m[j] - m[-1]) <= np.hypot(se[j], se[-1]))
+                j0 = min(j0, len(sizes) - 2)
+                values.append(float(np.polyfit(x[j0:], np.log(m[j0:]), 1)[0]))
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+        if kind == "spread":
+            r = families.identity(values, "(slope + 1/2)/se per field")
+        else:
+            margin = float(check["margin"])
+            r = families.tost_mean(values, -margin, margin)
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est),
+                                known_failure=check.get("known_failure", "")))
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -1862,7 +1941,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
-              "convergence": eval_convergence, "law_validity": eval_law_validity,
+              "convergence": eval_convergence, "error_floor": eval_error_floor, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

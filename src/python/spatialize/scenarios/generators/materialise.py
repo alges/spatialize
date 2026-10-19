@@ -18,8 +18,8 @@ from .. import engine
 def materialise(sc):
     """Write the pinned data of a scenario and its checksum manifest.
 
-    Dispatches on ``truth.generator``: ``sgf_exponential`` (stationary Gaussian fields, S03) or
-    ``vbm_edge_cases`` (degenerate designs, S12). The generator stream is sequential, so increasing
+    Dispatches on ``truth.generator``: ``sgf_exponential`` (stationary Gaussian fields, S03),
+    ``vbm_edge_cases`` (degenerate designs, S12) or ``mbm`` (Mondrian block-mark fields, S02). The generator stream is sequential, so increasing
     the number of fields keeps the existing ones byte for byte.
 
     Parameters
@@ -41,6 +41,8 @@ def materialise(sc):
         written = _sgf_fields(sc)
     elif generator == "vbm_edge_cases":
         written = _edge_case_fields(sc)
+    elif generator == "mbm":
+        written = _mbm_fields(sc)
     else:
         raise NotImplementedError(generator)
     with open(sc.file("CHECKSUMS.sha256"), "w") as fh:
@@ -78,6 +80,35 @@ def _sgf_fields(sc):
             rel = f"data/{name}_{k}.npy"
             np.save(sc.file(rel), a)
             written.append(rel)
+    return written
+
+
+def _marks(spec):
+    """The mark sampler ``(rng, n) -> marks`` a ``truth.marks`` entry names."""
+    if "gaussian" in spec:
+        mu, sd = spec["gaussian"]
+        return lambda r, n: r.normal(mu, sd, n)
+    if "lognormal" in spec:
+        mu, sd = spec["lognormal"]
+        return lambda r, n: r.lognormal(mu, sd, n)
+    raise NotImplementedError(spec)
+
+
+def _mbm_fields(sc):
+    """Mondrian block-mark fields (S02): the theory's Mondrian process of budget ``truth.rate`` on the
+    unit square, one mark per cell, ``data.design.n`` uniform data and the field on a
+    ``data.grid`` × ``data.grid`` grid."""
+    s = sc.spec
+    t, d = s["truth"], s["data"]
+    rng = np.random.default_rng(d["generator_seed"])
+    grid = fields.grid(d["grid"])
+    os.makedirs(sc.file("data"), exist_ok=True)
+    written = []
+    for k in range(_n_fields(d)):
+        z = fields.mbm(rng, float(t["rate"]), _marks(t["marks"]))
+        samples = fields.uniform_design(rng, d["design"]["n"])
+        _save(sc, k, {"samples": samples.astype(np.float32), "values": z(samples).astype(np.float32),
+                      "truth": z(grid).astype(np.float32)}, written)
     return written
 
 

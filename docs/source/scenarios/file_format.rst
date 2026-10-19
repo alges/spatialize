@@ -37,6 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
+       ``error_floor``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -188,6 +189,20 @@ This evaluator decides visual criteria on median maps over pinned replicate fiel
      * - ``contrast_ratio_reference``
        - ``min_ratio``: spread of the map over that of simple kriging with the true covariance,
          above it (V5).
+
+Evaluator ``error_floor``
+-------------------------
+
+This evaluator reads the convergence of the ensemble mean and its error against the truth over pinned
+replicate fields (scenario S02).
+
+- ``truth``: ``generator: mbm``, the theory's Mondrian process of budget ``rate`` on the unit square
+  with one mark per cell, ``marks: {gaussian: [mean, sd]}`` or ``{lognormal: [mu, sigma]}``.
+- ``data``: ``design`` (``type: uniform``, ``n``), ``grid``, ``mode: pinned``, ``fields`` (per
+  mode), ``sizes`` (the ensemble sizes), ``replicates`` (independent ensembles per size, per mode),
+  ``generator_seed``.
+- per check, ``kind`` (``spread``, identity, with ``bootstrap``; ``floor``, equivalence, with
+  ``margin``) and ``estimator``.
 
 Evaluator ``edge_cases``
 ------------------------

@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S03 and S12 are implemented. The other scenarios are ordered below by priority, which weighs what a
-scenario adds to the claims already tested against what it still needs. Each scenario's section
+S02, S03 and S12 are implemented. The other scenarios are ordered below by priority, which weighs
+what a scenario adds to the claims already tested against what it still needs. Each scenario's section
 repeats its rank and lists what its implementation takes.
 
-#. **S02**, the error floor of the ensemble. It complements P1 and needs only a Mondrian block-mark
-   generator.
 #. **S04**, a zero-inflated field. It is the main practical case of the draw decoders, now in the
    catalogue.
 #. **S08**, the support effect on tonnage curves. One functional on existing generators.
@@ -73,30 +71,39 @@ S01 — Simulation keeps the geometry
 S02 — Where more partitions stop helping
 ========================================
 
-:Status: ready (not yet implemented)
-:Priority: 1 of 11 among the pending scenarios
+:Status: **implemented**
+:Evaluator: ``error_floor``
 :Source in the theory: convergence of the ensemble and its error floor
-:Claim: the error against the truth stops decreasing beyond some ensemble size, while the estimate itself keeps converging (P1).
+:Claim: the ensemble mean keeps converging as the number of partitions grows (P1), while its error
+  against the truth stops decreasing beyond some ensemble size.
 
-**Setup.** The truth is a Mondrian block-mark field with 35 cells, sampled at 250 uniformly placed data, estimated by Mondrian IDW with :math:`T` up to 3000.
+**Setup.** The truth is a Mondrian block-mark field, one standard normal mark per cell of the theory's
+Mondrian process of budget 4.9 on the unit square, about 35 cells. Each pinned replicate field holds
+250 uniformly placed data, with the field on a 30×30 grid. Mondrian IDW (exponent 2, rate 5,
+``empty_cells="coarsen"``) computes, for each of nine ensemble sizes from 5 to 3000, 30 independent
+ensembles (60 in ``full``) on each of 8 fields (16 in ``full``).
 
 **Checks.**
 
-- *identity*. P1's :math:`T^{-1/2}` law holds on this field.
-- *identity*. Beyond the estimated threshold :math:`T_0`, the slope of the error against the truth versus :math:`T` equals 0.
+- ``spread``, *identity*. The slope against :math:`\log T` of half the logarithm of the variance of
+  the ensemble mean across the independent ensembles, averaged over the grid, is :math:`-1/2`. One
+  standardised difference per field, its standard error from 300 bootstrap resamples of the ensembles.
+- ``floor``, *equivalence*. Beyond the size :math:`T_0`, the smallest whose mean error against the
+  truth lies within one combined standard error of the error at 3000 members, the slope of the
+  logarithm of the error against :math:`\log T` lies within :math:`\pm 0.01`, less than 1 % of error
+  for each e-fold of members.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` both checks pass, the largest standardised difference of the
+spread being 1.5 and 2.0. The mean slope beyond :math:`T_0` was -0.00005 and -0.0002, against a
+margin of 0.01. A run takes about 1 min 35 s.
 
-- A Mondrian block-mark generator next to the Voronoi one in ``generators/fields.py``. It draws the
-  cells of the theory's Mondrian process on the unit square, at the rate giving 35 cells on average
-  (:math:`(1 + \lambda)^2 = 35`, :math:`\lambda \approx 4.9`), with one independent mark per
-  cell. Its cells can be checked against E2's co-occurrence before use.
-- Pinned replicate fields, 250 data each, with a grid of queries.
-- An evaluator computing the RMSE of the ensemble mean against the truth for ensemble sizes on a
-  logarithmic grid up to 3 000, averaged over independent ensembles. It reuses P1's slope check
-  (evaluator ``convergence``) on this field.
-- A rule for :math:`T_0`, fixed before the first run, for instance the smallest size whose error
-  lies within one standard error of the error at 3 000 members, then the slope test beyond it.
+**History.** The spread is read through the variance averaged over the grid. The mean over the grid of
+the logarithm of the standard deviation, P1's reading, gave a slope of -0.481 on the same ensembles
+before the first run, against -0.502 for the variance. On a block-mark field the members are far from
+normal, a cell reaching a datum or not, and the bias of the logarithm of a standard deviation changes
+with :math:`T`. The floor is an equivalence rather than an identity, since the error approaches its
+floor without reaching it exactly. Its slope beyond :math:`T_0` was -0.0003 per field, which an
+identity with more fields would reject although it has no practical consequence.
 
 .. _scenario-S03:
 

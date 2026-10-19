@@ -59,3 +59,20 @@ def test_mondrian_law_at_a_location_does_not_depend_on_the_other_queries():
         p = (labels[1:3] == labels[0]).mean(1)
         e = np.exp(-lam * h)
         assert np.all(np.abs(p - e) < 4 * np.sqrt(e * (1 - e) / n)), (p, e)
+
+
+def test_mondrian_block_mark_generator_follows_the_theory():
+    """The Mondrian cells of the scenarios' generator: two points share a cell with probability
+    exp(-rate * |x - y|_1), and the unit square holds (1 + rate)^2 cells on average."""
+    from spatialize.scenarios.generators import fields
+    rng = np.random.default_rng(0)
+    rate = 4.9
+    x, y = np.array([[0.3, 0.4]]), np.array([[0.42, 0.47]])
+    same, n_cells = [], []
+    for _ in range(4000):
+        z = fields.mbm(rng, rate, lambda r, n: np.arange(n, dtype=float))
+        same.append(z(x)[0] == z(y)[0])
+        n_cells.append(z.n_cells)
+    expected = np.exp(-rate * 0.19)
+    assert abs(np.mean(same) - expected) < 4 * np.sqrt(expected * (1 - expected) / 4000)
+    assert abs(np.mean(n_cells) - (1 + rate) ** 2) < 4 * np.std(n_cells) / np.sqrt(4000)

@@ -26,7 +26,7 @@ from __future__ import annotations
 import numpy as np
 from itertools import permutations, product
 
-import spatialize.gs.esi.scorefunction as sf
+import spatialize.gs.esi.scoring as sc
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, with_more_decoders
 from spatialize.gs.esi._main import build_arg_list
 from spatialize._parallel import map_chunks
@@ -261,7 +261,7 @@ class ParetoOptimizer:
     scoring : callable
         Decoder scoring function with signature
         ``(true_values, esi_samples) → float``.
-        Default: :func:`~spatialize.gs.esi.scorefunction.neg_log_likelihood`.
+        Default: :func:`~spatialize.gs.esi.scoring.neg_log_likelihood`.
     k : int or str
         CV folds.  ``"loo"`` or ``-1`` triggers leave-one-out.
     seed : int
@@ -300,7 +300,7 @@ class ParetoOptimizer:
         local_interpolator: str = "idw",
         p_process: str = partitioning_process.MONDRIAN,
         data_cond: bool       = True,
-        scoring               = sf.neg_log_likelihood,
+        scoring               = sc.neg_log_likelihood,
         k                     = 5,
         seed: int             = 0,
         folding_seed: int     = 0,
@@ -404,7 +404,7 @@ class ParetoOptimizer:
             _, cv_samples = cv_fn(*l_args)
 
             r_cv = float(scoring_fn(values, cv_samples))
-            out, nan = sf.left_out(cv_samples, scoring_fn)
+            out, nan = sc.left_out(cv_samples, scoring_fn)
 
             all_results.append({
                 "params":        cfg,

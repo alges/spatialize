@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 
 from spatialize import logging
-import spatialize.gs.esi.aggfunction as af
+import spatialize.gs.esi.functionals as fn
 from spatialize.gs.esi import esi_nongriddata
 from spatialize.data import load_drill_holes_andes_3D
 
@@ -30,7 +30,7 @@ result = esi_nongriddata(points, values, xi,
                       exponent=1.0,
                       n_partitions=100,
                       alpha=0.7,
-                      agg_function=af.mean
+                      agg_function=fn.mean
                       )
 
 #plotting original data and resulting estimation points

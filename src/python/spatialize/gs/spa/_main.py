@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import ListedColormap
 
-import spatialize.gs.esi.aggfunction as af
+import spatialize.gs.esi.functionals as fn
 from spatialize import SpatializeError, logging
 from spatialize._util import signature_overload, per_call, random_seed
 from spatialize.empirical import (EmpiricalModel, FittedModelFactory, _loo_target_variance,
@@ -2361,7 +2361,7 @@ def posterior_audit(points, values, **kwargs):
 
 
 @signature_overload(pivot_arg=("local_interpolator", li.IDW, "local interpolator"),
-                    common_args=dict(_COMMON, griddata=False, agg_function=af.mean),
+                    common_args=dict(_COMMON, griddata=False, agg_function=fn.mean),
                     specific_args=_SPECIFIC)
 def cv_sample_pred_posterior(points, values, xi, **kwargs):
     """The posterior analysis of version 1.2: the law of each datum built from the other data.

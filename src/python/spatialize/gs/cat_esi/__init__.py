@@ -5,7 +5,7 @@ from ._main import (
     CatESIResult,
     CatESIGridSearchResult,
 )
-from .agg_functions import (
+from .functionals import (
     aggregate_with_mv,
     aggregate_with_ordinal_mv,
     aggregate_with_weighted_mv,
@@ -13,7 +13,7 @@ from .agg_functions import (
     categorical_feature_precision,
     categorical_precision_cube,
 )
-from .score_functions import (
+from .scoring import (
     accuracy,
     f1_macro,
     f1_weighted,

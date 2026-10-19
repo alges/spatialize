@@ -17,7 +17,7 @@ def test_density_readings_do_not_depend_on_units(scale):
     so changing the units of the variable changes no conclusion: the KDE spread scales with the data,
     the NLL shifts by log(scale) and the encoder error does not change."""
     from spatialize.empirical import FittedModelFactory
-    from spatialize.gs.esi import scorefunction as sf
+    from spatialize.gs.esi import scoring as sc
     from spatialize.gs.esi.pareto import EmpiricalRobustnessBound, reference_laws
     from spatialize import session
     rng = np.random.default_rng(cases.GENERATOR_SEED)
@@ -27,8 +27,8 @@ def test_density_readings_do_not_depend_on_units(scale):
     reference, _ = FittedModelFactory().create(members[0])
     assert np.isclose(model.bandwidth_, reference.bandwidth_ * scale, rtol=1e-12)
 
-    nll = sf.neg_log_likelihood(truth, members)
-    assert np.isclose(sf.neg_log_likelihood(truth * scale, members * scale), nll + np.log(scale), rtol=1e-9)
+    nll = sc.neg_log_likelihood(truth, members)
+    assert np.isclose(sc.neg_log_likelihood(truth * scale, members * scale), nll + np.log(scale), rtol=1e-9)
 
     s, v, _ = DATA["2d"]
     with session.override(parallel=False):
@@ -43,19 +43,19 @@ def test_left_out_counts_the_data_a_scorer_cannot_use():
     the absolute and squared errors, 30 for the NLL, 2 for the CRPS); the warning of the searches
     lists every configuration over the threshold and marks the best."""
     import warnings
-    from spatialize.gs.esi import scorefunction as sf
+    from spatialize.gs.esi import scoring as sc
     samples = np.ones((4, 40))
     samples[0, :] = np.nan            # no valid member
     samples[1, 1:] = np.nan           # one
     samples[2, 20:] = np.nan          # twenty
-    assert sf.left_out(samples, sf.mae) == (0.25, (40 + 39 + 20) / 160)
-    assert sf.left_out(samples, sf.crps)[0] == 0.5
-    assert sf.left_out(samples, sf.neg_log_likelihood)[0] == 0.75
-    assert sf.left_out(samples, lambda t, s: 0.0)[0] == 0.25      # a scorer without min_valid needs 1
+    assert sc.left_out(samples, sc.mae) == (0.25, (40 + 39 + 20) / 160)
+    assert sc.left_out(samples, sc.crps)[0] == 0.5
+    assert sc.left_out(samples, sc.neg_log_likelihood)[0] == 0.75
+    assert sc.left_out(samples, lambda t, s: 0.0)[0] == 0.25      # a scorer without min_valid needs 1
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        sf.warn_left_out([(0.0, 0.0), (0.2, 0.3), (0.5, 0.6)], ["a", "b", "c"], {1}, 0.05)
-        sf.warn_left_out([(0.01, 0.02)], ["d"], {0}, 0.05)
+        sc.warn_left_out([(0.0, 0.0), (0.2, 0.3), (0.5, 0.6)], ["a", "b", "c"], {1}, 0.05)
+        sc.warn_left_out([(0.01, 0.02)], ["d"], {0}, 0.05)
     assert len(caught) == 1
     text = str(caught[0].message)
     assert "2 of 3" in text and "b: 20.0 %" in text and "<- the best" in text and "\n  a:" not in text
@@ -152,16 +152,16 @@ def test_a_point_mass_law_gets_the_spread_floor():
 
 
 def test_crps_is_the_exact_score_of_the_members():
-    import spatialize.gs.esi.scorefunction as sf
+    import spatialize.gs.esi.scoring as sc
     """E|X - y| - E|X - X'| / 2 over the members: brute force, an atom at the observation, a normal law."""
     rng = np.random.default_rng(1)
     members, observed = rng.random((5, 40)), rng.random(5)
     brute = np.mean([np.mean(np.abs(m - y)) - 0.5 * np.mean(np.abs(m[:, None] - m[None]))
                      for m, y in zip(members, observed)])
-    assert abs(sf.crps(observed, members) - brute) < 1e-12
-    assert sf.crps(np.array([0.0]), np.zeros((1, 10))) == 0.0
+    assert abs(sc.crps(observed, members) - brute) < 1e-12
+    assert sc.crps(np.array([0.0]), np.zeros((1, 10))) == 0.0
     normal = rng.standard_normal((1, 200_000))
-    assert abs(sf.crps(np.array([0.0]), normal) - (2 / np.sqrt(2 * np.pi) - 1 / np.sqrt(np.pi))) < 0.005
+    assert abs(sc.crps(np.array([0.0]), normal) - (2 / np.sqrt(2 * np.pi) - 1 / np.sqrt(np.pi))) < 0.005
 
 
 @pytest.mark.parametrize("name", ["crps", "mae", "rmse", "nll"])
@@ -182,10 +182,10 @@ def test_asymmetric_loss_reading_minimises_the_expected_loss(over, under, kind):
     """For a fixed law, the reading AsymmetricLoss returns has the smallest expected loss among nearby
     readings, a quantile for the linear loss and an expectile for the squared one, both at level
     under / (over + under)."""
-    from spatialize.gs.esi import aggfunction as af
+    from spatialize.gs.esi import functionals as fn
     rng = np.random.default_rng(0)
     members = rng.lognormal(0, 1, (1, 20_000))
-    reading = af.AsymmetricLoss(over, under, kind)(members)[0]
+    reading = fn.AsymmetricLoss(over, under, kind)(members)[0]
 
     def expected(r):
         excess, shortfall = np.clip(r - members, 0, None), np.clip(members - r, 0, None)
@@ -194,34 +194,55 @@ def test_asymmetric_loss_reading_minimises_the_expected_loss(over, under, kind):
         return np.mean(over * excess + under * shortfall)
     assert all(expected(reading) <= expected(reading + d) + 1e-12 for d in (-0.05, -0.01, 0.01, 0.05))
     alpha = under / (over + under)
-    target = np.quantile(members, alpha) if kind == "linear" else af.Expectile(alpha)(members)[0]
+    target = np.quantile(members, alpha) if kind == "linear" else fn.Expectile(alpha)(members)[0]
     assert abs(reading - target) < 1e-9
 
 
 def test_expectile_and_expected_shortfall():
-    from spatialize.gs.esi import aggfunction as af
+    from spatialize.gs.esi import functionals as fn
     rng = np.random.default_rng(1)
     members = rng.normal(0, 1, (3, 5000))
     members[0, :10] = np.nan
-    assert np.allclose(af.Expectile(0.5)(members), np.nanmean(members, axis=1), atol=1e-9)
-    e = af.Expectile(0.3)(members)
+    assert np.allclose(fn.Expectile(0.5)(members), np.nanmean(members, axis=1), atol=1e-9)
+    e = fn.Expectile(0.3)(members)
     for row, value in zip(members, e):
         row = row[np.isfinite(row)]
         assert abs(0.3 * np.mean(np.clip(row - value, 0, None)) - 0.7 * np.mean(np.clip(value - row, 0, None))) < 1e-9
-    es = af.ExpectedShortfall(0.9)(members)
+    es = fn.ExpectedShortfall(0.9)(members)
     for row, value in zip(members, es):
         row = row[np.isfinite(row)]
         assert abs(value - row[row >= np.quantile(row, 0.9)].mean()) < 1e-12
-    assert np.all(af.ExpectedShortfall(0.1, tail="lower")(members) < af.Expectile(0.5)(members))
+    assert np.all(fn.ExpectedShortfall(0.1, tail="lower")(members) < fn.Expectile(0.5)(members))
 
 
 def test_asymmetric_loss_score_in_a_search():
     import spatialize
-    from spatialize.gs.esi import esi_pareto_hparams_search, scorefunction as sf
+    from spatialize.gs.esi import esi_pareto_hparams_search, scoring as sc
     rng = np.random.default_rng(0)
     points, values = rng.random((60, 2)), rng.lognormal(0, 1, 60)
     with spatialize.session.override(progress=False):
         search = esi_pareto_hparams_search(points, values, local_interpolator="wdraw_idw", n_partitions=[50],
                                            alpha=[0.7], exponent=[2.0], k="loo",
-                                           scoring=sf.asymmetric_loss(over=5, under=1), seed=0)
+                                           scoring=sc.asymmetric_loss(over=5, under=1), seed=0)
     assert np.isfinite(search.all_results[0]["decoder_error"])
+
+
+def test_renamed_modules_keep_their_old_names_until_1_4():
+    """The modules renamed in 1.3 (aggfunction, lossfunction, scorefunction, and the categorical
+    agg_functions and score_functions) are still importable under their old names, which give the new
+    modules themselves with a FutureWarning."""
+    import importlib
+    import sys
+    import warnings
+    pairs = [("spatialize.gs.esi.aggfunction", "spatialize.gs.esi.functionals"),
+             ("spatialize.gs.esi.lossfunction", "spatialize.gs.esi.loss"),
+             ("spatialize.gs.esi.scorefunction", "spatialize.gs.esi.scoring"),
+             ("spatialize.gs.cat_esi.agg_functions", "spatialize.gs.cat_esi.functionals"),
+             ("spatialize.gs.cat_esi.score_functions", "spatialize.gs.cat_esi.scoring")]
+    for old, new in pairs:
+        sys.modules.pop(old, None)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            module = importlib.import_module(old)
+        assert module is importlib.import_module(new)
+        assert any(issubclass(w.category, FutureWarning) and new in str(w.message) for w in caught)

@@ -151,7 +151,7 @@ def public_cases():
     add("cat_esi_nongriddata", "2d", cat)
 
     def cat_btd(s, v, q):
-        from spatialize.gs.cat_esi.agg_functions import aggregate_with_btd
+        from spatialize.gs.cat_esi.functionals import aggregate_with_btd
         cats = np.where(v > np.median(v), "high", "low")
         r = cat_esi_nongriddata(s, cats, q, n_partitions=T, alpha=ALPHA, seed=SEED, **NULL)
         est, prob, ll = aggregate_with_btd(r.esi_samples(raw=True), categories_list=["high", "low"], seed=SEED)

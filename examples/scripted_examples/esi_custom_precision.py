@@ -4,9 +4,9 @@ from matplotlib.pyplot import colorbar
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from spatialize import logging
-import spatialize.gs.esi.aggfunction as af
+import spatialize.gs.esi.functionals as fn
 from spatialize.gs.esi import esi_griddata
-from spatialize.gs.esi.lossfunction import loss
+from spatialize.gs.esi.loss import loss
 
 
 logging.log.setLevel("DEBUG")
@@ -27,7 +27,7 @@ values = func(points[:, 0], points[:, 1])
 def op_error_precision(estimation, esi_samples):
     dyn_range = np.abs(np.nanmin(esi_samples) - np.nanmax(esi_samples))
 
-    @loss(af.mean)
+    @loss(fn.mean)
     def _op_error(x, y):
         return np.abs(x - y) / dyn_range
 
@@ -75,7 +75,7 @@ def esi_idw():
                           local_interpolator="idw",
                           exponent=1.0,
                           n_partitions=500, alpha=0.98,
-                          agg_function=af.median)
+                          agg_function=fn.median)
 
     plot_result(result, 'esi idw')
 
@@ -85,7 +85,7 @@ def esi_kriging():
                           local_interpolator="kriging",
                           model="spherical", nugget=0.0, range=10.0,
                           n_partitions=100, alpha=0.9,
-                          agg_function=af.median)
+                          agg_function=fn.median)
 
     plot_result(result, 'esi kriging')
 

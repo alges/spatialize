@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-import spatialize.gs.esi.aggfunction as af
+import spatialize.gs.esi.functionals as fn
 from spatialize import logging
 from spatialize.gs.esi import esi_griddata
 
@@ -29,7 +29,7 @@ result = esi_griddata(points, values, (grid_x, grid_y),
                       data_cond=False,
                       exponent=1.0,
                       n_partitions=500, alpha=0.985,
-                      agg_function=af.mean
+                      agg_function=fn.mean
                       )
 
 esi_idw_mond = result.estimation()
@@ -42,7 +42,7 @@ result_2 = esi_griddata(points, values, (grid_x, grid_y),
                       data_cond=True,
                       exponent=1.0,
                       n_partitions=500, alpha=0.985,
-                      agg_function=af.mean
+                      agg_function=fn.mean
                       )
 
 esi_idw_vor_t = result_2.estimation()
@@ -55,7 +55,7 @@ result_3 = esi_griddata(points, values, (grid_x, grid_y),
                       data_cond=False,
                       exponent=1.0,
                       n_partitions=500, alpha=0.985,
-                      agg_function=af.mean
+                      agg_function=fn.mean
                       )
 
 esi_idw_vor_f = result_3.estimation()

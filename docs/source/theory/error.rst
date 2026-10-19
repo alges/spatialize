@@ -159,4 +159,4 @@ themselves, whose tails fall at their own scale. Both are computed on the partit
 :func:`~spatialize.gs.partitions.cell_labels`. Its ``best_result`` reads the frontier by lowest
 decoder error (``"min_decoder"``) or by knee (``"knee"``), while ``best_for_tau`` picks the best
 configuration under a level :math:`\tau` (:doc:`../reference/selection`). The scores are in
-:mod:`spatialize.gs.esi.scorefunction`.
+:mod:`spatialize.gs.esi.scoring`.

@@ -7,9 +7,9 @@ from sklearn.model_selection import ParameterGrid
 
 from spatialize import SpatializeError, logging, session, GridSearchResult, EstimationResult
 from spatialize.result import Summarised
-import spatialize.gs.esi.aggfunction as af
-import spatialize.gs.esi.lossfunction as lf
-import spatialize.gs.esi.scorefunction as sf
+import spatialize.gs.esi.functionals as fn
+import spatialize.gs.esi.loss as lf
+import spatialize.gs.esi.scoring as sc
 from spatialize._util import signature_overload, random_seed
 from spatialize._math_util import flatten_grid_data
 from spatialize.gs import lib_spatialize_facade, partitioning_process, local_interpolator as li, \
@@ -71,7 +71,7 @@ class ESIGridSearchResult(GridSearchResult):
             The row of `best_params` with the lowest ``cv_error`` (ties are
             broken by taking the first row), plus ``"result_data_index"``
             (its index in `search_result_data`), ``"agg_function"``
-            (:func:`~spatialize.gs.esi.aggfunction.mean`), and ``"p_process"``.
+            (:func:`~spatialize.gs.esi.functionals.mean`), and ``"p_process"``.
             Ready to pass as ``best_params_found`` to :func:`esi_griddata` or
             :func:`esi_nongriddata`.
 
@@ -87,7 +87,7 @@ class ESIGridSearchResult(GridSearchResult):
         index = list(row.keys())[0]
         result = row[index]
         result.update({"result_data_index": index,
-                       "agg_function": af.mean,
+                       "agg_function": fn.mean,
                        "p_process": self.p_process})
         
         return result
@@ -321,7 +321,7 @@ class ESIParetoResult(Summarised):
         result.update({
             "epsilon":            r["epsilon"],
             "decoder_error":      r["decoder_error"],
-            "agg_function":       af.mean,
+            "agg_function":       fn.mean,
             "p_process":          self.p_process,
             "local_interpolator": self.local_interpolator,
         })
@@ -557,7 +557,7 @@ class ESIResult(EstimationResult):
         ----------
         loss_function : callable, optional
             Function ``(estimation, esi_samples) -> array`` used to compute
-            the error. Default: :func:`~spatialize.gs.esi.lossfunction.mse_loss`.
+            the error. Default: :func:`~spatialize.gs.esi.loss.mse_loss`.
 
         Returns
         -------
@@ -587,7 +587,7 @@ class ESIResult(EstimationResult):
         loss_function : callable, optional
             Function ``(estimation, esi_samples) -> array`` used to compute
             the per-sample error. Default:
-            :func:`~spatialize.gs.esi.lossfunction.mse_cube`.
+            :func:`~spatialize.gs.esi.loss.mse_cube`.
 
         Returns
         -------
@@ -628,7 +628,7 @@ class ESIResult(EstimationResult):
         else:
             return self._esi_samples
 
-    def re_estimate(self, agg_function=af.mean):
+    def re_estimate(self, agg_function=fn.mean):
         """Re-estimate the ESI samples using the given aggregation function.
 
         Recalculates the final estimate based on the aggregation function
@@ -642,7 +642,7 @@ class ESIResult(EstimationResult):
         agg_function : callable, optional
             Function ``(esi_samples) -> array`` used to aggregate the
             ensemble into a point estimate. Default:
-            :func:`~spatialize.gs.esi.aggfunction.mean`.
+            :func:`~spatialize.gs.esi.functionals.mean`.
 
         Returns
         -------
@@ -834,7 +834,7 @@ class ESIResult(EstimationResult):
                                  # -- valid only when 'p_process' is 'voronoi'.
                                  "n_partitions": [100],
                                  "alpha": list(np.flip(np.arange(0.70, 0.90, 0.01))),
-                                 "scoring": sf.mae,
+                                 "scoring": sc.mae,
                                  "seed": random_seed,
                                  "folding_seed": random_seed,
                                  "callback": None,
@@ -907,13 +907,13 @@ def esi_hparams_search(points, values, xi, **kwargs):
     scoring : callable, optional
         Cross-validation scoring function ``(true_values, esi_samples) ->
         float`` used to rank parameter combinations, e.g.
-        :func:`~spatialize.gs.esi.scorefunction.mae`,
-        :func:`~spatialize.gs.esi.scorefunction.neg_log_likelihood`, or
-        :func:`~spatialize.gs.esi.scorefunction.crps`. Distribution-based
+        :func:`~spatialize.gs.esi.scoring.mae`,
+        :func:`~spatialize.gs.esi.scoring.neg_log_likelihood`, or
+        :func:`~spatialize.gs.esi.scoring.crps`. Distribution-based
         scorers (`neg_log_likelihood`, `crps`) are automatically replaced
         with `mae` and a warning is issued if the smallest candidate in
         `n_partitions` is below 30. Default:
-        :func:`~spatialize.gs.esi.scorefunction.mae`.
+        :func:`~spatialize.gs.esi.scoring.mae`.
     seed : int, optional
         Random seed used for partitioning during estimation. Default: a
         random integer in ``[1000, 10000)``.
@@ -1007,7 +1007,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
 
-    _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
+    _distribution_scorers = (sc.neg_log_likelihood, sc.crps)
     if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
         import warnings
         warnings.warn(
@@ -1018,7 +1018,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
             UserWarning,
             stacklevel=2,
         )
-        kwargs["scoring"] = sf.mae
+        kwargs["scoring"] = sc.mae
 
     if isinstance(xi, tuple):
         p_xi = deepcopy(xi)
@@ -1050,7 +1050,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
 
         _, cv = cross_validate(*l_args)     # returns esi samples for the input data
 
-        results[i] = (kwargs["scoring"](values, cv),) + sf.left_out(cv, kwargs["scoring"])
+        results[i] = (kwargs["scoring"](values, cv),) + sc.left_out(cv, kwargs["scoring"])
 
         kwargs["callback"](logging.progress.inform())
 
@@ -1077,7 +1077,7 @@ def esi_hparams_search(points, values, xi, **kwargs):
         c += 1
     search = ESIGridSearchResult(result_data, kwargs["p_process"])
     best = {list(result_data.index).index(search.best_result()["result_data_index"])}
-    sf.warn_left_out([(r["left_out"], r["nan_members"]) for _, r in result_data.iterrows()],
+    sc.warn_left_out([(r["left_out"], r["nan_members"]) for _, r in result_data.iterrows()],
                      [", ".join(f"{k}={result_data.loc[i, k]}" for k in grid.keys()) for i in result_data.index],
                      best, session.get("max_left_out"))
     return search
@@ -1147,7 +1147,7 @@ def esi_griddata(points, values, xi, **kwargs):
     agg_function : callable, optional
          Function used to aggregate the ensemble of local estimates into a
          single value per location. Default:
-         :func:`~spatialize.gs.esi.aggfunction.mean`.
+         :func:`~spatialize.gs.esi.functionals.mean`.
     seed : int, optional
          Random seed for the partitioning process. Default: a random
          integer in ``[1000, 10000)``.
@@ -1170,7 +1170,7 @@ def esi_griddata(points, values, xi, **kwargs):
 
          .. warning::
              :meth:`ESIGridSearchResult.best_result` always injects
-             ``agg_function`` (:func:`~spatialize.gs.esi.aggfunction.mean`)
+             ``agg_function`` (:func:`~spatialize.gs.esi.functionals.mean`)
              and ``p_process`` into the dict it returns, so passing it
              silently overrides any ``agg_function`` or ``p_process`` given
              at the call site. :meth:`ESIParetoResult.best_result` injects
@@ -1270,7 +1270,7 @@ def esi_griddata(points, values, xi, **kwargs):
                  data_cond=False,
                  exponent=1.0,
                  n_partitions=500, alpha=0.985,
-                 agg_function=af.mean)
+                 agg_function=fn.mean)
 
     """
     ng_xi, original_shape = flatten_grid_data(xi)
@@ -1344,7 +1344,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
     agg_function : callable, optional
          Function used to aggregate the ensemble of local estimates into a
          single value per location. Default:
-         :func:`~spatialize.gs.esi.aggfunction.mean`.
+         :func:`~spatialize.gs.esi.functionals.mean`.
     seed : int, optional
          Random seed for the partitioning process. Default: a random
          integer in ``[1000, 10000)``.
@@ -1367,7 +1367,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
 
          .. warning::
              :meth:`ESIGridSearchResult.best_result` always injects
-             ``agg_function`` (:func:`~spatialize.gs.esi.aggfunction.mean`)
+             ``agg_function`` (:func:`~spatialize.gs.esi.functionals.mean`)
              and ``p_process`` into the dict it returns, so passing it
              silently overrides any ``agg_function`` or ``p_process`` given
              at the call site. :meth:`ESIParetoResult.best_result` injects
@@ -1465,7 +1465,7 @@ def esi_nongriddata(points, values, xi, **kwargs):
     common_args={
         "p_process":            partitioning_process.MONDRIAN,
         "data_cond":            True,
-        "scoring":              sf.neg_log_likelihood,
+        "scoring":              sc.neg_log_likelihood,
         "k":                    5,
         "n_partitions":         [100, 200, 300],
         "alpha":                list(np.flip(np.arange(0.70, 0.90, 0.05))),
@@ -1587,7 +1587,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     --------
     .. code-block:: python
 
-        import spatialize.gs.esi.scorefunction as sf
+        import spatialize.gs.esi.scoring as sc
         from spatialize.gs.esi import esi_pareto_hparams_search
 
         result = esi_pareto_hparams_search(
@@ -1596,7 +1596,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
             n_partitions=[100, 200, 300],
             alpha=[0.75, 0.80, 0.85],
             exponent=[1.0, 2.0],
-            scoring=sf.neg_log_likelihood,
+            scoring=sc.neg_log_likelihood,
             k=5,
         )
 
@@ -1619,14 +1619,14 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     # forwarded as-is to every ESI call, not iterated over in the grid.
     fixed_interp_kwargs = {name: kwargs.get(name) for name in decoder_callables(kwargs["local_interpolator"])}
 
-    by_name = {"nll": sf.neg_log_likelihood, "crps": sf.crps, "rmse": sf.rmse, "mae": sf.mae}
+    by_name = {"nll": sc.neg_log_likelihood, "crps": sc.crps, "rmse": sc.rmse, "mae": sc.mae}
     if isinstance(kwargs["scoring"], str):
         if kwargs["scoring"] not in by_name:
             raise SpatializeError(f"Unknown scoring '{kwargs['scoring']}' (available: {', '.join(by_name)}, "
                                   f"or a callable)")
         kwargs["scoring"] = by_name[kwargs["scoring"]]
 
-    _distribution_scorers = (sf.neg_log_likelihood, sf.crps)
+    _distribution_scorers = (sc.neg_log_likelihood, sc.crps)
     if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
         import warnings
         warnings.warn(
@@ -1637,7 +1637,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
             UserWarning,
             stacklevel=2,
         )
-        kwargs["scoring"] = sf.mae
+        kwargs["scoring"] = sc.mae
 
     from spatialize.gs.esi.pareto import ParetoOptimizer
     optimizer = ParetoOptimizer(
@@ -1662,7 +1662,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     all_results = optimizer.fit(points, values)
     result = ESIParetoResult(all_results, kwargs["p_process"], kwargs["local_interpolator"])
     on_frontier = {i for i, r in enumerate(all_results) if any(r is f for f in result.frontier)}
-    sf.warn_left_out([(r["left_out"], r["nan_members"]) for r in all_results],
+    sc.warn_left_out([(r["left_out"], r["nan_members"]) for r in all_results],
                      [", ".join(f"{k}={v}" for k, v in r["params"].items()) for r in all_results],
                      on_frontier, session.get("max_left_out"), best_name="on the frontier")
     return result
@@ -1675,7 +1675,7 @@ def esi_pareto_hparams_search(points, values, **kwargs):
                                  "data_cond": True,  # whether to condition the partitioning process on samples
                                  # -- valid only when ‘p_process’ is ‘voronoi’.
                                  "alpha": 0.8,
-                                 "agg_function": af.mean,
+                                 "agg_function": fn.mean,
                                  "seed": random_seed,
                                  "callback": None,
                                  "best_params_found": None

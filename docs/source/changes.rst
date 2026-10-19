@@ -37,12 +37,12 @@ New
   domain). :func:`~spatialize.data.load_reflectance_sundarbans` gives the near-infrared reflectance of the
   Sundarbans mangrove forest on a 400 × 580 grid, its tidal channels a field of sharp, winding boundaries
   (Landsat 9, USGS, public domain). Each returns the whole grid as the truth with samples drawn from it.
-- **Readings for an asymmetric loss.** ``aggfunction.AsymmetricLoss(over, under, kind)`` reads the
+- **Readings for an asymmetric loss.** ``functionals.AsymmetricLoss(over, under, kind)`` reads the
   members by the functional a use's costs select, ``over`` for each unit of over-prediction and
   ``under`` for each unit of under-prediction, at the level ``under / (over + under)``. A linear loss
   selects the quantile, a squared loss the expectile, a zero-one loss the mode.
-  ``aggfunction.Expectile`` and ``aggfunction.ExpectedShortfall`` (the mean beyond the value at risk,
-  either tail) are new readings of their own, and ``scorefunction.asymmetric_loss`` charges the same
+  ``functionals.Expectile`` and ``functionals.ExpectedShortfall`` (the mean beyond the value at risk,
+  either tail) are new readings of their own, and ``scoring.asymmetric_loss`` charges the same
   loss in cross-validation, so a search chooses the ensemble the use prefers.
 - **The Maipo precipitation as a data set.** :func:`~spatialize.data.load_precipitation_maipo` gives
   the daily precipitation of 69 rain gauges of the Maipo basin, central Chile, on three days of July
@@ -188,7 +188,7 @@ Results that change
   the other, and cross-validation fits a cell in full only where a coarser cell or a mark needs it. The
   scores are honest and the searches faster (a Pareto search of adaptive IDW on Walker Lake, 37 s
   against 62 s). Estimation is unchanged.
-- **The CRPS score** (``scorefunction.crps``, ``scoring="crps"``) integrated the cumulative distribution
+- **The CRPS score** (``scoring.crps``, ``scoring="crps"``) integrated the cumulative distribution
   of a density fitted to the members, over the grid of that density only, and returned infinity, without
   saying why, when the fit failed. It is now the exact score of the members themselves,
   :math:`\mathrm{E}|X - y| - \tfrac12\,\mathrm{E}|X - X'|`, which keeps an atom among the members,
@@ -361,6 +361,18 @@ Results that change
   :func:`~spatialize.gs.cat_esi.cat_esi_hparams_search` and
   :func:`~spatialize.gs.spa.cv_sample_pred_posterior` show their documentation, which their
   decorator dropped.
+
+Renamed
+-------
+
+- Three modules of :mod:`spatialize.gs.esi`, so that each is named for what it holds.
+  ``aggfunction`` is now :mod:`~spatialize.gs.esi.functionals`, the readings of the members reported as
+  the map, ``lossfunction`` is now :mod:`~spatialize.gs.esi.loss` and ``scorefunction`` is now
+  :mod:`~spatialize.gs.esi.scoring`. Their categorical counterparts follow,
+  ``spatialize.gs.cat_esi.agg_functions`` becoming ``spatialize.gs.cat_esi.functionals`` and
+  ``spatialize.gs.cat_esi.score_functions`` becoming ``spatialize.gs.cat_esi.scoring``. The old names
+  still import, giving the new modules with a ``FutureWarning``, until version 1.4. The examples import
+  them as ``fn``, ``lf`` and ``sc``.
 
 Removed
 -------

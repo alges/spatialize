@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-import spatialize.gs.esi.aggfunction as af
+import spatialize.gs.esi.functionals as fn
 from spatialize import logging
 from spatialize.gs.esi import esi_griddata
 from scipy.interpolate import griddata
@@ -42,7 +42,7 @@ result = esi_griddata(points, values, (grid_x, grid_y),
                       p_process="mondrian",
                       data_cond=False,
                       n_partitions=30, alpha=0.7,
-                      agg_function=af.mean
+                      agg_function=fn.mean
                       )
 
 print(result)

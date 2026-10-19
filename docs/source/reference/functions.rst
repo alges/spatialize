@@ -6,12 +6,14 @@ Pluggable functions
 
 The callables passed as ``agg_function``, which chooses the reading of the members reported as the
 map (:doc:`../theory/sde`), as ``loss_function``, or as the scores of the cross-validation searches
-(:doc:`selection`).
+(:doc:`selection`). Version 1.3 renamed their modules, ``aggfunction`` becoming ``functionals``,
+``lossfunction`` becoming ``loss`` and ``scorefunction`` becoming ``scoring``. The old names still
+import, with a warning, until version 1.4.
 
-Aggregation functions
-======================
+Functionals
+===========
 
-.. py:module:: spatialize.gs.esi.aggfunction
+.. py:module:: spatialize.gs.esi.functionals
 
 .. autofunction:: mean
 
@@ -48,7 +50,7 @@ Aggregation functions
 Loss functions
 ===============
 
-.. py:module:: spatialize.gs.esi.lossfunction
+.. py:module:: spatialize.gs.esi.loss
 
 .. autofunction:: loss
 
@@ -65,10 +67,10 @@ Loss functions
    :special-members: __call__
    :undoc-members:
 
-Score functions
-=================
+Scoring
+=======
 
-.. py:module:: spatialize.gs.esi.scorefunction
+.. py:module:: spatialize.gs.esi.scoring
 
 .. autofunction:: mae
 

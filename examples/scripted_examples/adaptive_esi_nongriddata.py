@@ -7,7 +7,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from spatialize import logging
 from spatialize.data import load_drill_holes_andes_2D
 from spatialize.gs.esi import esi_hparams_search, esi_nongriddata
-import spatialize.gs.esi.lossfunction as lf
+import spatialize.gs.esi.loss as lf
 
 # for a more explanatory output of the spatialize functions
 logging.log.setLevel("DEBUG")

@@ -13,9 +13,9 @@ from spatialize import logging
 from spatialize.logging import log_message
 from spatialize.viz import plot_categorical_colormap, plot_colormap_data, PlotStyle
 
-from .agg_functions import aggregate_with_mv, aggregate_with_ordinal_mv, aggregate_with_weighted_mv, categorical_feature_precision, categorical_precision_cube
+from .functionals import aggregate_with_mv, aggregate_with_ordinal_mv, aggregate_with_weighted_mv, categorical_feature_precision, categorical_precision_cube
 from .classifiers import get_classifier_fns, SKLEARN_CLASSIFIER_PARAMS, SKLEARN_RANDOM_STATE_CLASSIFIERS
-from .score_functions import resolve_scoring
+from .scoring import resolve_scoring
 
 
 # ─────────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ class CatESIResult(EstimationResult):
 
         The share of the partitions whose member is the category, among the members that are
         defined (a member of an empty cell, ``None``, takes no part). It is the law the majority
-        vote reads its mode from; :func:`~spatialize.gs.cat_esi.agg_functions.aggregate_with_btd`
+        vote reads its mode from; :func:`~spatialize.gs.cat_esi.functionals.aggregate_with_btd`
         gives the Dawid-Skene alternative, which weighs the partitions by their reliability.
 
         Parameters
@@ -365,7 +365,7 @@ class CatESIResult(EstimationResult):
 
     def _make_btd_fn(self, **kwargs):
         """Build a BTD aggregation callable, inferring metadata from the result."""
-        from .agg_functions import aggregate_with_btd
+        from .functionals import aggregate_with_btd
 
         # Infer categories from samples
         all_vals = [s for s in self._esi_samples.ravel() if s is not None]
@@ -1144,9 +1144,9 @@ def cat_esi_hparams_search(points, values, xi, **kwargs) -> CatESIGridSearchResu
         rows.append(row)
 
     result_data = pd.DataFrame(rows)
-    from spatialize.gs.esi import scorefunction as sf
+    from spatialize.gs.esi import scoring as sc
     best = {int(np.argmin(result_data["cv_error"].to_numpy()))}
-    sf.warn_left_out([(r["left_out"], 0.0 if np.isnan(r["nan_members"]) else r["nan_members"])
+    sc.warn_left_out([(r["left_out"], 0.0 if np.isnan(r["nan_members"]) else r["nan_members"])
                       for _, r in result_data.iterrows()],
                      [", ".join(f"{key}={p[key]}" for key in p) for p in param_grid],
                      best, session.get("max_left_out"))

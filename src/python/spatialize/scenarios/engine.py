@@ -1259,7 +1259,10 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
     - ``cross_power`` (paired-relation) — the share of the shifted and swapped values of the first of
       two variables flagged by the reading given the second (:meth:`PosteriorAudit.cross
       <spatialize.gs.spa.PosteriorAudit.cross>`, its partitions those of the check's
-      ``cross_estimator``) exceeds the share the audit of the values alone flags.
+      ``cross_estimator``) exceeds the share the audit of the values alone flags;
+    - ``errors_recommended`` (one-sided) — the share of the planted errors that
+      :meth:`PosteriorAudit.recommend <spatialize.gs.spa.PosteriorAudit.recommend>` lists to measure
+      again (alone or in a group to check) exceeds ``bound``.
 
     Reads ``data.n``, ``data.noise``, ``data.patch``, ``data.preferential``, ``data.cross``, ``data.q``,
     ``data.fields`` (per mode), ``data.generator_seed`` and ``estimators_T``.
@@ -1284,7 +1287,10 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
                 probes = (box[:, 0] + rng.random((n_probes, len(box))) * (box[:, 1] - box[:, 0])).astype(np.float32)
                 lab = np.asarray(runner.cells(part, pts, np.vstack([pts, probes]), n_members=T, seed=seed))
                 return lab[: len(pts)], lab[len(pts):]
-            cache[key] = PosteriorAudit(members, pts, vals, seed=seed, cells=cells)
+            def refit(z):
+                # the members of other values at the same locations, with the same partitions
+                return np.asarray(runner.loo(est, pts, np.asarray(z, np.float32), n_members=T, seed=seed), float)
+            cache[key] = PosteriorAudit(members, pts, vals, seed=seed, cells=cells, refit=refit)
         return cache[key]
 
     out = []
@@ -1324,13 +1330,18 @@ def eval_posterior_audit(sc: Scenario, runner: Runner, mode: str, seed: int,
                 w = a.weights()
                 bad_w += int(np.sum(~(w > 0)) + (abs(w.sum() - 1) > 1e-9))
                 n_w += len(w) + 1
+            elif kind == "errors_recommended":
+                a = audit(est, f["points"], f["planted"], ("planted", est.id, k))
+                rec = a.recommend(q=q, effect=False)
+                listed = set(rec.loc[rec["action"].isin(["measure again", "check provenance"]), "datum"])
+                x.append(float(np.mean([int(b) in listed for b in f["bad"]])))
             elif kind == "cross_power":
                 a = audit(est, f["points"], f["cross_u"], ("cross", est.id, k), ests[check["cross_estimator"]])
                 x.append(float(np.mean(a.cross(f["cross_v"], q=q).flag.to_numpy()[f["cross_bad"]])))
                 y.append(float(np.mean(a.flags(q)[f["cross_bad"]])))
             else:
                 raise ValueError(f"unknown check kind {kind}")
-        if kind == "errors_found":
+        if kind in ("errors_found", "errors_recommended"):
             r = families.mean_greater(x, float(check["bound"]))
         elif kind == "clean_flags":
             r = families.mean_less(x, float(check["bound"]))

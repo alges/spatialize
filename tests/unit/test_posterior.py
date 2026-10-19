@@ -366,3 +366,68 @@ def test_cross_is_robust_to_a_gross_error_among_the_pairs():
     x = np.linspace(-1, 1, 30)
     lever, centre, r, scale = _local_line(x - 0.3, 2 * x + 1, np.ones(30))
     assert np.isclose(centre, 1.6) and np.allclose(r, 0) and scale < 1e-12 and np.isclose(lever.sum(), 1)
+
+
+def test_recommend_lists_the_actions_the_readings_call_for():
+    """recommend lists a decimal error and a value inconsistent with the second variable as data to measure
+    again, both data of a conflicting duplicate as a pair to measure again, with their q-values and the
+    context of null_flags; it measures the effect of measuring them again; cross and null read on other
+    data or at another rate are refused, and so is an audit that cannot compute other members; the
+    q-values are those of Benjamini–Hochberg."""
+    from spatialize import SpatializeError
+    from spatialize.gs.spa import posterior_audit, PosteriorAudit
+    from spatialize.gs.spa._main import _qvalues, _bh
+    from spatialize.logging import singleton_null_callback as quiet
+    points, u, v, _ = _two_variables()
+    u = u.copy()
+    u[3] *= 10                                                   # a decimal error
+    u[7] += 1.2                                                  # inconsistent with v only
+    points, u, v = np.vstack([points, points[11]]), np.append(u, u[11] + 2.5), np.append(v, v[11])
+    audit = posterior_audit(points, u, n_partitions=150, alpha=0.85, seed=1, callback=quiet)
+    cross, null = audit.cross(v), audit.null_flags(n_replicates=3)
+    rec = audit.recommend(cross=cross, null=null)
+    action = dict(zip(rec.datum, rec.action))
+    assert action[3] == "measure again" and action[7] == "measure again"
+    assert {action[11], action[len(u) - 1]} <= {"measure again", "measure one of the pair again"}
+    assert "measure one of the pair again" in {action[11], action[len(u) - 1]}
+    assert rec.attrs["context"]["observed"] == null.attrs["observed"] and rec.attrs["settled"]
+    assert set(rec.attrs["effect"]) == {"mean_abs_change", "max_abs_change", "datum_most_changed", "relative"}
+    assert "effect" not in audit.recommend(effect=False).attrs
+    order = ["measure again", "check provenance", "measure one of the pair again", "sample more nearby", "none"]
+    assert list(rec.action) == sorted(rec.action, key=order.index)
+    with pytest.raises(SpatializeError):
+        audit.recommend(cross=audit.cross(v, q=0.1))
+    other = posterior_audit(points[:-1], u[:-1], n_partitions=150, alpha=0.85, seed=1, callback=quiet)
+    with pytest.raises(SpatializeError):
+        audit.recommend(null=other.null_flags(n_replicates=2))
+    with pytest.raises(SpatializeError):
+        PosteriorAudit(audit.members, points, u).recommend()
+    p = np.random.default_rng(0).random(60) ** 4
+    for q in (0.01, 0.05, 0.2):
+        assert np.array_equal(_qvalues(p) <= q, _bh(p, q))
+
+
+def test_recommend_clears_the_neighbours_of_a_gross_error_and_groups_suspects():
+    """A datum flagged only beside a gross error is cleared by the cleaning ("none", never a suspect), and
+    two neighbouring errors surprised the same way form one group to check."""
+    from spatialize.gs.spa import posterior_audit
+    from spatialize.logging import singleton_null_callback as quiet
+    field = lambda p: np.sin(2 * np.pi * p[:, 0]) + 0.5 * np.cos(2 * np.pi * p[:, 1])
+    rng = np.random.default_rng(11)
+    points = rng.random((150, 2))
+    z = field(points) + rng.normal(0, 0.1, 150)
+    z[0] = 10 * z[0] if abs(z[0]) > 0.5 else 8.0
+    audit = posterior_audit(points, z, n_partitions=150, alpha=0.85, seed=11, callback=quiet)
+    rec = audit.recommend(effect=False)
+    none = rec[rec.action == "none"].datum.to_numpy()
+    assert none.size and audit.flags()[none].all()
+    assert not set(none) & set(rec[rec.action.isin(["measure again", "check provenance"])].datum)
+    rng = np.random.default_rng(3)
+    points = rng.random((150, 2))
+    z = field(points) + rng.normal(0, 0.1, 150)
+    j = int(np.argsort(np.linalg.norm(points - points[0], axis=1))[1])
+    z[0] += 6.0
+    z[j] += 6.0
+    rec = posterior_audit(points, z, n_partitions=150, alpha=0.85, seed=3, callback=quiet).recommend(effect=False)
+    pair = rec.set_index("datum").loc[[0, j]]
+    assert (pair.action == "check provenance").all() and pair.group.nunique() == 1

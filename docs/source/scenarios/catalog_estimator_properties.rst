@@ -543,6 +543,8 @@ the Mondrian partition of rate 5 (``alpha`` = 0.9).
 - ``declustering``, *paired-relation*. The declustered mean lies closer to the field's mean over the
   domain than the plain mean, under the preferential design.
 - ``weights``, *almost-sure*. The declustering weights are positive and sum to 1.
+- ``errors-recommended``, *one-sided*. The share of the planted errors that the list of
+  recommendations names to measure again exceeds one half.
 - ``cross-power``, *paired-relation*. The share of the shifted and swapped values flagged by the
   reading given the second variable exceeds the share flagged by the audit of the values alone.
 
@@ -551,7 +553,8 @@ flagged, a shift of the square above the others by 0.22 to 0.23 (p at most
 :math:`2.8 \cdot 10^{-7}`), a shift of -0.36 to -0.37 at the isolated error and a declustered mean
 closer to the field's mean by 0.36 to 0.37. Between 20 % and 25 % of the clean fields carry a flag,
 the known failure (October 2026, after the widening of a variable was chosen once for all its data;
-30 % to 45 % before). Given the second variable, the reading flagged 70 % more of the shifted and
+30 % to 45 % before). The list of recommendations named 93 % of the planted errors to measure again. Given the second
+variable, the reading flagged 70 % more of the shifted and
 swapped values than the audit of the values alone (seed 1, :math:`p = 5.4 \cdot 10^{-10}`).
 
 **History.** The first version checked the coherence of the square, which passed at its limit, the

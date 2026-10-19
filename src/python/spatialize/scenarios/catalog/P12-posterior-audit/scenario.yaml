@@ -70,6 +70,12 @@ checks:
     kind: weights
     family: almost-sure
     estimator: idw
+  - id: errors-recommended
+    title: "the planted errors are listed to measure again (share above one half)"
+    kind: errors_recommended
+    family: one-sided
+    estimator: idw
+    bound: 0.5
   - id: cross-power
     title: "read given a second variable, shifted and swapped values are flagged more often than by their neighbours alone"
     kind: cross_power
@@ -95,4 +101,4 @@ provenance:
     it in P12, keep the coherence as a descriptive reading. Sized for an effect of 1.75 standard
     deviations, K ≈ (4.06 + 1.28)² / 1.75² ≈ 9.3, giving 20 fields in ci and 40 in full.
   v2: "2026-10-09: profile mondrian, Spatialize's default Mondrian, is now the theory's process (the partition of Spatialize 1.2 being mondrian-legacy); checks, thresholds and sizes unchanged. 2026-10-18: re-measured after widening='auto' was decided once per variable and the entropy of a law was read from its density (ci, seeds 1-3): errors found 0.95-0.98, clean fields flagged 0.20-0.25 (known failure; 0.30-0.45 before), shift of the patch 0.22-0.23, shift at the error -0.36 to -0.37, declustering 0.36-0.37. Checks, thresholds and sizes unchanged."
-  v3: "2026-10-18: check cross-power and the two-variable data (data.cross, estimator idw-cross), with the cross reading of the posterior analysis. The two variables are drawn after the other data, which do not change. Effect measured in the study of the method (16 fields, linear link): a shifted value found in 8 of 16, swapped values in 7 and 8 of 16, none by the audit of the values alone; a paired difference near 0.5 needs a handful of fields, so the 20 of ci suffice. known_failure text updated to the measurements of October 2026. First run (ci, seed 1): +0.63, p 1.6e-10; after the cross reading left the flagged data out of the others' laws, +0.70, p 5.4e-10."
+  v3: "2026-10-18: check cross-power and the two-variable data (data.cross, estimator idw-cross), with the cross reading of the posterior analysis. The two variables are drawn after the other data, which do not change. Effect measured in the study of the method (16 fields, linear link): a shifted value found in 8 of 16, swapped values in 7 and 8 of 16, none by the audit of the values alone; a paired difference near 0.5 needs a handful of fields, so the 20 of ci suffice. known_failure text updated to the measurements of October 2026. First run (ci, seed 1): +0.63, p 1.6e-10; after the cross reading left the flagged data out of the others' laws, +0.70, p 5.4e-10. Same day: check errors-recommended (PosteriorAudit.recommend lists the planted errors to measure again), a guard on the list, its effect on collateral flags being too small for a check (12 to 9 clean flags over 40 fields in the study of the method)."

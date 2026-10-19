@@ -121,7 +121,10 @@ New
   the false flags on the data at hand, auditing replicates free of errors drawn from the laws, with
   p-values read through the number of flags and through the most surprising datum.
   ``cross(covariate)`` reads each datum given a second variable measured at the same locations, which
-  finds shifted or swapped values that the neighbours alone do not show. Scenario P12 holds the analysis to
+  finds shifted or swapped values that the neighbours alone do not show. ``recommend()`` turns the
+  readings into a list of actions, the data to measure again, groups of suspects to check, conflicting
+  duplicates, places to sample more and flags that only a neighbouring suspect caused, found by cleaning
+  the suspects and reading the data again. Scenario P12 holds the analysis to
   planted errors, a raised patch and a preferential design (:ref:`scenario-P12`). The functions of version 1.2 work on top of it.
 - **The warning near alpha = 1** (``alpha > 0.95``) now comes only on ``"mondrian-legacy"``, whose
   cells multiply there. The theory's Mondrian process and Voronoi grow their cells with alpha without

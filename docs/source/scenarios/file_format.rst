@@ -308,7 +308,7 @@ runner's optional methods ``loo`` and ``cells`` (:doc:`extending`), with the rea
   shift of a value of the first, which also has two values swapped), the false discovery rate
   ``q``, ``fields`` (per mode) and ``generator_seed``.
 - per check, ``kind`` (``errors_found``, ``clean_flags``, ``shift_patch``, ``shift_error``,
-  ``declustering``, ``weights``, ``cross_power``), ``estimator``, for the one-sided kinds on
+  ``declustering``, ``weights``, ``errors_recommended``, ``cross_power``), ``estimator``, for the one-sided kinds on
   shares ``bound``, and for ``cross_power`` the ``cross_estimator`` whose partitions weigh the pairs.
 
 Evaluator ``draw_laws``

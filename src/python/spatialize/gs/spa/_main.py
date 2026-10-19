@@ -167,6 +167,19 @@ def _mixture_entropy(centres, weights, h, nu, size, rng):
     return -float(np.mean(logs))
 
 
+def _qvalues(p):
+    """The Benjamini–Hochberg adjusted p-values (q-values): datum i is flagged at rate q exactly when its
+    q-value is at most q. NaN where p is NaN."""
+    p = np.asarray(p, dtype=float)
+    out = np.full(p.size, np.nan)
+    ok = np.flatnonzero(np.isfinite(p))
+    if ok.size:
+        order = ok[np.argsort(p[ok], kind="stable")]
+        q = p[order] * ok.size / np.arange(1, ok.size + 1)
+        out[order] = np.minimum(np.minimum.accumulate(q[::-1])[::-1], 1.0)
+    return out
+
+
 def _min_qvalue(p):
     """The smallest Benjamini–Hochberg adjusted p-value over the finite p-values: some datum is flagged
     at rate q exactly when it is at most q."""
@@ -915,6 +928,13 @@ class PosteriorAudit(Summarised):
                 out[i] = float(np.mean(pos[nb]))
         return out
 
+    def _fingerprint(self):
+        """A short digest of the locations and values, which ties a reading to the data it read."""
+        import hashlib
+        h = hashlib.sha1(np.ascontiguousarray(np.asarray(self.points, dtype=np.float64)).tobytes())
+        h.update(np.ascontiguousarray(self.values).tobytes())
+        return h.hexdigest()[:16]
+
     def _settings(self):
         """The arguments that read another audit the way this one reads its data."""
         return dict(fitted_model_factory=self.fitted_model_factory, widening=self.widening,
@@ -1026,7 +1046,7 @@ class PosteriorAudit(Summarised):
         out = pd.DataFrame(rows)
         n_obs = int(observed.sum())
         strongest = _min_qvalue(self.tail_p())
-        out.attrs.update({"q": q, "observed": n_obs, "expected": float(out["flags"].mean()),
+        out.attrs.update({"q": q, "data": self._fingerprint(), "observed": n_obs, "expected": float(out["flags"].mean()),
                           "share_with_flags": float((out["flags"] > 0).mean()),
                           "p_value": float((1 + np.sum(out["flags"] >= n_obs)) / (len(out) + 1)),
                           "p_value_strongest": float((1 + np.sum(out["min_qvalue"] <= strongest)) / (len(out) + 1))})
@@ -1217,7 +1237,7 @@ class PosteriorAudit(Summarised):
         which hides their own errors. The data flagged by the audit of the values (:meth:`flags` at ``q``)
         therefore take no part in the others' laws, nor do, in a further reading, those flagged given
         the covariate, the readings repeated until the flags no longer change, ``passes`` at most.
-        A datum's own law never holds the datum. A robust line was tried first, without success, since
+        A datum's own law never holds the datum. A robust line fails here, since
         it treats the smaller of two branches of a relation, as with a link through a square, as errors.
 
         The values are read on the scale of the audit (``scale``), the covariate as given. The
@@ -1311,9 +1331,225 @@ class PosteriorAudit(Summarised):
         self.callback(logging.progress.stop())
         nats = np.log(self.base)
         tail = np.where(np.isfinite(cols["tail_p"]), np.clip(cols["tail_p"], np.finfo(float).tiny, 1.0), np.nan)
-        return pd.DataFrame({"covariate": v_raw, "pit": cols["pit"], "tail_p": tail, "flag": _bh(tail, q),
-                             "surprisal": cols["surprisal"] / nats, "entropy": cols["entropy"] / nats,
-                             "gain": cols["gain"] / nats, "pairs": cols["pairs"]})
+        out = pd.DataFrame({"covariate": v_raw, "pit": cols["pit"], "tail_p": tail, "flag": _bh(tail, q),
+                            "surprisal": cols["surprisal"] / nats, "entropy": cols["entropy"] / nats,
+                            "gain": cols["gain"] / nats, "pairs": cols["pairs"]})
+        out.attrs.update({"q": q, "data": self._fingerprint()})
+        return out
+
+    def recommend(self, q=0.05, cross=None, null=None, effect=True, passes=5, k=8, min_support=0.5,
+                  min_gain=0.0, tol=0.0):
+        r"""The data that call for an action, each with the action, the reason and its strength.
+
+        The readings of the audit become one list. It recommends measuring a suspect datum again, never
+        removing it: a measurement taken again confirms a true value, a part of the domain the other data
+        do not represent included, while it corrects an error. The analyst, who knows the provenance of
+        the data, decides.
+
+        Parameters
+        ----------
+        q : float, optional
+            The false discovery rate of the flags. Default: 0.05.
+        cross : pandas.DataFrame, optional
+            The result of :meth:`cross` on these data at the same ``q``, whose flags enter the list. It is
+            not computed here. Default: None.
+        null : pandas.DataFrame, optional
+            The result of :meth:`null_flags` on these data at the same ``q``, which tells whether the flags
+            exceed what clean data get. It is not computed here. Default: None.
+        effect : bool, optional
+            Whether to measure how much the cross-validated predictions of the data change when the data
+            to measure again are replaced by the medians of their laws, at the cost of one more audit.
+            Default: True.
+        passes : int, optional
+            The most cleaning passes (see Notes). Default: 5.
+        k : int, optional
+            The nearest data that link suspects into a group. Default: 8.
+        min_support, min_gain : float, optional
+            A law resting on fewer partitions than ``min_support``, or with an information gain below
+            ``min_gain`` (:meth:`evidence`, in the units of ``base``), marks a place to sample more.
+            Defaults: 0.5 and 0.
+        tol : float, optional
+            The distance below which two data count as co-located (:meth:`duplicates`). Default: 0.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per datum that calls for an action, sorted by action and strength: ``datum``,
+            ``value``, ``action``, ``reason``, ``q_value`` (the Benjamini–Hochberg adjusted p-value
+            behind the action, NaN for a place to sample more) and ``group`` (the suspects linked as
+            neighbours surprised the same way share a number). The actions:
+
+            - ``"measure again"``: a suspect alone, still surprising once its neighbours are cleaned, or
+              a datum inconsistent with the second variable measured with it (``cross``);
+            - ``"check provenance"``: one of a group of neighbouring suspects surprised the same way, a
+              batch error or a small part of the domain the other data do not represent;
+            - ``"measure one of the pair again"``: a datum co-located with another of a different value,
+              which no law can settle;
+            - ``"sample more nearby"``: a law resting on little evidence, not a suspect value;
+            - ``"none"``: a datum flagged by the audit only because a suspect beside it pulled its law.
+
+            ``attrs`` holds ``q``, ``passes`` (the cleaning passes run), ``settled`` (whether the
+            suspects stopped changing), ``counts`` (data per action), ``context`` (with ``null``: the
+            observed and expected flags, the two p-values of :meth:`null_flags` and ``verdict``,
+            ``"beyond clean data"`` when either p-value is at most 0.05, ``"an order of review"``
+            otherwise; None without ``null``) and, with ``effect``, ``effect`` (the mean and largest
+            absolute change of the cross-validated mean prediction of the data, the latter's datum, and
+            the mean change over the standard deviation of the values) and ``prediction_change`` (the
+            change at every datum).
+
+        Raises
+        ------
+        SpatializeError
+            When the audit was not built by :func:`posterior_audit`, which can compute the members of
+            other values, or ``cross`` or ``null`` were read on other data or at another ``q``.
+
+        Notes
+        -----
+        A gross error pulls the laws of its neighbours towards it, so neighbours far on the other side of
+        their laws get flagged with it, while a second error beside it may hide. The suspects are therefore
+        found by cleaning. The flagged data are replaced by the medians of their laws, the laws are computed
+        again, and the original values are read against them. A datum's law never holds the datum, so this
+        reads every datum against neighbours free of the suspects. The flags of that reading become the
+        suspects, and the cleaning repeats until they no longer change, ``passes`` times at most. A datum
+        flagged at first but not after cleaning was surprising only beside a suspect. The laws keep the
+        spread factor of the audit (``calibrate``) through the cleaning, so they change through the data
+        alone.
+
+        A part of the domain the other data do not represent cannot be told from errors by the flags. Its
+        data support each other, so the ensemble represents it and flags at most its edge, one or two data,
+        as it flags an error. Measuring again is the action that suits both. Neighbouring suspects surprised
+        the same way are grouped, since a group points to a batch of samples or to such a part.
+
+        On 40 synthetic fields with two planted errors and a raised patch, the cleaning kept 58 of the 60
+        errors and found 3 more that their neighbours hid, while it cleared half of the clean data flagged
+        beside an error (:doc:`/theory/posterior`).
+        """
+        if self._refit is None:
+            raise SpatializeError("recommend needs to compute the members of other values: build the audit with "
+                                  "posterior_audit, or give PosteriorAudit its refit")
+        from scipy.spatial import cKDTree
+        from spatialize.logging import singleton_null_callback
+        n = len(self.values)
+        data = self._fingerprint()
+        for name, reading in (("cross", cross), ("null", null)):
+            if reading is None:
+                continue
+            if reading.attrs.get("data") != data:
+                raise SpatializeError(f"{name} was read on other data than this audit's")
+            if not np.isclose(float(reading.attrs.get("q", np.nan)), q):
+                raise SpatializeError(f"{name} was read at q = {reading.attrs.get('q')}, not at q = {q}")
+        settings = self._settings()
+        quiet = singleton_null_callback
+
+        # the suspects, found by cleaning until they no longer change
+        initial = self.flags(q)
+        suspects, base, reread = initial.copy(), self, self
+        settled, used = not initial.any(), 0
+        while not settled and used < int(passes):
+            used += 1
+            z = self.values.copy()
+            z[suspects] = [float(base._inv(np.median(base.law(i)))) for i in np.flatnonzero(suspects)]
+            cleaned = PosteriorAudit(self._refit(z), self.points, z, callback=quiet, **settings)
+            reread = PosteriorAudit(cleaned.members, self.points, self.values, callback=quiet, **settings)
+            # the cleaning changes the laws through the data only: the spread factor stays the audit's,
+            # which a factor fitted again would narrow once a suspect no longer lies outside its interval
+            cleaned._factor = reread._factor = self.spread_factor
+            found = reread.flags(q)
+            settled = bool(np.array_equal(found, suspects))
+            suspects, base = found, cleaned
+        if not settled:
+            log_message(logging.logger.warning(
+                f"the suspects still changed after {used} cleaning passes; the last reading is reported"))
+        q_final, q_initial = _qvalues(reread.tail_p()), _qvalues(self.tail_p())
+
+        # groups of neighbouring suspects surprised the same way
+        pts = np.asarray(self.points, float)
+        side = np.sign(reread.pit() - 0.5)
+        _, idx = cKDTree(pts).query(pts, k=min(int(k) + 1, n))
+        idx = np.reshape(idx, (n, -1))
+        group = np.full(n, -1)
+        label = 0
+        for i in np.flatnonzero(suspects):
+            if group[i] >= 0:
+                continue
+            stack, group[i] = [i], label
+            while stack:
+                a = stack.pop()
+                for b in idx[a][1:]:
+                    if suspects[b] and group[b] < 0 and side[b] == side[a]:
+                        group[b] = label
+                        stack.append(b)
+            label += 1
+        sizes = np.bincount(group[group >= 0]) if label else np.zeros(0, int)
+
+        rows = {}
+
+        def add(i, action, reason, strength, grp=None):
+            if i in rows:
+                rows[i]["reason"] += "; " + reason
+                rows[i]["q_value"] = np.nanmin([rows[i]["q_value"], strength])
+                return
+            rows[i] = {"datum": int(i), "value": float(self.values[i]), "action": action, "reason": reason,
+                       "q_value": float(strength), "group": grp}
+
+        for i in np.flatnonzero(suspects):
+            g = int(group[i])
+            if sizes[g] == 1:
+                add(i, "measure again", "surprising once its neighbours are cleaned", q_final[i])
+            else:
+                add(i, "check provenance", f"one of {sizes[g]} neighbours surprised the same way", q_final[i], g)
+        if cross is not None:
+            q_cross = _qvalues(cross["tail_p"].to_numpy())
+            for i in np.flatnonzero(cross["flag"].to_numpy()):
+                add(i, "measure again", "inconsistent with the second variable measured with it", q_cross[i])
+        pairs = self.duplicates(tol)
+        if len(pairs):
+            p_self = self.tail_p()
+            p_pair = np.minimum(1.0, 2.0 * np.minimum(p_self[pairs["i"]], p_self[pairs["j"]]))
+            q_pair = _qvalues(p_pair)
+            for (i, j, d), qp in zip(pairs[["i", "j", "difference"]].itertuples(index=False), q_pair):
+                if qp <= q:
+                    for a, b in ((int(i), int(j)), (int(j), int(i))):
+                        add(a, "measure one of the pair again", f"co-located with datum {b}, the values {d:.4g} apart",
+                            qp)
+        for i in np.flatnonzero(initial & ~suspects):
+            add(i, "none", "flagged only beside a suspect, unsurprising once it is cleaned", q_initial[i])
+        ev = self.evidence()
+        weak = (ev["support"].to_numpy() < min_support) | (ev["gain"].to_numpy() < min_gain)
+        for i in np.flatnonzero(weak):
+            if i not in rows:
+                add(i, "sample more nearby",
+                    f"law resting on little evidence (support {ev['support'][i]:.2f}, gain {ev['gain'][i]:.2f})",
+                    np.nan)
+
+        order = {"measure again": 0, "check provenance": 1, "measure one of the pair again": 2,
+                 "sample more nearby": 3, "none": 4}
+        out = pd.DataFrame(list(rows.values()), columns=["datum", "value", "action", "reason", "q_value", "group"])
+        out = out.sort_values(["action", "q_value"], key=lambda c: c.map(order) if c.name == "action" else c,
+                              na_position="last", ignore_index=True)
+        out.attrs.update({"q": q, "passes": used, "settled": settled,
+                          "counts": out["action"].value_counts().to_dict(), "context": None})
+        if null is not None:
+            a = null.attrs
+            out.attrs["context"] = {
+                "observed": a["observed"], "expected": a["expected"], "p_value": a["p_value"],
+                "p_value_strongest": a["p_value_strongest"],
+                "verdict": "beyond clean data" if min(a["p_value"], a["p_value_strongest"]) <= 0.05
+                else "an order of review"}
+        measure = out.loc[out["action"].isin(["measure again", "check provenance", "measure one of the pair again"]),
+                          "datum"].to_numpy(dtype=int)
+        if effect and measure.size:
+            z = self.values.copy()
+            z[measure] = [float(reread._inv(np.median(reread.law(i)))) for i in measure]
+            with np.errstate(all="ignore"):
+                change = np.nanmean(self._refit(z), axis=1) - np.nanmean(self.members, axis=1)
+            others = np.setdiff1d(np.arange(n), measure)
+            mag = np.abs(change[others])
+            out.attrs["effect"] = {"mean_abs_change": float(np.nanmean(mag)), "max_abs_change": float(np.nanmax(mag)),
+                                   "datum_most_changed": int(others[np.nanargmax(mag)]),
+                                   "relative": float(np.nanmean(mag) / np.std(self.values))}
+            out.attrs["prediction_change"] = change
+        return out
 
     def duplicates(self, tol=0.0):
         """The pairs of data closer than ``tol`` (co-located when ``tol`` is 0), with their values.

@@ -498,7 +498,7 @@ An error among the pairs pulls the line of its neighbours, widening their residu
 their own errors. The data the audit of the values flags therefore take no part in the others'
 laws. Nor do, in a further reading, the data flagged given the covariate, the readings being
 repeated until the flags no longer change, three times at most. A robust line, which gives no
-weight to the pairs far from it, was tried first, without success. It treats the smaller of two
+weight to the pairs far from it, fails here. It treats the smaller of two
 branches of a relation as errors, so with a link through a square it flagged 14 of 16 clean
 fields.
 
@@ -517,6 +517,35 @@ shared component tells its size and not its sign, which left little power. A lin
 changes across the domain was followed only in part, the partitions of 300 data mixing the two
 relations near their border. Kernels of 5 degrees of freedom lost power, while Gaussian kernels
 flagged a quarter of the clean fields with a linear link.
+
+From readings to actions
+========================
+
+The readings combine into one list of actions. A gross error pulls the laws of its neighbours
+towards it, so neighbours far on the other side of their laws get flagged with it, while a second
+error beside it may hide. The suspects are therefore found by cleaning. Each flagged datum is
+replaced by the median of its law. With the laws computed again, the original values are read
+against them. A datum's law never holds the datum, so every datum is then read against neighbours
+free of the suspects. The flags of that reading become the suspects, the cleaning repeating until
+they no longer change. The laws keep the spread factor of the audit through the cleaning, so they
+change through the data alone. A datum flagged at first but not after cleaning was surprising only
+beside a suspect.
+
+A part of the domain the other data do not represent cannot be told from errors by the flags. Its
+data support each other, so the ensemble represents it, flagging at most its edge. On 40 synthetic
+fields with two planted errors and a raised patch, only 9 patches had a datum flagged, one or two
+each, as for an error. The cleaning kept 58 of the 60 errors and found 3 more that their neighbours
+hid, while it cleared 6 of the 12 clean data flagged beside an error.
+
+The list therefore recommends measuring a suspect again, never removing it. A measurement taken
+again confirms a true value, that of a part of the domain the other data do not represent included,
+while it corrects an error. Neighbouring suspects surprised the same way form a group to check, a
+batch of samples or such a part. A datum inconsistent with a second variable measured with it, or
+co-located with another of a different value, is listed too, as is a law resting on little evidence,
+a place to sample more. The effect of measuring again is read on the cross-validated predictions of
+the other data, with the suspects replaced by the medians of their laws. With the replicates of
+:meth:`~spatialize.gs.spa.PosteriorAudit.null_flags`, the list says whether its flags exceed what
+clean data get or give an order of review only.
 
 The share of the domain behind each datum
 =========================================

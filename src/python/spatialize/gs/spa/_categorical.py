@@ -597,7 +597,7 @@ class CategoricalPosteriorAudit(Summarised):
             the readings that point to it gathered in ``reason``:
 
             - ``"measure again"``. *Rule*: flagged at ``q`` by the audit or by ``cross``. *Evidence*: a class
-              its law, or its law given the second variable, makes very improbable. *Not*: a proof of
+              its law, or its law given the second variable, makes very improbable. *Limit*: no proof of
               error, since the single sample of a rare class, improbable everywhere, is flagged as well.
               *Action*: classify the sample again or check its record, keeping the class if the new
               classification agrees.
@@ -605,22 +605,22 @@ class CategoricalPosteriorAudit(Summarised):
               ``cross``, not flagged, with no datum of its class among its ``k`` nearest data in the list.
               *Evidence*: a class among the least
               probable under its law, without reaching a flag, which a category, carrying little
-              information, seldom reaches. *Not*: a suspect value as such, since about
+              information, seldom reaches. *Limit*: no suspect value as such, since about
               ``attrs["expected_clean"]`` of the listed data would be there by chance, the edges of units
               giving many of them. *Action*: check these first, in the order of their q-value, and stop
               when the number of data at least as surprising by chance (:meth:`review`,
               ``expected_by_chance``) reaches the number already checked.
             - ``"check provenance"``. *Rule*: in the list to check first, linked to other listed data among
               its ``k`` nearest with the same class. *Evidence*: neighbouring data with the same surprising
-              class. *Not*: necessarily errors, a small unit the other data do not represent showing the
+              class. *Limit*: the group may hold no error, a small unit the other data do not represent showing the
               same pattern. *Action*: check the campaign or the logging of the group, and sample around it.
             - ``"classify one of the pair again"``. *Rule*: a datum within ``tol`` of another of a different
               class. *Evidence*: two classes at one location, which cannot both be right, with no test
-              needed. *Not*: a verdict on which one is wrong. *Action*: classify the location again or
+              needed. *Limit*: no verdict on which one is wrong. *Action*: classify the location again or
               find the original record.
             - ``"sample more nearby"``. *Rule*: no other action applies, and the law rests on a share of
               partitions below ``min_support`` or has an information gain below ``min_gain``. *Evidence*:
-              the other data say little about the datum. *Not*: a suspect class. *Action*: take more
+              the other data say little about the datum. *Limit*: no suspect class. *Action*: take more
               samples there, the lowest gain first.
 
             ``attrs`` holds ``q``, ``share``, ``expected_clean`` (:meth:`review`), ``counts`` and, with

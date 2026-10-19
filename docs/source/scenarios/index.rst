@@ -90,7 +90,7 @@ Tiers
    :widths: 22 40 38
 
    * - Tier
-     - What it tests
+     - Subject
      - Target
    * - **T1** Encoder law
      - the law of the partition process (co-occurrence probabilities, partition laws)

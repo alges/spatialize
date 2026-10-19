@@ -558,7 +558,7 @@ Measure again
    lies far in the tail of the law the other data give it, once the suspects around it are cleaned,
    or far from what the second variable at the same place allows. The strength is the q-value of
    that reading. *Meaning.* The datum may be an error, a misplaced decimal point, a value copied from
-   another sample, a unit misread. *What it does not mean.* It does not prove an error. A true value
+   another sample, a unit misread. *Limit.* It does not prove an error. A true value
    of a part of the domain the other data do not represent can stand alone in its tail. *Action.*
    Measure the sample again, or check its records. Replace the value if the new measurement
    disagrees, keep it if it agrees.
@@ -568,7 +568,7 @@ Check provenance
    :math:`k` nearest of another and on the same side of its law, the linked suspects forming a
    group. *Evidence.* Several neighbouring data are surprising in the same direction. *Meaning.* A
    batch of samples handled the same wrong way, a calibration drift in one campaign, or a small part
-   of the domain that the other data do not represent. *What it does not mean.* The group is not
+   of the domain that the other data do not represent. *Limit.* The group is not
    necessarily a set of errors, since a real part of the domain shows the same pattern. *Action.*
    Check the provenance of the group, the campaign, the laboratory batch, the instrument. Sample
    around it before deciding.
@@ -578,7 +578,7 @@ Measure one of the pair again
    location), the pair passing the Benjamini–Hochberg procedure at the rate :math:`q` on the
    p-values :math:`\min\{1,\ 2\min(p_i, p_j)\}` of the co-located pairs. *Evidence.* Two values at one
    location differ beyond what their laws allow. *Meaning.* A duplicated sample, a re-assay or a
-   coordinate error. *What it does not mean.* It does not say which of the two values is wrong. Each
+   coordinate error. *Limit.* It does not say which of the two values is wrong. Each
    law sees the other datum as a neighbour, so neither law can settle it. *Action.* Measure the
    location again, or check which record is the original.
 
@@ -588,15 +588,13 @@ Sample more nearby
    the law then being as wide as the distribution of all the data or wider. *Evidence.* The other
    data say little about the datum, being far, few or in disagreement. *Meaning.* A place where the
    data do not pin the field down, often an edge, a sparse area or a place where the field changes
-   abruptly, around a part of the domain the rest of the data do not represent included. *What it
-   does not mean.* The value is not suspect, its q-value lying near 1. *Action.* Take more samples
+   abruptly, around a part of the domain the rest of the data do not represent included. *Limit.* The value is not suspect, its q-value lying near 1. *Action.* Take more samples
    there, starting with the lowest gain.
 
 None
    *Rule.* Datum :math:`i` belongs to :math:`F_0` and not to :math:`S`, and calls for no other
    action. *Evidence.* It was flagged at first, but not once the suspects around it were cleaned.
-   *Meaning.* A suspect beside it pulled its law, so the surprise belonged to the suspect. *What it
-   does not mean.* The datum is not cleared for good. It is cleared on the condition that the
+   *Meaning.* A suspect beside it pulled its law, so the surprise belonged to the suspect. *Limit.* The datum is not cleared for good. It is cleared on the condition that the
    suspect beside it is an error. *Action.* None, until the suspect is measured again.
 
 A datum takes the first action that applies in the order above, with the readings that point to it
@@ -730,7 +728,7 @@ Measure again
    measured with it. *Evidence.* Its law, or its law given the second variable, makes its class very
    improbable, beyond the floor that clean data at the edges of units leave. The strength is the q-value
    of that reading. *Meaning.* A gross error, a class misread or misrecorded, or a class held by one or
-   two samples of the whole data set, which is improbable everywhere. *What it does not mean.* It does
+   two samples of the whole data set, which is improbable everywhere. *Limit.* It does
    not prove an error, since the single sample of a rare class is flagged as well. *Action.* Classify the
    sample again or check its record, keeping the class if the new classification agrees.
 
@@ -738,7 +736,7 @@ Check first
    *Rule.* Datum :math:`i` belongs to :math:`L`, is not flagged, and no other datum of :math:`L` among
    :math:`N_k(i)` has its class. *Evidence.* Its class is among the least probable under its law, without
    the strength of a flag, which a single category seldom has. *Meaning.* A candidate error, ranked by the
-   surprise of its class. *What it does not mean.* It is not a suspect as such. The number
+   surprise of its class. *Limit.* It is not a suspect as such. The number
    :math:`n\, p_i` tells how many data would be at least as surprising by chance, so most data far down
    the list are clean, the edges of units giving many of them. *Action.* Check these data first, in the
    order of their q-value, and stop when :math:`n\, p_i` reaches the number already checked.
@@ -747,23 +745,21 @@ Check provenance
    *Rule.* Datum :math:`i` belongs to :math:`L`, is not flagged, and is linked to other data of
    :math:`L` with the same class, each among the :math:`k` nearest of another. *Evidence.* Neighbouring
    data share the same surprising class. *Meaning.* A batch of samples logged the same wrong way, or a
-   small unit that the other data do not represent, such as a thin layer or a narrow channel. *What it
-   does not mean.* The group is not necessarily a set of errors, a real unit showing the same pattern.
+   small unit that the other data do not represent, such as a thin layer or a narrow channel. *Limit.* The group is not necessarily a set of errors, a real unit showing the same pattern.
    *Action.* Check the campaign or the logging of the group, and sample around it before deciding.
 
 Classify one of the pair again
    *Rule.* Datum :math:`i` lies within a distance ``tol`` of another datum of a different class (0 by
    default, the same location). *Evidence.* Two classes at one location, which cannot both be right,
    with no test needed. *Meaning.* A duplicated sample, a second logging of the same place, or a
-   coordinate error. *What it does not mean.* It does not say which of the two classes is wrong.
+   coordinate error. *Limit.* It does not say which of the two classes is wrong.
    *Action.* Classify the location again, or find the original record.
 
 Sample more nearby
    *Rule.* Datum :math:`i` calls for no other action, while its law rests on a share of partitions below
    ``min_support`` (0.5 by default) or has an information gain below ``min_gain`` (0 by default).
    *Evidence.* The other data say little about the datum's class. *Meaning.* A place where the data do
-   not pin the classes down, far from other data or among neighbours of many classes. *What it does not
-   mean.* The class is not suspect. *Action.* Take more samples there, the lowest gain first.
+   not pin the classes down, far from other data or among neighbours of many classes. *Limit.* The class is not suspect. *Action.* Take more samples there, the lowest gain first.
 
 A datum takes the first action that applies in the order above, with the readings that point to it
 gathered in its reason. Within each action the rows are sorted by the q-value, strongest first, except

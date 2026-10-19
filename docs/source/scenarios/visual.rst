@@ -34,7 +34,7 @@ Map functionals
 
    * - Functional
      - Definition
-     - What it sees
+     - Detects
    * - orientation, coherence (:func:`orientation_coherence`)
      - structure tensor :math:`J = \langle G_\sigma * (\nabla Z\,\nabla Z^\top) \rangle`; with
        eigenvalues :math:`\mu_1 \ge \mu_2`, coherence :math:`(\mu_1-\mu_2)/(\mu_1+\mu_2) \in [0,1]`;

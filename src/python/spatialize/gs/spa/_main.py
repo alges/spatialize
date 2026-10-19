@@ -1392,26 +1392,26 @@ class PosteriorAudit(Summarised):
               Notes) with no other suspect among its ``k`` nearest data on the same side of its law;
               or a datum flagged at ``q`` by ``cross``. *Evidence*: its value lies far in the tail of
               the law the other data give it, or far from what the second variable at the same place
-              allows. *Not*: a proof of error, since a true value of a part of the domain the other
+              allows. *Limit*: no proof of error, since a true value of a part of the domain the other
               data do not represent can stand alone in its tail. *Action*: measure the sample again
               or check its records, replacing the value only if the new measurement disagrees.
             - ``"check provenance"``. *Rule*: a suspect linked to other suspects, each among the
               ``k`` nearest of another and on the same side of its law. *Evidence*: neighbouring data
-              surprising in the same direction. *Not*: necessarily errors, since a real part of the
+              surprising in the same direction. *Limit*: the group may hold no error, since a real part of the
               domain shows the same pattern. *Action*: check the campaign, the laboratory batch or the
               instrument, and sample around the group before deciding.
             - ``"measure one of the pair again"``. *Rule*: a datum within ``tol`` of another whose
               pair passes Benjamini–Hochberg at ``q`` on :math:`\min\{1, 2\min(p_i, p_j)\}` over the
               co-located pairs. *Evidence*: two values at one location differ beyond what their laws
-              allow. *Not*: a verdict on which value is wrong, since each law sees the other datum as
+              allow. *Limit*: no verdict on which value is wrong, since each law sees the other datum as
               a neighbour. *Action*: measure the location again, or find the original record.
             - ``"sample more nearby"``. *Rule*: no other action applies, and the law rests on a share
               of partitions below ``min_support`` or has an information gain below ``min_gain``.
-              *Evidence*: the other data say little about the datum. *Not*: a suspect value, its
+              *Evidence*: the other data say little about the datum. *Limit*: no suspect value, its
               q-value lying near 1. *Action*: take more samples there, the lowest gain first.
             - ``"none"``. *Rule*: flagged by the audit at ``q``, not a suspect once the cleaning
               settles, and no other action applies. *Evidence*: a suspect beside it pulled its law.
-              *Not*: cleared for good, only on the condition that the suspect beside it is an error.
+              *Limit*: cleared only on the condition that the suspect beside it is an error.
               *Action*: none, until that suspect is measured again.
 
             ``attrs`` holds ``q``, ``passes`` (the cleaning passes run), ``settled`` (whether the

@@ -258,3 +258,48 @@ def roughness(z):
     if v == 0:
         return 0.0
     return float((np.nanmean(np.diff(z, axis=1) ** 2) + np.nanmean(np.diff(z, axis=0) ** 2)) / (4 * v))
+
+
+def region_boundary(mask):
+    """The pixels of a region's boundary: those with a 4-neighbour on the other side.
+
+    Parameters
+    ----------
+    mask : array_like of bool, shape (m, m)
+        The region.
+
+    Returns
+    -------
+    ndarray of bool, shape (m, m)
+    """
+    a = np.asarray(mask, bool)
+    out = np.zeros_like(a)
+    dy, dx = a[:-1] != a[1:], a[:, :-1] != a[:, 1:]
+    out[:-1] |= dy
+    out[1:] |= dy
+    out[:, :-1] |= dx
+    out[:, 1:] |= dx
+    return out
+
+
+def boundary_sharpness(p, mask):
+    r"""How sharply a map changes across the boundary of a true region: the mean magnitude of its
+    gradient, in units per pixel, over the pixels of the region's boundary (:func:`region_boundary`).
+
+    Parameters
+    ----------
+    p : array_like of shape (m, m)
+        The map, such as a probability of the region, indexed ``[y, x]``.
+    mask : array_like of bool, shape (m, m)
+        The true region.
+
+    Returns
+    -------
+    float
+        :math:`\overline{\lVert \nabla p \rVert}` over the boundary, NaN when the region has none.
+    """
+    b = region_boundary(mask)
+    if not b.any():
+        return float("nan")
+    gy, gx = np.gradient(np.asarray(p, float))
+    return float(np.hypot(gx, gy)[b].mean())

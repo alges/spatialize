@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``,
+       ``error_floor``, ``atom_at_zero``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -203,6 +203,21 @@ replicate fields (scenario S02).
   ``generator_seed``.
 - per check, ``kind`` (``spread``, identity, with ``bootstrap``; ``floor``, equivalence, with
   ``margin``) and ``estimator``.
+
+Evaluator ``atom_at_zero``
+--------------------------
+
+This evaluator reads a field with an atom at zero through the probability of a dry location, over
+pinned replicate fields (scenario S04).
+
+- ``truth``: ``generator: vbm``, a Voronoi block-mark field of ``n_cells`` cells with uniform nuclei,
+  ``marks: {zero_inflated: {p_zero, lognormal: [mu, sigma]}}`` (or ``{gaussian: [mean, sd]}``,
+  ``{lognormal: [mu, sigma]}``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``dry_below`` (a member
+  below it counts as dry), ``generator_seed``.
+- per check, ``kind`` (``dry_fraction``, ``contrast``, ``dry_iou``, ``dry_edges``, each a paired
+  relation of ``estimator`` against ``against`` in the direction ``better``; ``support``, almost sure,
+  over ``estimators``).
 
 Evaluator ``edge_cases``
 ------------------------

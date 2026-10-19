@@ -1,0 +1,74 @@
+id: S04-zero-inflated-field
+version: 1
+tier: T3
+evaluator: atom_at_zero
+book:
+  topic: "worked example of a variable with an atom at zero (rain): averaging dilutes the atom, drawing keeps it"
+  draft_2026_10: "ch 12, decoders that return a law (the dry-days example)"   # the book is a draft
+purpose: >
+  A field that is exactly zero over part of the domain, as rain on a day when some areas stay dry. An
+  averaging decoder mixes zeros with positive values, so a dry place gets a small positive estimate and
+  the share of the domain read as dry shrinks. A drawing decoder returns data values, zeros included, so
+  the probability of a dry place read from its members recovers the dry share; drawing with
+  inverse-distance weights also keeps where the dry areas lie.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 35
+  marks: {zero_inflated: {p_zero: 0.45, lognormal: [1.0, 0.7]}}
+data:
+  design: {type: uniform, n: 400}
+  grid: 36                          # queries: 36×36 cell centres, row-major
+  mode: pinned
+  fields: {ci: 10, full: 20}         # sized for the smallest effect, the overlap (see provenance)
+  dry_below: 0.1                    # a member counts as dry below this; the wet marks fall below it with probability ~1e-6
+  generator_seed: 20261020
+estimators_T: {ci: 300, full: 300}
+estimators:
+  # Mondrian rate 5 on the unit square; coarsen, so every member is defined (a drawn member stays a datum)
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+  - {id: draw, encoder: mondrian, rate: 5.0, decoder: draw, params: {}, empty_cells: coarsen}
+  - {id: wdraw, encoder: mondrian, rate: 5.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: dry-fraction
+    title: "the draw recovers the dry share of the domain better than IDW"
+    kind: dry_fraction
+    family: paired-relation
+    estimator: draw
+    against: idw
+    better: less
+  - id: contrast
+    title: "the weighted draw separates dry from wet places more than the draw"
+    kind: contrast
+    family: paired-relation
+    estimator: wdraw
+    against: draw
+    better: greater
+  - id: support
+    title: "every drawn member is a data value"
+    kind: support
+    family: almost-sure
+    estimators: [draw, wdraw]
+  - id: dry-overlap
+    title: "the region read as dry overlaps the true dry region more with the weighted draw (V6)"
+    kind: dry_iou
+    family: paired-relation
+    estimator: wdraw
+    against: draw
+    better: greater
+  - id: dry-edges
+    title: "the probability of dry changes more sharply across the true dry edges with the weighted draw (V6)"
+    kind: dry_edges
+    family: paired-relation
+    estimator: wdraw
+    against: draw
+    better: greater
+provenance:
+  v1: >
+    2026-10-20: first version. Readings fixed before the first run, from a study of 12 fields drawn like
+    these: the dry share's error 0.263 for IDW against 0.015 for the draw (difference 4.5 standard
+    deviations per field); the contrast 0.681 for the weighted draw against 0.333 (11 sd); the overlap
+    0.848 against 0.663 (2.2 sd); the edge sharpness 0.258 against 0.059 (14 sd); no drawn member other
+    than a data value. Sizes for the paired t-test at the strictest Holm level of five checks (2e-4) with
+    power 0.9 on the smallest effect, 2.2 sd: K = ((3.54 + 1.28) / 2.2)^2 = 4.8, so 10 fields in ci and
+    20 in full.

@@ -1819,6 +1819,98 @@ def eval_error_floor(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_atom_at_zero(sc: Scenario, runner: Runner, mode: str, seed: int,
+                      save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``atom_at_zero``: a field with an atom at zero read through the probability of a dry
+    location (S04).
+
+    On each pinned field, the members of each estimator on the grid give :math:`p_{dry}`, the share of
+    members below ``data.dry_below``; the true dry region is where the truth is 0. Kinds (key ``kind``):
+
+    - ``dry_fraction`` (paired-relation) — the error of the estimated dry share of the grid, the mean of
+      :math:`p_{dry}`, is lower for ``estimator`` than for ``against``;
+    - ``contrast`` (paired-relation) — the mean of :math:`p_{dry}` over the true dry region minus that
+      over the wet region is higher for ``estimator`` than for ``against``;
+    - ``support`` (almost-sure) — every finite member of each of ``estimators`` is a data value;
+    - ``dry_iou`` (paired-relation, visual V6) — the overlap (:func:`~spatialize.scenarios.stats.maps.level_set_iou`)
+      of the region :math:`p_{dry} > 1/2` with the true dry region is higher for ``estimator`` than for
+      ``against``;
+    - ``dry_edges`` (paired-relation, visual V6) — the sharpness of :math:`p_{dry}` across the true dry
+      boundary (:func:`~spatialize.scenarios.stats.maps.boundary_sharpness`) is higher for ``estimator``
+      than for ``against``.
+
+    Reads ``data.grid``, ``data.dry_below``, ``data.fields`` (per mode) and ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    below = float(d["dry_below"])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            with np.errstate(invalid="ignore"):
+                pdry = np.nanmean(np.where(np.isfinite(mem), mem < below, np.nan), axis=1).reshape(m, m)
+            cache[(eid, k)] = (mem, pdry, (f["truth"] == 0).reshape(m, m), f["values"])
+        return cache[(eid, k)]
+
+    def reading(kind, eid, k):
+        _, pdry, dry, _ = read(eid, k)
+        if kind == "dry_fraction":
+            return abs(float(np.nanmean(pdry)) - float(dry.mean()))
+        if kind == "contrast":
+            return float(np.nanmean(pdry[dry]) - np.nanmean(pdry[~dry]))
+        if kind == "dry_iou":
+            return maps.level_set_iou(pdry > 0.5, dry)
+        if kind == "dry_edges":
+            return maps.boundary_sharpness(pdry, dry)
+        raise ValueError(f"unknown check kind {kind}")
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        used = check.get("estimators") or [check["estimator"], check["against"]]
+        cid, title = check["id"], check["title"]
+        missing = [e for e in used if not runner.supports(ests[e])]
+        if missing:
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {', '.join(missing)}"))
+            continue
+        if kind == "support":
+            bad, n = 0, 0
+            for eid in used:
+                for k in range(K):
+                    mem, _, _, vals = read(eid, k)
+                    fin = mem[np.isfinite(mem)].astype(np.float32)
+                    bad += int((~np.isin(fin, vals)).sum())
+                    n += fin.size
+            r = families.almost_sure(bad, n)
+        else:
+            a = [reading(kind, check["estimator"], k) for k in range(K)]
+            b = [reading(kind, check["against"], k) for k in range(K)]
+            r = families.paired_relation(a, b, better=check["better"])
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps:
+        from .figures import save_field_panels
+        panels = []
+        for k in range(K):
+            _, _, dry, _ = read(next(iter(ests)), k)
+            row = [{"title": "true dry region", "z": dry.astype(float), "vmin": 0, "vmax": 1, "cmap": "Blues"}]
+            row += [{"title": f"{eid}: P(dry)", "z": read(eid, k)[1], "vmin": 0, "vmax": 1, "cmap": "Blues"}
+                    for eid in ests if runner.supports(ests[eid])]
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "p_dry", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -1943,7 +2035,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
-              "convergence": eval_convergence, "error_floor": eval_error_floor, "law_validity": eval_law_validity,
+              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

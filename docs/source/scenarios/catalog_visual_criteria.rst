@@ -46,7 +46,7 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - sharp dry-region boundaries
      - :ref:`S04 <scenario-S04>`
      - IoU of :math:`p_{dry}>1/2` with the dry region and edge sharpness, weighted draw > draw
-     - ready · priority 3
+     - **implemented** on S04
    * - V7
      - no halos around extreme values
      - :ref:`S05 <scenario-S05>`

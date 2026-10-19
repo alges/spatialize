@@ -148,3 +148,62 @@ def save_comparison(directory, scenario_id, by_estimator, target_theta=None):
         fig.savefig(path, dpi=100, bbox_inches="tight")
         written.append(path)
     return written
+
+
+def save_field_panels(directory, scenario_id, name, fields):
+    """Save one figure per replicate field with a row of maps, and a summary of every field.
+
+    Parameters
+    ----------
+    directory : str
+        Root output directory; files go to ``<directory>/<scenario_id>/``.
+    scenario_id, name : str
+        Used in file names and titles.
+    fields : list of list of dict
+        One entry per replicate field, each a list of panels with keys ``title``, ``z`` (2D array, rows
+        = y) and optionally ``vmin``, ``vmax`` and ``cmap``; the arrays are saved too, as
+        ``<name>_<k>_<panel>.npy``.
+
+    Returns
+    -------
+    list of str
+        Paths of the files written.
+    """
+    from matplotlib.figure import Figure
+
+    out_dir = os.path.join(directory, scenario_id)
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+
+    def draw(ax, p):
+        im = ax.imshow(np.asarray(p["z"], float), origin="lower", extent=(0, 1, 0, 1), cmap=p.get("cmap", "viridis"),
+                       vmin=p.get("vmin"), vmax=p.get("vmax"))
+        ax.set_title(p["title"], fontsize=8)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return im
+
+    for k, panels in enumerate(fields):
+        for j, p in enumerate(panels):
+            path = os.path.join(out_dir, f"{name}_{k}_{j}.npy")
+            np.save(path, np.asarray(p["z"]))
+            written.append(path)
+        fig = Figure(figsize=(3.0 * len(panels), 3.2), layout="constrained")
+        axes = fig.subplots(1, len(panels), squeeze=False)[0]
+        for ax, p in zip(axes, panels):
+            fig.colorbar(draw(ax, p), ax=ax, shrink=0.8)
+        fig.suptitle(f"{scenario_id} — {name}, field {k}", fontsize=10)
+        path = os.path.join(out_dir, f"{name}_{k}.png")
+        fig.savefig(path, dpi=110)
+        written.append(path)
+    ncol = len(fields[0]) if fields else 1
+    fig = Figure(figsize=(2.2 * ncol, 2.3 * len(fields)), layout="constrained")
+    axes = fig.subplots(len(fields), ncol, squeeze=False)
+    for k, panels in enumerate(fields):
+        for j, p in enumerate(panels):
+            draw(axes[k, j], {**p, "title": f"{k}: {p['title']}"})
+    fig.suptitle(f"{scenario_id} — {name}: every field", fontsize=10)
+    path = os.path.join(out_dir, f"{name}_summary.png")
+    fig.savefig(path, dpi=90)
+    written.append(path)
+    return written

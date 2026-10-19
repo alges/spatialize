@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S02, S03 and S12 are implemented. The other scenarios are ordered below by priority, which weighs
-what a scenario adds to the claims already tested against what it still needs. Each scenario's section
-repeats its rank and lists what its implementation takes.
+S02, S03, S04 and S12 are implemented. The other scenarios are ordered below by priority, which
+weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
+section repeats its rank and lists what its implementation takes.
 
-#. **S04**, a zero-inflated field. It is the main practical case of the draw decoders, now in the
-   catalogue.
 #. **S08**, the support effect on tonnage curves. One functional on existing generators.
 #. **S01**, simulation keeps the geometry. It is the first test of simulation, needing a runner
    method for simulated fields.
@@ -639,32 +637,38 @@ without them.
 S04 — Zero-inflated field (rain)
 ================================
 
-:Status: ready (not yet implemented)
-:Priority: 2 of 11 among the pending scenarios
+:Status: **implemented**
+:Evaluator: ``atom_at_zero``
 :Source in the theory: worked example of a variable with an atom at zero
-:Claim: an averaging decoder dilutes the atom, giving dry areas small positive values. A draw decoder recovers the dry fraction, while a distance-weighted draw also keeps its placement.
+:Claim: an averaging decoder dilutes the atom, giving dry areas small positive values. A draw decoder
+  recovers the dry fraction, while a distance-weighted draw also keeps its placement.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 35 cells whose marks are 0 with probability 0.45 and lognormal otherwise (log-mean 1, log-sd 0.7). Each replicate field has 400 uniformly placed data with queries on a 36×36 grid. Mondrian partitions carry three decoders, IDW, draw and weighted draw (IDW weights), with :math:`T = 300`. The readings are the probability of dry, :math:`p_{dry}` (the fraction of members below a small threshold), and the mean of the wet members.
+**Setup.** The truth is a Voronoi block-mark field with 35 cells whose marks are 0 with probability
+0.45 and lognormal otherwise (log-mean 1, log-sd 0.7). Each pinned replicate field has 400 uniformly
+placed data with the field on a 36×36 grid. Mondrian partitions of rate 5 carry three decoders, IDW,
+draw and weighted draw (IDW weights), with :math:`T = 300` and ``empty_cells="coarsen"``. The reading
+is the probability of a dry location, :math:`p_{dry}`, the share of members below 0.1, a level the wet
+marks reach with probability near :math:`10^{-6}`. The scenario uses 10 fields in ``ci`` and 20 in
+``full``.
 
 **Checks.**
 
-- *paired-relation*. The error in the dry fraction is lower for draw than for IDW.
-- *paired-relation*. The contrast of :math:`p_{dry}` between dry and wet areas is higher for weighted draw than for draw.
-- *almost-sure*. Every draw member is a data value.
-- Visual **V6**. The region :math:`p_{dry} > 1/2` overlaps the true dry region better (IoU) and has sharper edges for weighted draw than for draw.
+- ``dry-fraction``, *paired-relation*. The error of the dry share of the grid, the mean of
+  :math:`p_{dry}` against the true share, is lower for the draw than for IDW.
+- ``contrast``, *paired-relation*. The mean of :math:`p_{dry}` over the true dry region minus that over
+  the wet region is higher for the weighted draw than for the draw.
+- ``support``, *almost-sure*. Every member of the draw and of the weighted draw is a data value.
+- ``dry-overlap``, *paired-relation*, visual **V6**. The overlap (IoU) of the region
+  :math:`p_{dry} > 1/2` with the true dry region is higher for the weighted draw than for the draw.
+- ``dry-edges``, *paired-relation*, visual **V6**. The mean magnitude of the gradient of
+  :math:`p_{dry}` over the pixels of the true dry boundary is higher for the weighted draw than for the
+  draw.
 
-**To implement.**
-
-- A zero-inflated mark sampler for the existing Voronoi block-mark generator (0 with probability
-  0.45, lognormal otherwise), with pinned replicate fields.
-- An evaluator with the readings :math:`p_{dry}`, the share of members below a small threshold fixed
-  before the first run, and the mean of the wet members. The dry-fraction error and the contrast are
-  then paired relations over the fields. The decoders ``idw``, ``draw`` and ``wdraw_idw`` are in the
-  catalogue.
-- The support check, which the evaluator ``draw_laws`` already decides (kind ``support``), applied
-  to these fields.
-- For V6, the overlap through the existing ``level_set_iou``. The sharpness of the edges needs a
-  functional to define, such as the mean gradient of :math:`p_{dry}` across the true dry boundary.
+**Results.** On seeds 1 and 2 in ``ci`` every check passes. IDW misses the dry share by 0.28 more than
+the draw. The weighted draw raises the contrast by 0.37, the overlap by 0.15 and the sharpness of the
+edges by 0.20 per pixel, while none of 7.8 million drawn members is anything but a data value. A run
+takes about a second. The maps of :math:`p_{dry}` are saved with ``--save-maps``, IDW marking as dry
+only the places close to a dry datum and the draw blurring the edges that the weighted draw keeps.
 
 .. _scenario-S05:
 

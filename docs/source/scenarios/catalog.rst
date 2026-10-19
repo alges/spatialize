@@ -146,8 +146,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - kriging baselines for V2 and the comparison with ordinary kriging
    * - :ref:`S04 <scenario-S04>`
      - zero-inflated field
-     - ready · priority 2
-     - zero-inflated mark sampler; edge-sharpness functional (V6)
+     - **implemented**
+     - —
    * - :ref:`S05 <scenario-S05>`
      - heavy-tailed field
      - partly ready · priority 9

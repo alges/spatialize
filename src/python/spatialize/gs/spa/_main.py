@@ -1595,7 +1595,10 @@ class PosteriorAudit(Summarised):
                       (ax[1], gain, get_palette_colormap("vik"), dict(norm=TwoSlopeNorm(0, -span, span)),
                        f"information gain, {unit}", "Information from the other data")]
             for a, c, cm, scale, label, title in panels:
-                sc = a.scatter(pts[:, 0], y, c=c, cmap=cm, s=25, zorder=3, **scale)
+                # a thin outline keeps the points whose colour is the background's visible (a support of 1
+                # everywhere under empty_cells="coarsen", a gain near 0)
+                sc = a.scatter(pts[:, 0], y, c=c, cmap=cm, s=25, zorder=3, edgecolors="0.45", linewidths=0.3,
+                               **scale)
                 a.scatter(pts[weak, 0], y[weak], s=110, facecolors='none', edgecolors=plt.rcParams['text.color'],
                           linewidths=1.0, zorder=4, label="support < 0.5")
                 plt.colorbar(sc, ax=a, label=label)

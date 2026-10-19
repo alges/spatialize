@@ -35,17 +35,23 @@ members has variance :math:`\sigma^2/T`. On log scales its spread against :math:
 
 **Check.**
 
-- *identity* on the slope of the mean over the queries of :math:`\log(\text{spread})` against
-  :math:`\log T`. Its standard error comes from 500 bootstrap resamples of the ensembles, drawn
-  independently for each size, and :math:`(\text{slope} + 1/2)/\text{se}` is referred to
-  :math:`N(0, 1)`.
+- *identity* on the slope of half the logarithm of the variance of the ensemble mean, averaged over
+  the queries, against :math:`\log T`. Its standard error comes from 500 bootstrap resamples of the
+  ensembles, drawn independently for each size, and :math:`(\text{slope} + 1/2)/\text{se}` is
+  referred to :math:`N(0, 1)`.
 
 A dependence between the members, such as a stream of random numbers shared by two partitions,
 would flatten the slope. The field is the smooth one of P10, not a block-mark field, the claim
 holding for any field.
 
-**Results.** On seed 1 in ``ci`` (2026-10-09) the slope is :math:`-0.482` with IDW
-(:math:`p = 0.016`) and :math:`-0.491` with kriging (:math:`p = 0.25`), both passing.
+**Results.** On seeds 1 to 3 in ``ci`` (2026-10-19) the slope lies between :math:`-0.511` and
+:math:`-0.492` with IDW and between :math:`-0.504` and :math:`-0.490` with kriging, every p-value at
+least 0.24.
+
+**History.** Version 1 read the slope on the mean over the queries of the logarithm of the standard
+deviation, which gave :math:`-0.482` with IDW (:math:`p = 0.016`) on seed 1. That reading is biased when
+the members are far from normal, its bias changing with :math:`T`, as scenario S02 showed on a
+block-mark field. Version 2 averages the variance before the logarithm.
 
 .. _scenario-P2:
 

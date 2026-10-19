@@ -1,5 +1,5 @@
 id: P1-ensemble-convergence
-version: 1
+version: 2
 tier: T2
 evaluator: convergence
 book:
@@ -32,3 +32,4 @@ checks:
     estimators: [idw, kriging]
 provenance:
   v1: "2026-10-09: first version; the field is the smooth field of P10 rather than a block-mark field, the claim holding for any field; sizes fixed before the first run."
+  v2: "2026-10-19: the slope is read on half the logarithm of the variance of the ensemble mean averaged over the queries, instead of the mean over the queries of the logarithm of its standard deviation. The latter is biased when the members are far from normal, its bias changing with T: on the block-mark field of S02 it gave -0.481 against -0.502 for the variance, and on this field v1 measured -0.482 with IDW (p = 0.016). Sizes, replicates and bootstrap unchanged."

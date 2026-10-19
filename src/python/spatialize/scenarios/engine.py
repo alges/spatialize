@@ -1696,9 +1696,11 @@ def eval_convergence(sc: Scenario, runner: Runner, mode: str, seed: int,
     r"""Evaluator ``convergence``: the spread of the ensemble mean falls as :math:`T^{-1/2}` (P1).
 
     For each ensemble size of ``sizes``, ``replicates`` independent ensembles (seeds derived from
-    the run's seed) are computed on the same data. At each query the spread is the standard
-    deviation of the ensemble mean across the replicates. The slope of the mean over the queries of
-    :math:`\log(\text{spread})` against :math:`\log T` must be :math:`-1/2`. Its standard error comes
+    the run's seed) are computed on the same data. At each query the variance of the ensemble mean
+    across the replicates is computed, then averaged over the queries. The slope of half its logarithm
+    against :math:`\log T` must be :math:`-1/2`. The variance is averaged before the logarithm, since
+    the mean of the logarithms of standard deviations is biased when the members are far from normal,
+    the bias changing with :math:`T`. Its standard error comes
     from ``bootstrap`` resamples of the replicates, drawn independently for each size; the
     identity's z is (slope + 1/2) / standard error.
 
@@ -1725,7 +1727,7 @@ def eval_convergence(sc: Scenario, runner: Runner, mode: str, seed: int,
             x = np.log(sizes)
 
             def slope(m):
-                y = np.log(m.std(axis=1, ddof=1)).mean(axis=1)
+                y = 0.5 * np.log(m.var(axis=1, ddof=1).mean(axis=1))
                 return float(np.polyfit(x, y, 1)[0])
 
             b = slope(means)

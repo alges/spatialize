@@ -1,0 +1,178 @@
+diff --git a/include/spatialize/decoders/draw.hpp b/include/spatialize/decoders/draw.hpp
+index aee5655..ca338e8 100644
+--- a/include/spatialize/decoders/draw.hpp
++++ b/include/spatialize/decoders/draw.hpp
+@@ -48,6 +48,25 @@ namespace sptlz{
+     return(static_cast<double>(h >> 11) * (1.0 / 9007199254740992.0));
+   }
+ 
++  // the standard normal quantile (Acklam's rational approximation, relative error below 1.2e-9)
++  inline double normal_quantile(double p){
++    static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00};
++    static const double b[] = {-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01};
++    static const double c[] = {-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00};
++    static const double d[] = {7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00};
++    p = std::min(std::max(p, 1e-300), 1.0 - 1e-16);
++    if(p < 0.02425){
++      double q = std::sqrt(-2*std::log(p));
++      return((((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1));
++    }
++    if(p > 1 - 0.02425){
++      double q = std::sqrt(-2*std::log(1-p));
++      return(-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1));
++    }
++    double q = p - 0.5, r = q*q;
++    return((((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1));
++  }
++
+   // an index drawn with probability proportional to the (non-negative) weights
+   inline int draw_index(const std::vector<float> &w, double u){
+     double total = 0.0;
+@@ -262,6 +281,7 @@ namespace sptlz{
+     protected:
+       std::unique_ptr<CellWeights> weights;
+       bool by_cell;   // coupling: one uniform number per cell (true) or per location (false)
++      float rho;      // strength of the coupling by cell, in [0, 1] (1: one level for the whole cell)
+ 
+       std::function<std::vector<float>(const std::vector<int>&, unsigned int)> fitter(std::vector<std::vector<float>> *coords, std::vector<float> *values){
+         return([this, coords, values](const std::vector<int> &ids, unsigned int seed){ return(weights->fit_cell(coords, values, ids, seed)); });
+@@ -278,7 +298,7 @@ namespace sptlz{
+       }
+ 
+     public:
+-      DrawDecoder(CellWeights *_weights, bool _by_cell=false): weights(_weights), by_cell(_by_cell){}
++      DrawDecoder(CellWeights *_weights, bool _by_cell=false, float _rho=1.0f): weights(_weights), by_cell(_by_cell), rho(_rho){}
+ 
+       std::vector<float> fit_cell(std::vector<std::vector<float>> *coords, std::vector<float> *values,
+                                   const std::vector<int> &samples, unsigned int seed){
+@@ -313,9 +333,18 @@ namespace sptlz{
+         for(size_t j=0; j<order.size(); j++) order[j] = static_cast<int>(j);
+         std::stable_sort(order.begin(), order.end(), [&sl_values](int a, int b){ return(sl_values[a] < sl_values[b]); });
+         std::vector<float> ordered(order.size());
++        // below full strength, each location's level mixes the cell's with its own through a Gaussian
++        // copula of correlation rho
++        bool mixed = rho < 1.0f;
++        double zc = mixed ? normal_quantile(u) : 0.0, sc = std::sqrt(std::max(0.0f, rho)), sl = std::sqrt(std::max(0.0f, 1.0f - rho));
+         for(size_t q=0; q<locations_id->size(); q++){
+           for(size_t k=0; k<order.size(); k++) ordered[k] = w[q][order[k]];
+-          int k = draw_index(ordered, u);
++          double level = u;
++          if(mixed){
++            double z = sc*zc + sl*normal_quantile(draw_uniform(cell, locations_id->at(q), DrawRole::ESTIMATE));
++            level = 0.5*std::erfc(-z/std::sqrt(2.0));
++          }
++          int k = draw_index(ordered, level);
+           if(k >= 0) result[q] = sl_values[order[k]];
+         }
+         return(result);
+diff --git a/src/c++/registry.hpp b/src/c++/registry.hpp
+index 8aa64ce..343ba0f 100644
+--- a/src/c++/registry.hpp
++++ b/src/c++/registry.hpp
+@@ -106,6 +106,9 @@ namespace registry {
+   inline bool by_cell(const DecoderSpec &spec, const py::dict &params){
+     return(param<int>(spec, params, "coupling") == 2);
+   }
++  inline float rho_of(const DecoderSpec &spec, const py::dict &params){
++    return(param<float>(spec, params, "rho"));
++  }
+ 
+   // ---------------------------------------------------------------------------------------------
+   // custom decoder: Python callables on the cells (cat_esi and user decoders)
+@@ -206,6 +209,8 @@ namespace registry {
+     if (!specs.empty()) return(specs);
+     // the coupling of the draws within a cell, a parameter of every drawing decoder (draw.hpp)
+     const Param COUPLING = {"coupling", "choice", "'location': independent draws at each location; 'cell': the locations of a cell share one level, read on each one's weighted law", false, py::str("location"), {"location", "cell"}};
++    // EXPERIMENTAL (prototype, 2026-10-16): the strength of the coupling by cell
++    const Param RHO = {"rho", "float", "strength of the coupling by cell, in [0, 1]", false, py::float_(1.0), {}};
+     specs.push_back({"idw", "Inverse distance weighting, weights 1/d^p (a datum at distance 0 takes all the weight).",
+        1, ANY, true,
+        {{"exponent", "float", "the power p of the distance", true, py::none(), {}}},
+@@ -230,11 +235,11 @@ namespace registry {
+        nullptr});
+     specs.push_back({"draw", "A datum of the cell drawn uniformly (the block-mark decoder).",
+        1, ANY, true,
+-       {COUPLING},
++       {COUPLING, RHO},
+        nullptr});
+     specs.push_back({"wdraw_idw", "A datum of the cell drawn with probability proportional to 1/d^p.",
+        1, ANY, true,
+-       {{"exponent", "float", "the power p of the distance", true, py::none(), {}}, COUPLING},
++       {{"exponent", "float", "the power p of the distance", true, py::none(), {}}, COUPLING, RHO},
+        nullptr});
+     specs.push_back({"wdraw_kriging", "A datum of the cell drawn with probability proportional to its ordinary-kriging weight, made non-negative.",
+        1, ANY, true,
+@@ -242,7 +247,7 @@ namespace registry {
+         {"nugget", "float", "nugget", true, py::none(), {}},
+         {"range", "float", "range", true, py::none(), {}},
+         {"sill", "float", "sill", true, py::none(), {}},
+-        {"negative_weights", "choice", "'clip' sets negative weights to 0, 'abs' takes their absolute value", false, py::str("clip"), {"clip", "abs"}}, COUPLING},
++        {"negative_weights", "choice", "'clip' sets negative weights to 0, 'abs' takes their absolute value", false, py::str("clip"), {"clip", "abs"}}, COUPLING, RHO},
+        nullptr});
+     specs.push_back({"cellmean", "The mean of the cell's data (the linear decoder of the theory's co-occurrence identity).",
+        1, ANY, true,
+@@ -257,14 +262,14 @@ namespace registry {
+        nullptr});
+     specs.push_back({"wdraw_adaptiveidw", "A datum of the cell drawn with probability proportional to its adaptive IDW weight.",
+        1, 3, true,
+-       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}, COUPLING},
++       {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}}, COUPLING, RHO},
+        nullptr});
+     specs.push_back({"wdraw_sharpidw", "A datum of the cell drawn with probability proportional to its sharpened adaptive IDW weight.",
+        1, 3, true,
+        {{"metric", "choice", "error minimised when fitting each cell", false, py::str("mae"), {"mae", "mse"}},
+         {"kappa_r", "float", "boost of the data with large leave-one-out residuals", false, py::float_(1.5), {}},
+         {"kappa_g", "float", "raise of the exponent with the cell's gradient", false, py::float_(0.2), {}},
+-        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}, COUPLING},
++        {"rho_max", "float", "cap of the cell's dimensionless gradient", false, py::float_(3.0), {}}, COUPLING, RHO},
+        nullptr});
+     // factories, which read the parameters through their own spec
+     specs[0].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+@@ -283,16 +288,16 @@ namespace registry {
+       return(custom_decoder(decoders()[3], d, p, m));
+     };
+     specs[4].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+-      return(new sptlz::DrawDecoder(new sptlz::UniformWeights(), by_cell(decoders()[4], p)));
++      return(new sptlz::DrawDecoder(new sptlz::UniformWeights(), by_cell(decoders()[4], p), rho_of(decoders()[4], p)));
+     };
+     specs[5].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+-      return(new sptlz::DrawDecoder(new sptlz::IDWWeights(param<float>(decoders()[5], p, "exponent")), by_cell(decoders()[5], p)));
++      return(new sptlz::DrawDecoder(new sptlz::IDWWeights(param<float>(decoders()[5], p, "exponent")), by_cell(decoders()[5], p), rho_of(decoders()[5], p)));
+     };
+     specs[6].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+       const DecoderSpec &s = decoders()[6];
+       return(new sptlz::DrawDecoder(new sptlz::KrigingWeights(
+           param<int>(s, p, "model"), param<float>(s, p, "nugget"), param<float>(s, p, "range"), param<float>(s, p, "sill"),
+-          s.params[4].choices[param<int>(s, p, "negative_weights")-1]), by_cell(s, p)));
++          s.params[4].choices[param<int>(s, p, "negative_weights")-1]), by_cell(s, p), rho_of(s, p)));
+     };
+     specs[7].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+       return(new sptlz::WeightedMeanDecoder(new sptlz::UniformWeights()));
+@@ -304,12 +309,12 @@ namespace registry {
+     };
+     specs[9].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+       const DecoderSpec &s = decoders()[9];
+-      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], 0.0f, 0.0f, 0.0f), by_cell(s, p)));
++      return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], 0.0f, 0.0f, 0.0f), by_cell(s, p), rho_of(s, p)));
+     };
+     specs[10].make = [](int d, const py::dict &p, Method m)->sptlz::Decoder*{
+       const DecoderSpec &s = decoders()[10];
+       return(new sptlz::DrawDecoder(new sptlz::SharpenedWeights(d, s.params[0].choices[param<int>(s, p, "metric")-1], param<float>(s, p, "kappa_r"),
+-                                                                param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max")), by_cell(s, p)));
++                                                                param<float>(s, p, "kappa_g"), param<float>(s, p, "rho_max")), by_cell(s, p), rho_of(s, p)));
+     };
+     return(specs);
+   }
+diff --git a/src/python/spatialize/gs/__init__.py b/src/python/spatialize/gs/__init__.py
+index d2491e2..79c042f 100644
+--- a/src/python/spatialize/gs/__init__.py
++++ b/src/python/spatialize/gs/__init__.py
+@@ -125,7 +125,7 @@ def more_decoders(idw, kriging, adaptive, grid=False):
+     """
+     one = (lambda x: [x]) if grid else (lambda x: x)
+     sharp = dict(adaptive, kappa_r=one(1.5), kappa_g=one(0.2), rho_max=one(3.0))
+-    coupled = dict(coupling=one("location"))   # the drawing decoders: independent draws at each location
++    coupled = dict(coupling=one("location"), rho=one(1.0))   # the drawing decoders: independent draws at each location (rho: EXPERIMENTAL prototype)
+     return {
+         local_interpolator.CELLMEAN: {}, local_interpolator.DRAW: dict(coupled),
+         local_interpolator.WDRAW_IDW: dict(idw, **coupled),

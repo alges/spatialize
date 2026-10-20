@@ -12,6 +12,22 @@ on:
       - "test-all"
 
 jobs:
+  no-roadmap:
+    # the roadmap/ folder lives on develop only (see roadmap/README.md): remove it on the release branch
+    # (git rm -r roadmap) before the pull request to main
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: The release carries no roadmap
+        run: |
+          if [ -d roadmap ]; then
+            echo "::error::roadmap/ belongs to develop only: run 'git rm -r roadmap' on the release branch before merging into main"
+            exit 1
+          fi
+
   build-linux:
     runs-on: ubuntu-latest
 

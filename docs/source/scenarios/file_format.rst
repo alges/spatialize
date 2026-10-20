@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``, ``connectivity``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``, ``connectivity``, ``variogram_inference``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -397,6 +397,25 @@ runner's optional method ``simulate`` (:doc:`extending`).
   - ``members_equivalent`` (equivalence), ``margin``;
   - ``members_against_mean`` (paired relation), no further key;
   - ``simulated_excess`` (one-sided), no further key.
+
+Evaluator ``variogram_inference``
+---------------------------------
+
+This evaluator compares the direction and the correlation lengths a runner reads from the data with
+those of the field itself, over pinned replicate fields (scenario S14). It needs the runner's optional
+method ``infer_variogram`` (:doc:`extending`).
+
+- ``truth``: ``generator: sgf_exponential`` (see ``map_visual``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``generator_seed``.
+- ``estimators`` is empty: the runner's method chooses its own ensembles.
+- per check, ``kind``:
+
+  - ``direction`` (equivalence), ``margin_deg``;
+  - ``length`` (equivalence), ``axis`` (0 the major, 1 the minor) and ``margin``, on the logarithm of the
+    ratio to the field's length;
+  - ``error_bound_clean`` (one-sided), ``below``, on the bound read from the data as they are;
+  - ``error_bound_covers`` (one-sided), ``noise_share``, the bound minus the true share of an error of that
+    share of the field's variance added to the data.
 
 Evaluator ``edge_cases``
 ------------------------

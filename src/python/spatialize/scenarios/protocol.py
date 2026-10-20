@@ -97,6 +97,12 @@ class Runner(Protocol):
     member, each keeping its index, so that readings over several locations can be taken draw by
     draw. Scenarios S09 and S10 need it.
 
+    It may also provide ``infer_variogram(samples, values, queries, *, seed)``, returning a dict with
+    ``direction_deg``, the major axis of the anisotropy in degrees counterclockwise from the first
+    coordinate, ``lengths``, the correlation lengths along the major and the minor axes, and
+    ``error_bound_share``, an upper bound on the share of the variance a measurement error takes, read from
+    the data through the ensemble on the grid the queries form. Scenario S14 needs it.
+
     It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
     n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function
     that the implementation's reading ``reading`` of the law gives at each query and threshold.

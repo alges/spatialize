@@ -184,6 +184,10 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - connectivity of high-value bodies: members coupled by cell keep it, the map of means and simulated fields do not
      - **implemented**
      - —
+   * - :ref:`S14 <scenario-S14>`
+     - the variogram read from the ensemble: direction, correlation lengths and a bound on the measurement error
+     - **implemented** (experimental feature)
+     - the length across the structures, a known failure
    * - 
      - **V — visual criteria**
      - 

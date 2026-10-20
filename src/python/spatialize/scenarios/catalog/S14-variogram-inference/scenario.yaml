@@ -1,0 +1,105 @@
+id: S14-variogram-inference
+version: 4
+tier: T3
+evaluator: variogram_inference
+book:
+  topic: "the variogram read from the ensemble: the direction from the structure tensor of the map, the correlation lengths from drawing members"
+  draft_2026_10: "ch 8, classical geostatistics read through the ensemble; ch 12, the anisotropic field"   # the book is a draft
+purpose: >
+  An implementation that reads a variogram from its ensemble (experimental in Spatialize,
+  spatialize.futures.variogram) recovers, from the data alone, the direction of an anisotropic field and its
+  correlation lengths along and across the structures, as the suite reads them on the field itself.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: sgf_exponential
+  covariance: "exp(−√(hᵀAh)), ranges 0.45 and 0.09 at 30°, as S03"
+  a1: 0.45
+  a2: 0.09
+  theta_deg: 30.0
+data:
+  design: {type: uniform, n: 400}
+  grid: 40
+  mode: pinned
+  fields: {ci: 16, full: 32}
+  generator_seed: 20261031
+estimators_T: {ci: 100, full: 100}
+estimators: []
+checks:
+  - id: direction
+    title: "the direction read from the data lies within 10° of the field's own"
+    kind: direction
+    family: equivalence
+    margin_deg: 10.0
+  - id: length-major
+    title: "the correlation length along the structures lies within a factor 1.5 of the field's"
+    kind: length
+    family: equivalence
+    axis: 0
+    margin: 0.405
+  - id: length-minor
+    title: "the correlation length across the structures lies within a factor 1.5 of the field's"
+    kind: length
+    family: equivalence
+    axis: 1
+    margin: 0.405
+    known_failure: "the length across the structures comes out 1.34 times the field's (log ratio +0.29, seeds 1 and 2), the members unable to resolve structures near the spacing of the data"
+  - id: error-bound-clean
+    title: "on data without measurement error the bound on an error's share of the variance stays below 0.3"
+    kind: error_bound_clean
+    family: one-sided
+    below: 0.3
+  - id: error-bound-covers
+    title: "with a measurement error of 0.3 of the variance, the bound lies above the error's share"
+    kind: error_bound_covers
+    family: one-sided
+    noise_share: 0.3
+provenance:
+  v1: >
+    2026-10-20: first version, with the experimental variogram inference (user decision, item 6 of the
+    release's pending list). The truth's direction and lengths are the suite's own functionals on the field
+    (orientation_coherence, directional_range along the field's direction and across it). Study before the
+    first run on 16 fields of S03 (the library's own functionals as target): direction error 1.4° (standard
+    deviation 1.0) against 5.6° (6.2) for directional experimental variograms; log ratio of the lengths to the
+    field's -0.08 (0.08) along and +0.14 (0.12) across, the latter longer as the members cannot resolve
+    structures much shorter than the spacing of the data. Margins of V3 (±log 1.5) and of V1 (±10°); the
+    narrowest effect, (0.405 - 0.14) / 0.12 = 2.3 standard deviations per field, needs K = ((3.4 + 1.28) /
+    2.3)^2 = 4 at the strictest Holm level of three checks, so 16 fields in ci and 32 in full.
+    First runs (ci, seeds 1 and 2): the direction within 0.5° of the field's (margin 10°), the length along
+    the structures 0.94 times the field's, both passing; the length across them 1.34 times the field's
+    (log +0.29, standard error 0.044), so its equivalence within a factor 1.5 fails. The study had found
+    +0.14 with the library's own functional on S03's fields; the suite's functional (correlation with
+    half-pixel lags) reads the field's minor length shorter. User decision: a known failure with these values.
+  v2: >
+    2026-10-20: the nugget (user: "faltó una estimación del nugget?"). Study on 4 fields × nugget shares 0, 0.1
+    and 0.3 (measurement error added to the data): fitting nugget and sill in the distance the members' lengths
+    rescale underestimated it (0.20 for 0.3) and the lengths read at e^-1 shrank with it (0.73 times the field's
+    at 0.3); fitting the scale too gave the nugget (0.27 for 0.3) but wandering lengths; iterating the two
+    diverged on one field. The method kept: the nugget share from the data with the scale free, the lengths
+    from the members read where their correlation falls below (1 - share) e^-1: shares 0.05 (sd 0.06), 0.12
+    (0.05), 0.27 (0.04), lengths 1.02-1.10 and 1.12-1.21 times the field's. Checks nugget-none (within 0.15 of
+    0) and nugget-error (within 0.1 of 0.3) fixed before their first run; the effects, 1.6 standard deviations
+    per field each, need K = ((3.66 + 1.28) / 1.6)^2 = 10 at the strictest Holm level of five checks.
+  v3: >
+    2026-10-20: the two nugget checks removed with the classical fit they read (user: the nugget must come
+    from the theory). Their first runs (seeds 1 and 2): none on clean data passed (0.02); with an error of 0.3
+    the fit read 0.23 against a margin of 0.1, failing, the share being taken against a sill the free scale
+    extrapolates beyond the field's variance; taken against the data's variance it overestimated on fields of
+    short range (0.19 for 0.1). The theory's variogram (Prop. 8.3.1, draft), ½E[(z_i - z_j)²] = τ² + κ₂(1 -
+    e_ij) with e from the ensemble's cells, read τ² that depends on the granularity (0.13 to 0.53 for 0.3), so
+    the measurement error is not read in 1.3 while its study continues; the result reports instead the
+    theory's residual weight per location. The direction and length checks are unchanged.
+  v4: >
+    2026-10-20: an upper bound on the measurement error, the theory's order-two estimator (10.2.1) read where
+    two locations coincide: with an independent error the covariance across distinct locations keeps the form
+    κ₂e while the error adds to the variance at a location (Prop. 5.6.1, draft), so the pooled within-cell
+    variance of the data is τ² plus the field's variance inside the cells, which vanishes as they shrink (Thm
+    7.4.4); its minimum over a ladder of granularities bounds τ² from above (user decision, after studies in
+    which the plateau was never reached with 400 data). Study on S14's fields, the ladder stopping once fewer
+    than a quarter of the data share a cell (near α = 0.99): about 0.20 of the variance on clean data, 0.40 to
+    0.48 with an error of 0.3. Checks fixed before their first run: below 0.3 on clean data, above the error's
+    share with an error of 0.3. First run (ci, seed 1): error-bound-covers passed (+0.24), error-bound-clean
+    failed (0.34 against 0.3): the library's ladder stopped at α = 0.98, about 85 of 400 data still sharing a
+    cell at 0.99, below the quarter its stop asked; the study's 0.20 at 0.99 had been read beside the degrees
+    of freedom of the isotropized coordinates, a mistake in setting the threshold. User decision: the stop
+    lowered to 15 % of the data, which reaches α = 0.99 (bound 0.21 to 0.24 on clean data) and still excludes
+    0.995; threshold kept, confirmed on seeds 3 and 4.

@@ -2891,6 +2891,83 @@ def eval_connectivity(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_variogram_inference(sc: Scenario, runner: Runner, mode: str, seed: int,
+                             save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``variogram_inference``: the anisotropy and the correlation lengths read from the data
+    through the ensemble, against the field itself (S14).
+
+    On each pinned field the runner's optional method ``infer_variogram`` reads, from the data, the direction
+    of the major axis and the correlation lengths along the major and the minor axes. The truth's direction is
+    :func:`~spatialize.scenarios.stats.maps.orientation_coherence` of the field, its lengths
+    :func:`~spatialize.scenarios.stats.maps.directional_range` along that direction and across it, in units
+    of length. Kinds (key ``kind``):
+
+    - ``direction`` (equivalence) — the angle between the two directions lies within ``±margin_deg``;
+    - ``length`` (equivalence) — the logarithm of the length along axis ``axis`` (0 major, 1 minor) over the
+      field's lies within ``±margin``;
+    - ``error_bound_clean`` (one-sided) — on the data as they are, without measurement error, the upper bound
+      on an error's share of the variance (``error_bound_share`` of the runner's dict) stays below ``below``;
+    - ``error_bound_covers`` (one-sided) — with an error of share ``noise_share`` of the field's variance added
+      to the data (Gaussian, seeded per field from the run's seed), the bound minus the error's true share of
+      the noisy data's variance is positive.
+
+    Reads ``data.grid`` and ``data.fields`` (per mode).
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    cache = {}
+
+    def read(k, noise_share=0.0):
+        if (k, noise_share) not in cache:
+            f = sc.field(k)
+            truth = f["truth"].astype(float).reshape(m, m)
+            theta, _ = maps.orientation_coherence(truth)
+            lengths = [maps.directional_range(truth, theta) / m, maps.directional_range(truth, theta + 90.0) / m]
+            values, true_share = f["values"].astype(float), 0.0
+            if noise_share > 0:
+                var_e = noise_share / (1.0 - noise_share) * float(np.var(f["truth"]))
+                values = values + np.sqrt(var_e) * np.random.default_rng(_sub_seed(seed, 13, k)).standard_normal(len(values))
+                true_share = var_e / float(np.var(values))
+            r = runner.infer_variogram(f["samples"], values.astype(np.float32), queries, seed=_sub_seed(seed, k))
+            cache[(k, noise_share)] = (theta, np.array(lengths), float(r["direction_deg"]), np.asarray(r["lengths"], float),
+                                       float(r.get("error_bound_share", np.nan)), true_share)
+        return cache[(k, noise_share)]
+
+    out = []
+    for check in s["checks"]:
+        cid, title = check["id"], check["title"]
+        if not hasattr(runner, "infer_variogram"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no variogram inference"))
+            continue
+        if check["kind"] == "direction":
+            x = [((read(k)[2] - read(k)[0] + 90.0) % 180.0) - 90.0 for k in range(K)]
+            margin = float(check["margin_deg"])
+        elif check["kind"] == "length":
+            a = int(check["axis"])
+            x = [float(np.log(read(k)[3][a] / read(k)[1][a])) for k in range(K)]
+            margin = float(check["margin"])
+        elif check["kind"] == "error_bound_clean":
+            out.append(CheckOutcome(sc.id, cid, title, families.mean_less([read(k)[4] for k in range(K)], float(check["below"])),
+                                    expect=_expect(check, "default"), known_failure=check.get("known_failure", "")))
+            continue
+        elif check["kind"] == "error_bound_covers":
+            ns = float(check["noise_share"])
+            x = [read(k, ns)[4] - read(k, ns)[5] for k in range(K)]
+            out.append(CheckOutcome(sc.id, cid, title, families.mean_greater(x, 0.0),
+                                    expect=_expect(check, "default"), known_failure=check.get("known_failure", "")))
+            continue
+        else:
+            raise ValueError(f"unknown check kind {check['kind']}")
+        r = families.tost_mean(x, -margin, margin)
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -3016,7 +3093,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "order_relations": eval_order_relations, "connectivity": eval_connectivity, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "order_relations": eval_order_relations, "connectivity": eval_connectivity, "variogram_inference": eval_variogram_inference, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

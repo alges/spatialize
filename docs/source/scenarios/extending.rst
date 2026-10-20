@@ -74,6 +74,12 @@ array of shape ``(n_queries, n_members)``. Each column stays the widened version
 block average read column by column keeps the dependence between locations. Scenarios S09 and S10 need
 it.
 
+A runner may also read a variogram from its ensemble, through a method
+``infer_variogram(samples, values, queries, *, seed)`` returning a dict with ``direction_deg``, the major
+axis in degrees counterclockwise from the first coordinate, ``lengths``, the correlation lengths along the
+major and the minor axes, and ``error_bound_share``, an upper bound on the share of the variance a
+measurement error takes. Scenario S14 needs it.
+
 A runner may also give the readings of its law, through a method
 ``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an
 array of shape ``(n_queries, n_thresholds)``. It holds the cumulative distribution function that

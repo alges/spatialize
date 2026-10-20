@@ -218,6 +218,30 @@ class SpatializeRunner:
                            values=np.asarray(values, float))
         return np.asarray(widen_members(result, widening=widening, seed=int(seed)).esi_samples(raw=True), float)
 
+    def infer_variogram(self, samples, values, queries, *, seed):
+        """The anisotropy and the correlation lengths read from the data through the ensemble
+        (:func:`spatialize.futures.variogram.infer_variogram`), on the grid the queries form.
+
+        Returns
+        -------
+        dict
+            ``direction_deg``, the major axis in degrees counterclockwise from the first coordinate in
+            [0, 180), ``lengths``, the correlation lengths along the major and the minor axes, and
+            ``error_bound_share``, an upper bound on the share of the data's variance a measurement error
+            takes.
+        """
+        import warnings
+        from spatialize.futures.variogram import infer_variogram
+        from spatialize.logging import singleton_null_callback
+        q = np.asarray(queries, float)
+        xs, ys = np.unique(q[:, 0]), np.unique(q[:, 1])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = infer_variogram(np.asarray(samples, float), np.asarray(values, float), xi=tuple(np.meshgrid(xs, ys)),
+                                seed=int(seed), callback=singleton_null_callback)
+        return dict(direction_deg=float(r.azimuth), lengths=[float(x) for x in r.lengths],
+                    error_bound_share=float(r.error_bound_share))
+
     def cat_loo(self, est, samples, codes, *, n_members, seed):
         """Leave-one-out categorical ensemble: each datum's class predicted from the other data, one member
         per partition, with the classifier named by the estimator's ``decoder`` (as the categorical

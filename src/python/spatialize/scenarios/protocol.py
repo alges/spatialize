@@ -92,6 +92,11 @@ class Runner(Protocol):
     of ``n_members`` members at the queries, from the local laws widened as ``widening`` asks
     (``"auto"`` or ``False``). Scenarios S01 and S11 need it.
 
+    It may also provide ``widened_members(estimator, samples, values, queries, *, n_members, seed,
+    widening="auto")``, returning an array of shape ``(q, n_members)``: the members widened member by
+    member, each keeping its index, so that readings over several locations can be taken draw by
+    draw. Scenario S10 needs it.
+
     It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
     n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function
     that the implementation's reading ``reading`` of the law gives at each query and threshold.

@@ -201,6 +201,23 @@ class SpatializeRunner:
                           callback=singleton_null_callback)
         return np.asarray(sims.scenarios, float).reshape(len(queries), int(n_fields))
 
+    def widened_members(self, est, samples, values, queries, *, n_members, seed, widening="auto"):
+        """Members of the estimator at the queries, widened member by member
+        (:func:`~spatialize.gs.ess.widen_members`, seeded by ``seed``), each keeping its index.
+
+        Returns
+        -------
+        ndarray of shape (q, n_members)
+        """
+        from spatialize.gs.esi import ESIResult
+        from spatialize.gs.ess import widen_members
+        members = np.asarray(self.members(est, samples, values, queries, n_members=n_members, seed=seed), float)
+        with np.errstate(all="ignore"):
+            estimate = np.nanmean(members, axis=1)
+        result = ESIResult(estimate, members, xi=np.asarray(queries, float), points=np.asarray(samples, float),
+                           values=np.asarray(values, float))
+        return np.asarray(widen_members(result, widening=widening, seed=int(seed)).esi_samples(raw=True), float)
+
     def cat_loo(self, est, samples, codes, *, n_members, seed):
         """Leave-one-out categorical ensemble: each datum's class predicted from the other data, one member
         per partition, with the classifier named by the estimator's ``decoder`` (as the categorical

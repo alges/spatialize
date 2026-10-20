@@ -16,11 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S08, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S08, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S10**, loss-optimal quantiles. New readings on existing generators.
 #. **S09**, resource categories. A preferential-design generator and a classification rule fixed in
    advance.
 #. **S07**, exceedance areas. Its coverage check is ready, its identity awaits a derivation.
@@ -829,27 +828,55 @@ S09 — Resource categories under preferential sampling
 S10 — Choosing a quantile
 =========================
 
-:Status: ready (not yet implemented)
-:Priority: 6 of 11 among the pending scenarios
-:Source in the theory: worked example of loss-optimal quantiles
-:Claim: the empirically optimal quantile level decreases as the cost of over-estimation grows. A block's quantile differs from the mean of its points' quantiles in the predicted direction.
+:Status: **implemented**
+:Evaluator: ``quantile_choice``
+:Source in the theory: the functional an asymmetric loss chooses, and the law of a block average
+:Claim: when over-estimation costs :math:`c` times under-estimation, the level that minimises the
+  realised loss falls as :math:`c` grows, the theory placing it at :math:`1/(1 + c)`. A block's quantile
+  differs from the average of its locations' quantiles, lying above it below the median and below it
+  above, at a lower realised loss.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 40 cells and centred lognormal marks (log-sd 0.9). Each replicate field has 300 uniformly placed data with queries on a 40×40 grid, estimated by Mondrian IDW.
+**Setup.** The truth is a Voronoi block-mark field with 40 cells and lognormal marks of log-scale 0.9,
+centred by their sample mean. Each pinned replicate field holds 300 uniformly placed data, with the
+field on a 40×40 grid cut into 100 blocks of 4×4 cells. Mondrian IDW (exponent 2, rate 5,
+:math:`T = 300`, ``empty_cells="coarsen"``) gives the members, widened member by member with
+skew-normal laws (:func:`~spatialize.gs.ess.widen_members`, through the runner's optional method
+``widened_members``). A block's law is that of the block averages of the widened members, column by
+column. The loss of reporting :math:`\hat z` for the truth :math:`z` is :math:`c(\hat z - z)` above
+the truth and :math:`z - \hat z` below. The optimal level is the level, among 0.01, 0.02, …, 0.99,
+whose quantile map has the lowest mean loss against the truth. The scenario uses 12 fields in ``ci``
+and 24 in ``full``.
 
 **Checks.**
 
-- *paired-relation*. The optimal level decreases with the cost ratio.
-- *paired-relation*. The block quantile minus the mean of the point quantiles has the predicted sign below and above the median.
+- ``level-falls-5``, *paired-relation*. The optimal level is lower at :math:`c = 5` than at
+  :math:`c = 1`.
+- ``level-falls-1``, *paired-relation*. The optimal level is lower at :math:`c = 1` than at
+  :math:`c = 1/5`.
+- ``level-near-5`` and ``level-near-0.2``, *equivalence*, known failures. The optimal level lies within
+  0.05 of :math:`1/(1 + c)`, 1/6 at :math:`c = 5` and 5/6 at :math:`c = 1/5`.
+- ``block-gap-low``, *paired-relation*. At level 1/6 the block's quantile exceeds the average of its
+  locations' quantiles, averaged over the blocks.
+- ``block-gap-high``, *paired-relation*. At level 0.9 it lies below.
+- ``block-loss-low`` and ``block-loss-high``, *paired-relation*. At level 1/6, the cost
+  :math:`c = 5`, and at level 0.9, the cost :math:`c = 1/9`, the block's quantile incurs a lower mean
+  loss against the true block averages than the averaged quantiles.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` the six checks pass and the two known failures fail. The
+optimal level is lower by 0.21 at :math:`c = 5` than at equal costs, by 0.24 at equal costs than at
+:math:`c = 1/5`. At :math:`c = 5` it lies 0.13 above 1/6, at :math:`c = 1/5` 0.08 below 5/6, so the
+widened laws are too wide in their tails on this field. The block's quantile exceeds the averaged
+quantiles by 0.51 at level 1/6 and falls short of them by 0.71 at level 0.9, in nearly every block.
+The averaged quantiles incur a mean loss higher by 0.32 at :math:`c = 5` and by 0.04 at level 0.9. A
+run takes about 9 s.
 
-- Pinned replicate fields from the Voronoi block-mark generator with centred lognormal marks
-  (log-sd 0.9).
-- An asymmetric linear loss over a grid of cost ratios. The empirically optimal level is the
-  quantile level of the members that minimises the realised loss against the truth. A paired
-  relation then reads its decrease with the cost ratio.
-- The block quantile, the quantile of the members' block means, against the mean of the point
-  quantiles, with the sign predicted below and above the median.
+**History.** The specification read the levels on the raw members. A study on 12 fields found its
+claims there, but with gaps of 0.06 and 0.09 and the block loss reversed, the raw members being
+under-dispersed. The theory reads the widened members draw by draw, while the library's widening,
+drawing each location's law anew, lost the member index. The library gained
+:func:`~spatialize.gs.ess.widen_members`, which keeps it, so the scenario reads the widened members. The two checks
+against :math:`1/(1 + c)` are registered as known failures, since the study placed the optimal level
+0.145 above 1/6 and 0.078 below 5/6 with standard deviations near 0.02.
 
 .. _scenario-S11:
 

@@ -94,6 +94,13 @@ def _marks(spec):
     if "lognormal" in spec:
         mu, sd = spec["lognormal"]
         return lambda r, n: r.lognormal(mu, sd, n)
+    if "centred_lognormal" in spec:
+        mu, sd = spec["centred_lognormal"]
+
+        def centred(r, n):
+            m = r.lognormal(mu, sd, n)
+            return m - m.mean()
+        return centred
     if "zero_inflated" in spec:
         z = spec["zero_inflated"]
         wet = _marks({k: v for k, v in z.items() if k != "p_zero"})

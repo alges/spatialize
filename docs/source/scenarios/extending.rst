@@ -68,6 +68,11 @@ A runner may also give fields simulated from its ensemble, through a method
 array of shape ``(n_queries, n_fields)``. With ``widening="auto"`` the local laws are widened before
 the draws, as the theory's widening of an under-dispersed ensemble asks. Scenarios S01 and S11 need it.
 
+A runner may also give its members widened member by member, through a method
+``widened_members(est, samples, values, queries, *, n_members, seed, widening="auto")`` returning an
+array of shape ``(n_queries, n_members)``. Each column stays the widened version of one member, so a
+block average read column by column keeps the dependence between locations. Scenario S10 needs it.
+
 A runner may also give the readings of its law, through a method
 ``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an
 array of shape ``(n_queries, n_thresholds)``. It holds the cumulative distribution function that

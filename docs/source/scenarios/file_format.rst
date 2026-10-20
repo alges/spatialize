@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -212,7 +212,8 @@ pinned replicate fields (scenario S04).
 
 - ``truth``: ``generator: vbm``, a Voronoi block-mark field of ``n_cells`` cells with uniform nuclei,
   ``marks: {zero_inflated: {p_zero, lognormal: [mu, sigma]}}`` (or ``{gaussian: [mean, sd]}``,
-  ``{lognormal: [mu, sigma]}``).
+  ``{lognormal: [mu, sigma]}``, ``{centred_lognormal: [mu, sigma]}``, lognormal marks minus their
+  sample mean).
 - ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``dry_below`` (a member
   below it counts as dry), ``generator_seed``.
 - per check, ``kind`` (``dry_fraction``, ``contrast``, ``dry_iou``, ``dry_edges``, each a paired
@@ -263,6 +264,25 @@ over pinned replicate fields (scenario S11).
     and optionally ``members`` and ``against_members``, the number of members of each median map
     (default ``estimators_T``);
   - ``contrast`` (one-sided), ``estimator`` and ``above``.
+
+Evaluator ``quantile_choice``
+-----------------------------
+
+This evaluator reads the quantile an asymmetric loss chooses, at each location and over blocks, on
+the members widened member by member, over pinned replicate fields (scenario S10). It needs the
+runner's optional method ``widened_members`` (:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``block`` (the side of the
+  blocks, in grid cells), ``level_step`` (the step of the levels searched for the optimal one),
+  ``widening`` (the family of the widening) and ``generator_seed``.
+- per check, ``kind``, ``estimator`` and its keys:
+
+  - ``optimal_level`` (paired relation), ``cost``, ``against_cost`` and ``better``, the cost of
+    over-estimation relative to under-estimation;
+  - ``optimal_level_near`` (equivalence), ``cost`` and ``margin``;
+  - ``block_gap`` (paired relation), ``level`` and ``better``;
+  - ``block_loss`` (paired relation), ``level``, the cost being :math:`(1 - \text{level})/\text{level}`.
 
 Evaluator ``edge_cases``
 ------------------------

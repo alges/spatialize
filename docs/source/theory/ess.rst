@@ -59,6 +59,18 @@ and skew-normal laws otherwise, with a skewness read from the nearest data.
 A drawing decoder (:doc:`decoders`) puts the dispersion of the cells into the members themselves, so
 :math:`s^2` is larger and less widening is needed.
 
+The mixture can also be drawn member by member, each member :math:`z_t(v)` replaced by one draw from
+its own component :math:`G_{z_t(v),\, \mathrm{need}(v)}`. At every location the widened members then
+follow the widened law, while member :math:`t` stays member :math:`t` at every location, so they keep
+the dependence between locations that the members carry. A reading over a region comes from them
+draw by draw. The law of a block average :math:`\bar Z_B = |B|^{-1} \sum_{v \in B} Z(v)`, for
+instance, is that of the block averages of the widened members, whose quantile at a level
+:math:`\alpha` differs from the average of the quantiles of the locations in the block. That average
+is the quantile of the comonotone coupling, every location at the same level of its own law at once,
+a coupling which gives away the cancellation between locations. It usually lies below the block's quantile when
+:math:`\alpha` is below the median and above it when :math:`\alpha` is above, as in nearly every
+block of scenario :ref:`S10 <scenario-S10>`.
+
 Fitting the local laws
 ======================
 
@@ -80,3 +92,5 @@ and the widening are set by :class:`~spatialize.empirical.FittedModelFactory`, w
 (``"gamma"``, ``"skew_normal"``, or ``"auto"``, which takes Gamma laws when the members are
 non-negative) and ``widening_knn`` the number :math:`k` of nearest data the
 target :math:`\tau^2` is read from (:doc:`../reference/ess`, :doc:`../reference/empirical`).
+:func:`~spatialize.gs.ess.widen_members` widens the members of an ESI estimation member by member,
+with the same laws.

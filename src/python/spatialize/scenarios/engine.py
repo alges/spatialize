@@ -2152,6 +2152,130 @@ def eval_granularity(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_quantile_choice(sc: Scenario, runner: Runner, mode: str, seed: int,
+                         save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``quantile_choice``: the quantile an asymmetric loss chooses, at a location and over a
+    block (S10).
+
+    On each pinned field the members of ``estimator``, widened member by member (the runner's optional
+    method ``widened_members``, family ``data.widening``), give the law at each location of the grid, and
+    their averages over blocks of ``data.block`` × ``data.block`` cells, column by column, the law of
+    each block average. The loss of reporting :math:`\hat z` for the truth :math:`z`, when
+    over-estimation costs :math:`c` times under-estimation, is :math:`c(\hat z - z)` above the truth and
+    :math:`z - \hat z` below, minimised in expectation by the quantile at level :math:`1/(1 + c)`.
+    Kinds (key ``kind``):
+
+    - ``optimal_level`` (paired-relation) — the level, on a grid of step ``data.level_step``, whose
+      quantile map minimises the mean realised loss over the grid at cost ``cost``, compared with that
+      at ``against_cost`` in the direction ``better``;
+    - ``optimal_level_near`` (equivalence) — that level lies within ``margin`` of :math:`1/(1 + c)`;
+    - ``block_gap`` (paired-relation) — the quantile at ``level`` of the block's law, against the
+      average over the block of its locations' quantiles at that level, averaged over the blocks, in
+      the direction ``better``;
+    - ``block_loss`` (paired-relation) — the mean realised loss, against the true block averages at the
+      cost :math:`(1 - \text{level})/\text{level}`, of the block's quantile is lower than that of the
+      averaged quantiles.
+
+    Reads ``data.grid``, ``data.block``, ``data.level_step``, ``data.widening``, ``data.fields`` (per
+    mode) and ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m, b = int(d["grid"]), int(d["block"])
+    queries = generators.grid(m).astype(np.float32)
+    step = float(d["level_step"])
+    levels = np.arange(step, 1.0 - step / 2, step)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache, optimum = {}, {}
+
+    def loss(zhat, z, c):
+        e = zhat - z
+        return float(np.nanmean(np.where(e > 0, c * e, -e)))
+
+    def blocks(x):
+        x = np.asarray(x, float)
+        x = x.reshape(x.shape[:-1] + (m // b, b, m // b, b))
+        return x.mean(axis=(-3, -1)).reshape(x.shape[:-4] + (-1,))
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            w = np.asarray(runner.widened_members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                                  seed=_sub_seed(seed, k), widening=d.get("widening", "auto")), float)
+            with np.errstate(all="ignore"):
+                cache[(eid, k)] = (w, np.nanquantile(w, levels, axis=1), f["truth"].astype(float))
+        return cache[(eid, k)]
+
+    def best_level(eid, k, c):
+        if (eid, k, c) not in optimum:
+            _, q, truth = read(eid, k)
+            optimum[(eid, k, c)] = float(levels[int(np.argmin([loss(q[i], truth, c) for i in range(len(levels))]))])
+        return optimum[(eid, k, c)]
+
+    def block_readings(eid, k, level):
+        w, _, truth = read(eid, k)
+        with np.errstate(all="ignore"):
+            block = np.nanquantile(blocks(w.T), level, axis=0)
+            averaged = blocks(np.nanquantile(w, level, axis=1))
+        return block, averaged, blocks(truth)
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est) or not hasattr(runner, "widened_members"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no widened members for {est.encoder}/{est.decoder}"))
+            continue
+        if kind == "optimal_level":
+            a = [best_level(est.id, k, float(check["cost"])) for k in range(K)]
+            bb = [best_level(est.id, k, float(check["against_cost"])) for k in range(K)]
+            r = families.paired_relation(a, bb, better=check["better"])
+        elif kind == "optimal_level_near":
+            c, margin = float(check["cost"]), float(check["margin"])
+            r = families.tost_mean([best_level(est.id, k, c) - 1.0 / (1.0 + c) for k in range(K)], -margin, margin)
+        elif kind in ("block_gap", "block_loss"):
+            level = float(check["level"])
+            a, bb = [], []
+            for k in range(K):
+                block, averaged, true_block = block_readings(est.id, k, level)
+                if kind == "block_gap":
+                    a.append(float(np.nanmean(block)))
+                    bb.append(float(np.nanmean(averaged)))
+                else:
+                    c = (1.0 - level) / level
+                    a.append(loss(block, true_block, c))
+                    bb.append(loss(averaged, true_block, c))
+            r = families.paired_relation(a, bb, better=check.get("better", "less"))
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels, nb = [], m // b
+        for (eid, k) in sorted(cache, key=lambda key: key[1]):
+            e = ests[eid]
+            recipe = f"{e.encoder} rate {e.rate:g}, {e.decoder}, widened"
+            w, q, truth = read(eid, k)
+            block, averaged, true_block = block_readings(eid, k, 1.0 / 6.0)
+            lo, hi = float(np.min(truth)), float(np.max(truth))
+            blo, bhi = float(np.nanmin([block.min(), averaged.min(), true_block.min()])), float(np.nanmax([block.max(), averaged.max(), true_block.max()]))
+            i6 = int(np.argmin(np.abs(levels - 1.0 / 6.0)))
+            panels.append([
+                {"title": "truth", "z": truth.reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"},
+                {"title": f"{recipe}\nquantile 1/6", "z": q[i6].reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"},
+                {"title": "true block averages", "z": true_block.reshape(nb, nb), "vmin": blo, "vmax": bhi, "cmap": "coolwarm"},
+                {"title": f"{recipe}\nblock law, quantile 1/6", "z": block.reshape(nb, nb), "vmin": blo, "vmax": bhi, "cmap": "coolwarm"},
+                {"title": f"{recipe}\naveraged quantiles 1/6", "z": averaged.reshape(nb, nb), "vmin": blo, "vmax": bhi, "cmap": "coolwarm"},
+            ])
+        save_field_panels(save_maps, sc.id, "block_quantiles", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2277,7 +2401,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

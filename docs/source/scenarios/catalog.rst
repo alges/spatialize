@@ -169,9 +169,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - ready · priority 7
      - preferential-design generator; classification rule
    * - :ref:`S10 <scenario-S10>`
-     - optimal quantile levels
-     - ready · priority 6
-     - loss-optimal quantile readings
+     - the quantile an asymmetric loss chooses, at a location and over a block
+     - **implemented**
+     - two known failures, the optimal level against :math:`1/(1 + c)`
    * - :ref:`S11 <scenario-S11>`
      - granularity and covariance
      - **implemented**

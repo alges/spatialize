@@ -44,6 +44,12 @@ New
   ``functionals.Expectile`` and ``functionals.ExpectedShortfall`` (the mean beyond the value at risk,
   either tail) are new readings of their own, and ``scoring.asymmetric_loss`` charges the same
   loss in cross-validation, so a search chooses the ensemble the use prefers.
+- **Widened members keeping their index.** :func:`~spatialize.gs.ess.widen_members` widens the members
+  of an ESI estimation member by member, with the laws of the widening of ``ess_sample``, each member
+  keeping its column. The members' dependence between locations survives, so the law of a block
+  average, read from the widened members column by column, keeps the cancellation between locations
+  that the average of the locations' quantiles gives away (:doc:`theory/ess`, scenario
+  :ref:`S10 <scenario-S10>`).
 - **The Maipo precipitation as a data set.** :func:`~spatialize.data.load_precipitation_maipo` gives
   the daily precipitation of 69 rain gauges of the Maipo basin, central Chile, on three days of July
   2018, with the 2 km cells of the basin, the data of

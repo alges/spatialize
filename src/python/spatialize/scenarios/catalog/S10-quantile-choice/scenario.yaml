@@ -1,0 +1,107 @@
+id: S10-quantile-choice
+version: 1
+tier: T3
+evaluator: quantile_choice
+book:
+  topic: "the functional an asymmetric loss chooses: the quantile at level 1/(1 + c), and the law of a block average against the average of the per-location quantiles"
+  draft_2026_10: "§12.3.9, eqs (12.3.51)–(12.3.54), (12.3.65)–(12.3.68), Figs 12.9 and 12.10"   # the book is a draft
+purpose: >
+  When over-estimation costs c times under-estimation, the law is read at its quantile of level
+  1/(1 + c). Read against the truth, the level that minimises the realised loss falls as c grows. A figure
+  for a block comes from the law of the block average, the widened members averaged over the block draw by
+  draw. Averaging the per-location quantiles instead, the comonotone reading, understates the block's
+  quantile below the median and overstates it above, at a higher realised loss.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 40
+  marks: {centred_lognormal: [0.0, 0.9]}   # LN(0, 0.9²) minus the sample mean of the field's marks
+data:
+  design: {type: uniform, n: 300}
+  grid: 40
+  mode: pinned
+  fields: {ci: 12, full: 24}
+  block: 4                          # blocks of 4×4 grid cells, 100 blocks
+  level_step: 0.01                  # levels 0.01, 0.02, ..., 0.99 for the optimal level
+  widening: auto                    # skew-normal on these centred marks
+  generator_seed: 20261024
+estimators_T: {ci: 300, full: 300}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: level-falls-5
+    title: "the optimal level is lower when over-estimation costs 5 times under-estimation than at equal costs"
+    kind: optimal_level
+    family: paired-relation
+    estimator: idw
+    cost: 5.0
+    against_cost: 1.0
+    better: less
+  - id: level-falls-1
+    title: "the optimal level is lower at equal costs than when over-estimation costs a fifth of under-estimation"
+    kind: optimal_level
+    family: paired-relation
+    estimator: idw
+    cost: 1.0
+    against_cost: 0.2
+    better: less
+  - id: level-near-5
+    title: "at c = 5 the optimal level lies within 0.05 of 1/(1 + c) = 1/6"
+    kind: optimal_level_near
+    family: equivalence
+    estimator: idw
+    cost: 5.0
+    margin: 0.05
+    known_failure: "the widened laws are too wide in their tails on this field: the optimal level is about 0.31 (October 2026)"
+  - id: level-near-0.2
+    title: "at c = 1/5 the optimal level lies within 0.05 of 1/(1 + c) = 5/6"
+    kind: optimal_level_near
+    family: equivalence
+    estimator: idw
+    cost: 0.2
+    margin: 0.05
+    known_failure: "the widened laws are too wide in their tails on this field: the optimal level is about 0.76 (October 2026)"
+  - id: block-gap-low
+    title: "at level 1/6 the block's quantile exceeds the average of its locations' quantiles"
+    kind: block_gap
+    family: paired-relation
+    estimator: idw
+    level: 0.1666667
+    better: greater
+  - id: block-gap-high
+    title: "at level 0.9 the block's quantile lies below the average of its locations' quantiles"
+    kind: block_gap
+    family: paired-relation
+    estimator: idw
+    level: 0.9
+    better: less
+  - id: block-loss-low
+    title: "at c = 5 the block's quantile incurs a lower loss against the true block averages than the averaged quantiles"
+    kind: block_loss
+    family: paired-relation
+    estimator: idw
+    level: 0.1666667
+  - id: block-loss-high
+    title: "at level 0.9 the block's quantile incurs a lower loss against the true block averages than the averaged quantiles"
+    kind: block_loss
+    family: paired-relation
+    estimator: idw
+    level: 0.9
+provenance:
+  v1: >
+    2026-10-24: first version. The specification read the levels on the raw members. A study on 12 fields
+    found the claims of the specification there (the optimal level falling with the cost by 2.1 and 1.0
+    standard deviations per field, the block gap of the right sign at 1/6 and 0.9) but small gaps (0.06 and
+    -0.09) and the book's loss result reversed (block 0.55 against averaged 0.47 at c = 5): the raw members
+    are under-dispersed. The book reads the widened members draw by draw, while the library's widening
+    resampled each location's draws, losing the member index. User decision: add to the library a widening
+    member by member keeping the index (spatialize.gs.ess.widen_members) and read S10 on it, adding the loss
+    check of the book and a check of the optimal level against 1/(1 + c). Study through the library, 12
+    fields: optimal levels 0.756, 0.515 and 0.312 at c = 1/5, 1 and 5 (falls of 13.9 and 12.6 standard
+    deviations); gaps +0.52 at 1/6 and -0.71 at 0.9, of the right sign in 99.8 % of the blocks (5.3 and
+    5.1 standard deviations); loss of the averaged reading above that of the block law by 0.35 at c = 5
+    (4.4) and 0.035 at level 0.9 (2.8). The optimal level sits 0.145 above 1/6 at c = 5 and 0.078 below
+    5/6 at c = 1/5, with standard deviations near 0.02, so the two checks against 1/(1 + c) are registered
+    as known failures (user decision). Sizes for the strictest Holm level of eight checks (1.25e-4) with power 0.9 on 2.8
+    standard deviations: K = ((3.66 + 1.28) / 2.8)^2 = 3.1, so 12 fields in ci and 24 in full, keeping
+    the t-test's degrees of freedom.

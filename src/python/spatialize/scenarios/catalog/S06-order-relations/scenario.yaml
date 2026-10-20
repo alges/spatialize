@@ -1,0 +1,57 @@
+id: S06-order-relations
+version: 1
+tier: T3
+evaluator: order_relations
+book:
+  topic: "coherence of the marginals on a non-stationary field: the ensemble's law against indicator kriging"
+  draft_2026_10: "§12.3.5, eqs (12.3.33)–(12.3.36), Fig 12.4"   # the book is a draft
+purpose: >
+  On a field whose mark law changes across the domain, Gaussian on the left half and lognormal on the right,
+  the law the ensemble estimates is a distribution function at every location: read at five thresholds it
+  lies within [0, 1] and never decreases. Indicator kriging, which krigs each threshold's indicator with its
+  own fitted variogram and nothing coupling them, breaks these order relations.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 60
+  marks: {by_half: {left: {gaussian: [0.0, 0.5]}, right: {lognormal: [0.0, 1.1]}, centred: true}}
+data:
+  design: {type: uniform, n: 400}
+  grid: 40
+  mode: pinned
+  fields: {ci: 6, full: 12}
+  threshold_quantiles: [0.1, 0.3, 0.5, 0.7, 0.9]   # thresholds at these quantiles of the data
+  tolerance: 1.0e-9
+  generator_seed: 20261029
+estimators_T: {ci: 300, full: 300}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: empirical
+    title: "the empirical law of the members is a distribution function at every location"
+    kind: law
+    family: almost-sure
+    estimator: idw
+    reading: empirical
+  - id: kde-skew-normal
+    title: "the kernel density law widened with skew-normal components is a distribution function at every location"
+    kind: law
+    family: almost-sure
+    estimator: idw
+    reading: kde-skew_normal
+  - id: indicator-kriging
+    title: "negative control: indicator kriging breaks the order relations"
+    kind: indicator_kriging
+    family: almost-sure
+    expect: {default: reject}
+provenance:
+  v1: >
+    2026-10-20: first version. The indicator-kriging baseline fits an exponential variogram to each
+    threshold's indicator by a rule fixed before the first run (fields.fit_exponential_variogram: 15 distance
+    classes up to 0.5, least squares weighted by the pairs, a grid of ranges and nugget shares). Study on
+    10 fields: indicator kriging fails to increase with the threshold at 73 % of the grid (the book: 55 %) and
+    leaves [0, 1] at 55 % (the book: 42 %); the ensemble's law had no violation, read empirically or as the
+    widened kernel density. The book finds the failures concentrated on the volatile half (78 % against 32.5
+    %); here the halves fail alike (73 % each), the indicators carrying the order of the values and not their
+    spread, so no check reads the halves. The checks are almost sure; the widened reading costs about 11 s per
+    field, so 6 fields in ci and 12 in full.

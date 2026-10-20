@@ -2646,6 +2646,90 @@ def eval_heavy_tail(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_order_relations(sc: Scenario, runner: Runner, mode: str, seed: int,
+                         save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``order_relations``: the estimated law read at a few thresholds on a non-stationary field,
+    against indicator kriging (S06).
+
+    On each pinned field the thresholds are the data's quantiles of levels ``data.threshold_quantiles``. A
+    location violates the order relations when its estimated cumulative distribution function, read at the
+    thresholds, decreases from one threshold to the next or leaves [0, 1], by more than ``data.tolerance``.
+    Kinds (key ``kind``):
+
+    - ``law`` (almost-sure) — the reading ``reading`` of the law of ``estimator`` (the runner's optional
+      method ``law_cdf``) violates the order relations at no location;
+    - ``indicator_kriging`` (almost-sure, a negative control) — the same count for indicator kriging
+      (:func:`~spatialize.scenarios.generators.fields.indicator_kriging`), which must reject.
+
+    Reads ``data.grid``, ``data.threshold_quantiles``, ``data.tolerance``, ``data.fields`` (per mode) and
+    ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    tol = float(d["tolerance"])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def violations(F):
+        F = np.asarray(F, float)
+        return np.any(np.diff(F, axis=1) < -tol, axis=1) | np.any((F < -tol) | (F > 1 + tol), axis=1)
+
+    def read(key, k):
+        if (key, k) not in cache:
+            f = sc.field(k)
+            th = np.quantile(f["values"].astype(float), [float(x) for x in d["threshold_quantiles"]])
+            if key == "indicator_kriging":
+                F = generators.fields.indicator_kriging(f["samples"], f["values"], queries, th)
+            else:
+                eid, reading = key
+                F = runner.law_cdf(ests[eid], f["samples"], f["values"], queries, th, reading=reading,
+                                   n_members=T, seed=_sub_seed(seed, k))
+            cache[(key, k)] = (violations(F), f["truth"].astype(float))
+        return cache[(key, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        cid, title = check["id"], check["title"]
+        if kind == "law":
+            est = ests[check["estimator"]]
+            if not runner.supports(est) or not hasattr(runner, "law_cdf"):
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} gives no law readings for {est.encoder}/{est.decoder}"))
+                continue
+            key = (est.id, check["reading"])
+        elif kind == "indicator_kriging":
+            key = "indicator_kriging"
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        bad = sum(int(read(key, k)[0].sum()) for k in range(K))
+        r = families.almost_sure(bad, K * m * m)
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for k in sorted({key[1] for key in cache}):
+            row = []
+            for (key, kk), (bad, truth) in cache.items():
+                if kk != k:
+                    continue
+                if not row:
+                    row.append({"title": "truth", "z": truth.reshape(m, m), "cmap": "viridis",
+                                "vmin": float(np.quantile(truth, 0.02)), "vmax": float(np.quantile(truth, 0.98))})
+                name = ("indicator kriging, fitted variograms" if key == "indicator_kriging"
+                        else f"{ests[key[0]].encoder} rate {ests[key[0]].rate:g}, {ests[key[0]].decoder}, {key[1]}")
+                row.append({"title": f"{name}\norder relations broken", "z": bad.reshape(m, m).astype(float),
+                            "vmin": 0, "vmax": 1, "cmap": "Greys"})
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "order_relations", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2771,7 +2855,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "order_relations": eval_order_relations, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

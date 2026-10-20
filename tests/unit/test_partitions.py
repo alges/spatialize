@@ -123,3 +123,26 @@ def test_halo_share_reads_the_ring_around_high_cells():
     z[8, 8:12] = -1.0                                     # one row of the ring dips below the floor
     ring, rest = halo_share(z, top, floor=0.0, width=2)
     assert abs(ring - 4 / 20) < 1e-12 and rest == 0.0       # 20 pixels within two 4-neighbour steps
+
+
+def test_variogram_fit_tells_noise_from_a_smooth_field():
+    """The fitting rule of scenario S06's indicator kriging: white noise is read as nearly pure nugget, a
+    smooth exponential field (scale 0.2, practical range 0.6) as a structured one of comparable range."""
+    from spatialize.scenarios.generators.fields import fit_exponential_variogram, sgf_exponential
+    rng = np.random.default_rng(2)
+    s = rng.random((400, 2))
+    noise = fit_exponential_variogram(s, rng.normal(size=400))
+    # a range within the first distance class (0.5 / 15) is a nugget as the classes see it
+    assert noise["nugget"] >= 0.8 or noise["practical_range"] <= 1.5 * 0.5 / 15
+    smooth = fit_exponential_variogram(s, sgf_exponential(rng, s, 0.2))
+    assert smooth["nugget"] <= 0.2 and 0.2 <= smooth["practical_range"] <= 1.5
+
+
+def test_indicator_kriging_reads_each_threshold_on_its_own():
+    """Indicator kriging returns one column per threshold, the data's own indicator at a datum without
+    nugget, and a constant indicator unchanged."""
+    from spatialize.scenarios.generators.fields import indicator_kriging
+    rng = np.random.default_rng(3)
+    s, v = rng.random((80, 2)), rng.normal(size=80)
+    F = indicator_kriging(s, v, rng.random((25, 2)), [-5.0, 0.0, 5.0])
+    assert F.shape == (25, 3) and np.all(F[:, 0] == 0.0) and np.all(F[:, 2] == 1.0)

@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -340,6 +340,23 @@ range of the data and the top decile, against global ordinary kriging, over pinn
   - ``leaves_range`` (one-sided);
   - ``top_decile`` (one-sided);
   - ``halo`` and ``halo_local`` (one-sided and paired relation, V7), on the baseline.
+
+Evaluator ``order_relations``
+-----------------------------
+
+This evaluator reads the estimated law at a few thresholds on a non-stationary field, against
+indicator kriging, over pinned replicate fields (scenario S06). Its check ``law`` needs the runner's
+optional method ``law_cdf`` (:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``), with ``marks: {by_half: {left, right,
+  centred}}``, a mark law for the cells whose nucleus lies in each half of the domain, each half
+  centred on its own when ``centred`` is true.
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``threshold_quantiles``
+  (the data's quantiles used as thresholds), ``tolerance`` and ``generator_seed``.
+- per check, ``kind``:
+
+  - ``law`` (almost sure), ``estimator`` and ``reading``, a reading of ``law_cdf``;
+  - ``indicator_kriging`` (almost sure, a negative control with ``expect: {default: reject}``).
 
 Evaluator ``edge_cases``
 ------------------------

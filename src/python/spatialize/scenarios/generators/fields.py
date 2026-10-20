@@ -110,6 +110,90 @@ def ordinary_kriging_exponential(samples, values, queries, practical_range, nugg
     return np.linalg.solve(lhs, rhs)[:n].T @ np.asarray(values, float)
 
 
+def fit_exponential_variogram(samples, values, n_lags=15, max_lag=0.5):
+    r"""Fit an isotropic exponential variogram to data, by a rule fixed in advance.
+
+    The experimental semivariogram is read in ``n_lags`` distance classes of equal width up to
+    ``max_lag``. The model :math:`\gamma(h) = C\,[s + (1 - s)(1 - e^{-3h/r})]` is fitted by least squares
+    weighted by the number of pairs in each class, over a grid of 60 practical ranges :math:`r` from 0.02
+    to 1.5 (geometric) and 20 nugget shares :math:`s` from 0 to 0.95, the sill :math:`C` in closed form for
+    each. This is the classical baseline's fitting, used where the theory compares the ensemble with
+    kriging on a fitted variogram (scenario S06).
+
+    Parameters
+    ----------
+    samples : ndarray of shape (n, 2)
+        Data locations.
+    values : ndarray of shape (n,)
+        Data values.
+    n_lags : int, default 15
+        Number of distance classes.
+    max_lag : float, default 0.5
+        Largest distance read.
+
+    Returns
+    -------
+    dict
+        ``practical_range``, ``nugget`` (a share of the sill) and ``sill``.
+    """
+    s = np.asarray(samples, float)
+    v = np.asarray(values, float)
+    i, j = np.triu_indices(len(s), k=1)
+    h = np.linalg.norm(s[i] - s[j], axis=1)
+    g = 0.5 * (v[i] - v[j]) ** 2
+    edges = np.linspace(0.0, float(max_lag), int(n_lags) + 1)
+    which = np.digitize(h, edges) - 1
+    keep = (which >= 0) & (which < n_lags)
+    count = np.bincount(which[keep], minlength=n_lags).astype(float)
+    total = np.bincount(which[keep], weights=g[keep], minlength=n_lags)
+    lag = np.bincount(which[keep], weights=h[keep], minlength=n_lags)
+    ok = count > 0
+    gamma, lag, w = total[ok] / count[ok], lag[ok] / count[ok], count[ok]
+    best = (np.inf, None)
+    for r in np.geomspace(0.02, 1.5, 60):
+        for share in np.linspace(0.0, 0.95, 20):
+            shape = share + (1.0 - share) * (1.0 - np.exp(-3.0 * lag / r))
+            denom = np.sum(w * shape ** 2)
+            sill = np.sum(w * gamma * shape) / denom if denom > 0 else 0.0
+            err = np.sum(w * (gamma - sill * shape) ** 2)
+            if err < best[0]:
+                best = (err, dict(practical_range=float(r), nugget=float(share), sill=float(max(sill, 0.0))))
+    return best[1]
+
+
+def indicator_kriging(samples, values, queries, thresholds, **fit):
+    """Indicator kriging: at each threshold, the ordinary kriging of the indicator of the data at or below
+    it, under the exponential variogram :func:`fit_exponential_variogram` fits to that indicator.
+
+    Each threshold has its own system and variogram, nothing coupling them, so the estimates need not
+    increase with the threshold nor stay within [0, 1] (scenario S06's negative control).
+
+    Parameters
+    ----------
+    samples, values, queries : ndarray
+        Data locations, data values and prediction locations.
+    thresholds : array_like of shape (k,)
+        Increasing thresholds.
+    **fit
+        Passed to :func:`fit_exponential_variogram`.
+
+    Returns
+    -------
+    ndarray of shape (q, k)
+        The estimated cumulative distribution function at each query and threshold.
+    """
+    v = np.asarray(values, float)
+    out = []
+    for t in np.asarray(thresholds, float):
+        ind = (v <= t).astype(float)
+        if ind.min() == ind.max():
+            out.append(np.full(len(queries), ind[0]))
+            continue
+        model = fit_exponential_variogram(samples, ind, **fit)
+        out.append(ordinary_kriging_exponential(samples, ind, queries, model["practical_range"], model["nugget"]))
+    return np.stack(out, axis=1)
+
+
 def block_kriging_variance_exponential(samples, block_points, practical_range, nugget=0.0):
     r"""Ordinary-kriging variance of block averages under an isotropic exponential variogram of unit sill.
 
@@ -230,7 +314,7 @@ def simple_kriging_exponential(samples, values, queries, a1, a2=None, theta_deg=
     return cov(np.asarray(queries, float), s) @ np.linalg.solve(c_ss, np.asarray(values, float))
 
 
-def vbm(rng, n_cells, mark_sampler, dim=2):
+def vbm(rng, n_cells, mark_sampler, dim=2, positional=False):
     """Voronoi block-mark field: one mark per cell of a Voronoi tessellation.
 
     Parameters
@@ -243,6 +327,9 @@ def vbm(rng, n_cells, mark_sampler, dim=2):
         ``mark_sampler(rng, n)`` returns ``n`` marks, e.g. ``lambda r, n: r.lognormal(0, 1, n)``.
     dim : int, default 2
         Dimension.
+    positional : bool, default False
+        Call ``mark_sampler(rng, centres)`` with the nuclei instead, for a mark law that changes across
+        the domain.
 
     Returns
     -------
@@ -250,7 +337,7 @@ def vbm(rng, n_cells, mark_sampler, dim=2):
         ``field(x)``: the mark of the nearest nucleus for each row of ``x``.
     """
     centres = rng.random((n_cells, dim))
-    marks = mark_sampler(rng, n_cells)
+    marks = mark_sampler(rng, centres) if positional else mark_sampler(rng, n_cells)
 
     def field(x):
         d = ((np.asarray(x)[:, None, :] - centres[None, :, :]) ** 2).sum(axis=2)

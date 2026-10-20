@@ -153,9 +153,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented**
      - —
    * - :ref:`S06 <scenario-S06>`
-     - non-stationary field, order relations of the estimated law
-     - partly ready · priority 10
-     - indicator-kriging baseline (negative control), writable in NumPy
+     - non-stationary field, order relations of the estimated law against indicator kriging
+     - **implemented**
+     - —
    * - :ref:`S07 <scenario-S07>`
      - the area above a limit, read from the members and from simulated fields
      - **implemented**

@@ -94,6 +94,22 @@ def _marks(spec):
     if "lognormal" in spec:
         mu, sd = spec["lognormal"]
         return lambda r, n: r.lognormal(mu, sd, n)
+    if "by_half" in spec:
+        halves = spec["by_half"]
+        left, right = _marks(halves["left"]), _marks(halves["right"])
+
+        def by_half(r, centres):
+            is_left = centres[:, 0] < 0.5
+            marks = np.empty(len(centres))
+            marks[is_left] = left(r, int(is_left.sum()))
+            marks[~is_left] = right(r, int((~is_left).sum()))
+            if halves.get("centred", False):
+                for side in (is_left, ~is_left):
+                    if side.any():
+                        marks[side] -= marks[side].mean()
+            return marks
+        by_half.positional = True
+        return by_half
     if "pareto" in spec:
         x_min, index = spec["pareto"]
         return lambda r, n: float(x_min) * (1.0 + r.pareto(float(index), n))   # Pareto type I
@@ -150,7 +166,8 @@ def _vbm_fields(sc):
     os.makedirs(sc.file("data"), exist_ok=True)
     written = []
     for k in range(_n_fields(d)):
-        z = fields.vbm(rng, int(t["n_cells"]), _marks(t["marks"]))
+        sampler = _marks(t["marks"])
+        z = fields.vbm(rng, int(t["n_cells"]), sampler, positional=getattr(sampler, "positional", False))
         samples = _design(rng, d["design"])
         _save(sc, k, {"samples": samples.astype(np.float32), "values": z(samples).astype(np.float32),
                       "truth": z(grid).astype(np.float32)}, written)

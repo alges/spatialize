@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S05, S07, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01 to S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S06**, order relations in a non-stationary field. P4 already covers the ensemble's side, the
-   negative control awaits an indicator-kriging baseline.
 #. **S13**, connectivity. A new generator, a new functional and simulated fields.
 
 .. _scenario-S01:
@@ -734,27 +732,41 @@ rounding of a weighted average in single precision, so the check of the data ran
 S06 — Order relations in a non-stationary field
 ===============================================
 
-:Status: partly ready (not yet implemented)
-:Priority: 10 of 11 among the pending scenarios
-:Source in the theory: worked example of a field whose law changes across the domain
-:Claim: the law estimated by the ensemble stays a proper distribution everywhere, with no order-relation violations, which indicator kriging cannot guarantee.
+:Status: **implemented**
+:Evaluator: ``order_relations``
+:Source in the theory: the coherence of the marginals on a field whose law changes across the domain
+:Claim: the law estimated by the ensemble is a distribution function at every location, read at a few
+  thresholds. Indicator kriging, which krigs each threshold's indicator with its own fitted variogram,
+  breaks these order relations.
 
-**Setup.** The truth is a Voronoi block-mark field with 60 cells, its marks Gaussian (sd 0.5) on the left half and lognormal (log-sd 1.1) on the right half. Each replicate field has 400 uniformly placed data, with queries on a 40×40 grid and five thresholds. Mondrian ensemble estimators are compared with an indicator-kriging baseline.
+**Setup.** The truth is a Voronoi block-mark field with 60 cells, its marks drawn from a normal law of
+standard deviation 0.5 for the cells whose nucleus lies in the left half and from a lognormal law of
+log-scale 1.1 in the right half, each half centred on its own. Each pinned replicate field holds 400
+uniformly placed data, with the field on a 40×40 grid. The thresholds are the data's 10 %, 30 %, 50 %,
+70 % and 90 % quantiles. Mondrian IDW (exponent 2, rate 5, :math:`T = 300`, ``empty_cells="coarsen"``)
+gives the members, whose law is read through the runner's ``law_cdf``, empirically and as a kernel
+density widened with skew-normal components. The baseline is indicator kriging
+(:func:`~spatialize.scenarios.generators.fields.indicator_kriging`), the ordinary kriging of each
+threshold's indicator under an exponential variogram fitted to that indicator by a rule fixed in advance
+(:func:`~spatialize.scenarios.generators.fields.fit_exponential_variogram`). A location breaks the order
+relations when its estimates decrease from one threshold to the next or leave [0, 1]. The scenario uses
+6 fields in ``ci`` and 12 in ``full``.
 
 **Checks.**
 
-- *almost-sure*. The ensemble's estimated law shows no order-relation violation and no negative probability.
-- *negative control*. The indicator-kriging baseline does show violations.
+- ``empirical``, *almost-sure*. The empirical law of the members breaks the order relations at no
+  location.
+- ``kde-skew-normal``, *almost-sure*. The same for the widened kernel density.
+- ``indicator-kriging``, *almost-sure*, negative control. Indicator kriging breaks them, which the test
+  must reject.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` the three checks pass. Both readings of the ensemble's law keep
+the order relations at all 9600 locations, while indicator kriging breaks them at 7654, 80 % of them. A
+run takes about 70 s.
 
-- A mark sampler that depends on the nucleus's position, Gaussian on the left half and lognormal on
-  the right, with pinned replicate fields.
-- The ensemble's check, reading the law at five thresholds through the runner's ``law_cdf``. P4
-  already decides this property on a stationary field, so S06 adds the non-stationary case.
-- For the negative control, an indicator-kriging baseline, the ordinary kriging of each threshold's
-  indicator. It can be written in NumPy as for S05, with the violations of the order relations
-  counted at each location.
+**History.** The theory finds the failures of indicator kriging concentrated on the volatile half of
+such a field. A study on 10 fields found them spread alike over both halves, 73 % of the grid in each,
+since the indicators carry the order of the values and not their spread, so no check reads the halves.
 
 .. _scenario-S07:
 

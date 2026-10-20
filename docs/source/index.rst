@@ -104,7 +104,6 @@ If you use Spatialize in your research, please cite:
    :hidden:
 
    theory/index
-   scenarios/index
    reference/index
    development/index
    troubleshooting

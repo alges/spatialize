@@ -27,3 +27,19 @@ ends with a pointer to the functions that implement it.
 
 The pages build on one another in that order. A reader in a hurry can read the second, then the
 pages on encoders and decoders, which hold the practical advice.
+
+Conformance tests
+=================
+
+The theory states what the estimators must do, from the law of the random partitions to the
+behaviour of a complete estimator on a field whose truth is known. Spatialize checks these statements
+on itself with a public suite of conformance tests. Each test sets up a situation, decides a criterion
+registered before its first run with a statistical test of stated level and power, and runs again on
+every change. The catalogue lists every claim tested, the part of the theory it comes from and its
+result, the known failures included, so a reader can see which statements of these pages hold in
+Spatialize as it stands.
+
+.. toctree::
+   :maxdepth: 2
+
+   ../scenarios/index

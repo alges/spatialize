@@ -2276,6 +2276,118 @@ def eval_quantile_choice(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_confidence_classes(sc: Scenario, runner: Runner, mode: str, seed: int,
+                            save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``confidence_classes``: blocks classified by the confidence their law gives, against the
+    kriging variance (S09).
+
+    On each pinned field the members of ``estimator``, widened member by member (the runner's optional
+    method ``widened_members``, family ``data.widening``), averaged over blocks of ``data.block`` ×
+    ``data.block`` cells column by column, give the law of each block average. Its relative half-width
+    :math:`h_B = (q_{0.95} - q_{0.05}) / (2 q_{0.5})` puts the block in class 0 (well estimated) up to the
+    first of ``data.thresholds``, class 1 (moderately) up to the second, class 2 (poorly) beyond. A block's
+    error is :math:`|q_{0.5} - Z_B| / Z_B`, :math:`Z_B` the true block average, and a class's error the
+    median over its blocks. The proxy ranks the blocks by their ordinary-kriging variance under the
+    exponential variogram of ``data.proxy``
+    (:func:`~spatialize.scenarios.generators.fields.block_kriging_variance_exponential`), giving its classes
+    the law's counts. Kinds (key ``kind``):
+
+    - ``ordered`` (paired-relation) — the error of class ``better_class`` is lower than that of class
+      ``worse_class``, over the fields where both hold blocks;
+    - ``against_proxy`` (paired-relation) — the error of class 2 minus that of class 0 is greater for the
+      law's classes than for the proxy's.
+
+    Reads ``data.grid``, ``data.block``, ``data.thresholds``, ``data.widening``, ``data.proxy``,
+    ``data.fields`` (per mode) and ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m, b = int(d["grid"]), int(d["block"])
+    nb = m // b
+    queries = generators.grid(m)
+    iy, ix = np.divmod(np.arange(m * m), m)
+    block_of = (iy // b) * nb + ix // b
+    block_points = [queries[block_of == j] for j in range(nb * nb)]
+    low, high = (float(x) for x in d["thresholds"])
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def blocks(x):
+        x = np.asarray(x, float)
+        x = x.reshape(x.shape[:-1] + (nb, b, nb, b))
+        return x.mean(axis=(-3, -1)).reshape(x.shape[:-4] + (-1,))
+
+    def class_errors(classes, err):
+        return [float(np.median(err[classes == c])) if np.any(classes == c) else np.nan for c in range(3)]
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            w = np.asarray(runner.widened_members(ests[eid], f["samples"], f["values"], queries.astype(np.float32),
+                                                  n_members=T, seed=_sub_seed(seed, k),
+                                                  widening=d.get("widening", "auto")), float)
+            with np.errstate(all="ignore"):
+                q05, q50, q95 = np.nanquantile(blocks(w.T), [0.05, 0.5, 0.95], axis=0)
+                h = (q95 - q05) / (2.0 * q50)
+            truth = blocks(f["truth"].astype(float))
+            err = np.abs(q50 - truth) / np.abs(truth)
+            law = np.where(h <= low, 0, np.where(h <= high, 1, 2))
+            variance = generators.fields.block_kriging_variance_exponential(
+                f["samples"], block_points, float(d["proxy"]["practical_range"]), float(d["proxy"]["nugget"]))
+            order = np.argsort(variance, kind="stable")
+            proxy = np.empty_like(law)
+            n0, n1 = int((law == 0).sum()), int((law == 1).sum())
+            proxy[order[:n0]], proxy[order[n0:n0 + n1]], proxy[order[n0 + n1:]] = 0, 1, 2
+            cache[(eid, k)] = dict(h=h, err=err, law=law, proxy=proxy, variance=variance, truth=f["truth"],
+                                   law_errors=class_errors(law, err), proxy_errors=class_errors(proxy, err))
+        return cache[(eid, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est) or not hasattr(runner, "widened_members"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no widened members for {est.encoder}/{est.decoder}"))
+            continue
+        law = np.array([read(est.id, k)["law_errors"] for k in range(K)])
+        if kind == "ordered":
+            a, bb, better = law[:, int(check["better_class"])], law[:, int(check["worse_class"])], "less"
+        elif kind == "against_proxy":
+            proxy = np.array([read(est.id, k)["proxy_errors"] for k in range(K)])
+            a, bb, better = law[:, 2] - law[:, 0], proxy[:, 2] - proxy[:, 0], "greater"
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        keep = np.isfinite(a) & np.isfinite(bb)          # fields where the classes compared hold blocks
+        r = families.paired_relation(a[keep], bb[keep], better=better)
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for (eid, k) in sorted(cache, key=lambda key: key[1]):
+            e = ests[eid]
+            recipe = f"{e.encoder} rate {e.rate:g}, {e.decoder}, widened"
+            c = cache[(eid, k)]
+            truth = np.asarray(c["truth"], float)
+            panels.append([
+                {"title": "truth", "z": truth.reshape(m, m), "cmap": "viridis"},
+                {"title": f"{recipe}\nrelative half-width of the block law", "z": np.clip(c["h"], 0, 1).reshape(nb, nb),
+                 "vmin": 0, "vmax": 1, "cmap": "magma"},
+                {"title": "classes from the law\n(0 well, 1 moderately, 2 poorly)", "z": c["law"].reshape(nb, nb),
+                 "vmin": 0, "vmax": 2, "cmap": "cividis"},
+                {"title": "classes from the kriging variance\n(same counts)", "z": c["proxy"].reshape(nb, nb),
+                 "vmin": 0, "vmax": 2, "cmap": "cividis"},
+                {"title": "relative error of the block median", "z": np.clip(c["err"], 0, 0.5).reshape(nb, nb),
+                 "vmin": 0, "vmax": 0.5, "cmap": "magma"},
+            ])
+        save_field_panels(save_maps, sc.id, "confidence_classes", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2401,7 +2513,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

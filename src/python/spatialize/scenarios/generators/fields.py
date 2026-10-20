@@ -45,6 +45,75 @@ def uniform_design(rng, n, dim=2):
     return rng.random((n, dim))
 
 
+def preferential_design(rng, n_uniform, n_box, box, dim=2):
+    """A preferential design: ``n_uniform`` points uniform on the unit cube, then ``n_box`` more uniform
+    in the sub-box ``box``, as a survey sampled more densely where early results looked good.
+
+    Parameters
+    ----------
+    rng : numpy.random.Generator
+        Random generator.
+    n_uniform, n_box : int
+        Number of points over the whole cube and inside ``box``.
+    box : array_like of shape (dim, 2)
+        Lower and upper bounds of the preferred region along each coordinate.
+    dim : int, default 2
+        Dimension.
+
+    Returns
+    -------
+    ndarray of shape (n_uniform + n_box, dim)
+        The uniform points first.
+    """
+    box = np.asarray(box, float)
+    inner = box[:, 0] + (box[:, 1] - box[:, 0]) * rng.random((n_box, dim))
+    return np.vstack([rng.random((n_uniform, dim)), inner])
+
+
+def block_kriging_variance_exponential(samples, block_points, practical_range, nugget=0.0):
+    r"""Ordinary-kriging variance of block averages under an isotropic exponential variogram of unit sill.
+
+    The variogram is :math:`\gamma(h) = c_0 + (1 - c_0)(1 - e^{-3h/r})` for :math:`h > 0`, ``nugget``
+    :math:`c_0` and practical range :math:`r` (the convention of the kriging decoder). The variance
+    depends on the variogram and on the locations alone, never on the data values, which is the
+    property of the kriging-variance proxy for confidence that scenario S09 compares with the law.
+
+    Parameters
+    ----------
+    samples : ndarray of shape (n, 2)
+        Data locations.
+    block_points : list of ndarray of shape (p, 2)
+        The points discretising each block.
+    practical_range, nugget : float
+        Variogram parameters, the nugget as a share of the unit sill.
+
+    Returns
+    -------
+    ndarray of shape (len(block_points),)
+        :math:`\bar C(B, B) - \sum_i \lambda_i \bar C(v_i, B) - \mu` for each block.
+    """
+    s = np.asarray(samples, float)
+    n = len(s)
+    c1 = 1.0 - float(nugget)
+
+    def cov(p, q, same=False):
+        c = c1 * np.exp(-3.0 * np.linalg.norm(p[:, None, :] - q[None, :, :], axis=2) / float(practical_range))
+        if same:
+            np.fill_diagonal(c, 1.0)
+        return c
+    lhs = np.ones((n + 1, n + 1))
+    lhs[:n, :n] = cov(s, s, same=True)
+    lhs[n, n] = 0.0
+    rhs = np.ones((n + 1, len(block_points)))
+    within = np.empty(len(block_points))
+    for j, g in enumerate(block_points):
+        g = np.asarray(g, float)
+        rhs[:n, j] = cov(s, g).mean(axis=1)
+        within[j] = cov(g, g, same=True).mean()
+    sol = np.linalg.solve(lhs, rhs)
+    return within - (sol[:n] * rhs[:n]).sum(axis=0) - sol[n]
+
+
 def _aniso_matrix(a1, a2, theta_deg):
     t = np.deg2rad(theta_deg)
     rot = np.array([[np.cos(t), np.sin(t)], [-np.sin(t), np.cos(t)]])

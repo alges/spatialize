@@ -76,3 +76,19 @@ def test_mondrian_block_mark_generator_follows_the_theory():
     expected = np.exp(-rate * 0.19)
     assert abs(np.mean(same) - expected) < 4 * np.sqrt(expected * (1 - expected) / 4000)
     assert abs(np.mean(n_cells) - (1 + rate) ** 2) < 4 * np.std(n_cells) / np.sqrt(4000)
+
+
+def test_block_kriging_variance_follows_the_data_locations():
+    """The ordinary-kriging variance of scenario S09's proxy: zero for a point block on a datum without
+    nugget, at least the nugget there with one (the nugget acting as measurement error), growing away
+    from the data, beyond the sill far from them (the error of the estimated mean adds to it), and
+    smaller for a block than for one of its points."""
+    from spatialize.scenarios.generators.fields import block_kriging_variance_exponential as bkv
+    rng = np.random.default_rng(0)
+    s = rng.random((50, 2))
+    on_datum, near, far = s[:1], s[:1] + 0.01, np.array([[2.0, 2.0]])
+    v = bkv(s, [on_datum, near, far], practical_range=0.3)
+    assert abs(v[0]) < 1e-10 and 0 < v[1] < v[2] and v[2] > 1.0
+    assert bkv(s, [on_datum], practical_range=0.3, nugget=0.4)[0] >= 0.4
+    block = np.array([[0.5, 0.5], [0.52, 0.5], [0.5, 0.52], [0.52, 0.52]])
+    assert bkv(s, [block], 0.3)[0] < bkv(s, [block[:1]], 0.3)[0]

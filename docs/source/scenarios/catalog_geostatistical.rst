@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S08, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S09**, resource categories. A preferential-design generator and a classification rule fixed in
-   advance.
 #. **S07**, exceedance areas. Its coverage check is ready, its identity awaits a derivation.
 #. **S05**, a heavy-tailed field. Its main checks are ready, its comparison with kriging awaits a
    baseline.
@@ -799,29 +797,56 @@ counterpart.
 
 .. _scenario-S09:
 
-S09 — Resource categories under preferential sampling
-=====================================================
+S09 — Confidence classes under preferential sampling
+====================================================
 
-:Status: ready (not yet implemented)
-:Priority: 7 of 11 among the pending scenarios
-:Source in the theory: worked example of classifying estimates by confidence
-:Claim: categories assigned from the estimated law (measured, indicated, inferred) are ordered in error, measured blocks being estimated best.
+:Status: **implemented**
+:Evaluator: ``confidence_classes``
+:Source in the theory: classifying blocks by the confidence in their average, read from its law, and
+  the kriging variance, which depends on the data locations alone
+:Claim: classes read from the law of each block average are ordered in the error they commit, the
+  well estimated blocks erring least. Classes cut from the kriging variance with the same counts
+  separate the error less, since that variance follows the density of the data whatever their values.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 30 cells and lognormal marks (log-sd 0.8). A preferential design places 150 uniform data plus 150 in the central quarter, with the estimates on a 36×36 grid aggregated into 3×3 blocks. The estimator is Mondrian IDW.
+**Setup.** The truth is a Voronoi block-mark field with 30 cells and lognormal marks of log-scale 0.8.
+Each pinned replicate field holds 300 data, 150 uniformly placed and 150 more in the central square
+:math:`[0.25, 0.75]^2`, a quarter of the area holding half the data. The field lies on a 36×36 grid
+cut into 144 blocks of 3×3 cells. Mondrian IDW (exponent 2, rate 5, :math:`T = 300`,
+``empty_cells="coarsen"``) gives the members, widened member by member with Gamma laws
+(:func:`~spatialize.gs.ess.widen_members`). Their block averages, column by column, give the law of
+each block average. Its relative half-width :math:`h_B = (q_{0.95} - q_{0.05}) / (2 q_{0.5})` places a
+block among the well estimated up to 0.15, the moderately estimated up to 0.30 and the poorly
+estimated beyond. A block's error is :math:`|q_{0.5} - Z_B| / Z_B`, with :math:`Z_B` the true block
+average, a class's error the median over its blocks. The proxy ranks the blocks by their
+ordinary-kriging variance under an exponential variogram fixed in advance, with a practical range of
+0.183, the side of a square of the mean cell area, and a nugget of 0.4 of the sill
+(:func:`~spatialize.scenarios.generators.fields.block_kriging_variance_exponential`). Its classes
+receive the law's counts. The scenario uses 12 fields in ``ci`` and 24 in ``full``.
 
 **Checks.**
 
-- *paired-relation*. Over fields, the error of measured blocks is below that of indicated blocks, itself below that of inferred blocks.
+- ``well-below-moderate``, *paired-relation*. The well estimated blocks commit a lower error than
+  the moderately estimated ones.
+- ``moderate-below-poor``, *paired-relation*. The moderately estimated blocks commit a lower error
+  than the poorly estimated ones.
+- ``law-against-proxy``, *paired-relation*. The error of the poorly estimated class minus that of the
+  well estimated class is greater for the law's classes than for the proxy's.
 
-**To implement.**
+A field where a class holds no block drops out of the checks on that class.
 
-- A preferential-design generator in ``generators/fields.py``, generalising the design P9 draws
-  (150 uniform data plus 150 in the central quarter).
-- A classification rule from the estimated law, fixed before the first run. One choice is the
-  relative width of each 3×3 block's 90 % interval, below a first threshold for measured blocks and
-  below a second for indicated ones, the others being inferred.
-- The block aggregation of the members, each member's mean over the block's points, then the paired
-  relations of the block errors across the categories.
+**Results.** On seeds 1 and 2 in ``ci`` the three checks pass on all 12 fields. The error grows by
+0.05 from the well to the moderately estimated blocks and by 0.16 to 0.17 from the moderately to the
+poorly estimated ones. Across the law's classes it spreads more than across the proxy's, by 0.11 and
+0.13. In the maps the proxy's classes follow the dense centre of the design, while the law's classes do not.
+A run takes about 4 s.
+
+**History.** The specification named the classes of resource reporting, measured, indicated and
+inferred, here replaced by general terms. On the raw members a study on 12 fields found the classes
+ordered, while the block law covered its 90 % interval in 61 % of the blocks. On the members widened
+member by member it covered 87 %, so the scenario reads the widened members. The comparison with the
+kriging variance was added after the same study. With a variogram fixed in advance the proxy orders
+the error a little, 0.095, 0.148 and 0.183 across its classes against 0.037, 0.096 and 0.239 for the
+law.
 
 .. _scenario-S10:
 

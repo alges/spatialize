@@ -108,6 +108,16 @@ def _marks(spec):
     raise NotImplementedError(spec)
 
 
+def _design(rng, design):
+    """The data locations a ``data.design`` entry names: ``uniform`` (``n``) or ``preferential``
+    (``n_uniform`` over the domain, then ``n_box`` uniform in ``box``)."""
+    if design["type"] == "uniform":
+        return fields.uniform_design(rng, design["n"])
+    if design["type"] == "preferential":
+        return fields.preferential_design(rng, int(design["n_uniform"]), int(design["n_box"]), design["box"])
+    raise NotImplementedError(design["type"])
+
+
 def _mbm_fields(sc):
     """Mondrian block-mark fields (S02): the theory's Mondrian process of budget ``truth.rate`` on the
     unit square, one mark per cell, ``data.design.n`` uniform data and the field on a
@@ -138,7 +148,7 @@ def _vbm_fields(sc):
     written = []
     for k in range(_n_fields(d)):
         z = fields.vbm(rng, int(t["n_cells"]), _marks(t["marks"]))
-        samples = fields.uniform_design(rng, d["design"]["n"])
+        samples = _design(rng, d["design"])
         _save(sc, k, {"samples": samples.astype(np.float32), "values": z(samples).astype(np.float32),
                       "truth": z(grid).astype(np.float32)}, written)
     return written

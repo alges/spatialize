@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -283,6 +283,24 @@ runner's optional method ``widened_members`` (:doc:`extending`).
   - ``optimal_level_near`` (equivalence), ``cost`` and ``margin``;
   - ``block_gap`` (paired relation), ``level`` and ``better``;
   - ``block_loss`` (paired relation), ``level``, the cost being :math:`(1 - \text{level})/\text{level}`.
+
+Evaluator ``confidence_classes``
+--------------------------------
+
+This evaluator classifies blocks by the confidence the law of their average gives, against classes
+cut from the kriging variance, over pinned replicate fields (scenario S09). It needs the runner's
+optional method ``widened_members`` (:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``).
+- ``data``: ``design`` (``type: preferential`` with ``n_uniform`` data over the domain and ``n_box``
+  more uniform in ``box``, or ``type: uniform`` with ``n``), ``grid``, ``mode: pinned``, ``fields``
+  (per mode), ``block`` (the side of the blocks, in grid cells), ``thresholds`` (the relative
+  half-widths bounding the first two classes), ``widening``, ``proxy`` (``practical_range`` and
+  ``nugget`` of the exponential variogram of the kriging variance) and ``generator_seed``.
+- per check, ``kind``, ``estimator`` and its keys:
+
+  - ``ordered`` (paired relation), ``better_class`` and ``worse_class``;
+  - ``against_proxy`` (paired relation), no further key.
 
 Evaluator ``edge_cases``
 ------------------------

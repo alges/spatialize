@@ -95,7 +95,7 @@ class Runner(Protocol):
     It may also provide ``widened_members(estimator, samples, values, queries, *, n_members, seed,
     widening="auto")``, returning an array of shape ``(q, n_members)``: the members widened member by
     member, each keeping its index, so that readings over several locations can be taken draw by
-    draw. Scenario S10 needs it.
+    draw. Scenarios S09 and S10 need it.
 
     It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
     n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function

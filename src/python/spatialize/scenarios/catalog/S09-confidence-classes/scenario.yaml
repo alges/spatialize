@@ -1,0 +1,67 @@
+id: S09-confidence-classes
+version: 1
+tier: T3
+evaluator: confidence_classes
+book:
+  topic: "classifying blocks by confidence from the law of their average, against the kriging variance, which ignores the values"
+  draft_2026_10: "§12.3.8, eqs (12.3.49)–(12.3.50), Prop 12.3.10, Fig 12.8"   # the book is a draft
+purpose: >
+  A block's confidence class is read from the law of its average, through the relative half-width of its
+  90 % interval: well estimated up to 0.15, moderately up to 0.30, poorly beyond. Under a preferential
+  design the classes are ordered in the error they commit against the field. The kriging variance, a
+  function of the data locations alone, rewards the densely sampled centre whatever the values there, so
+  classes cut from it with the same counts separate the error less.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 30
+  marks: {lognormal: [0.0, 0.8]}
+data:
+  design: {type: preferential, n_uniform: 150, n_box: 150, box: [[0.25, 0.75], [0.25, 0.75]]}
+  grid: 36
+  mode: pinned
+  fields: {ci: 12, full: 24}
+  block: 3                          # blocks of 3×3 grid cells, 144 blocks
+  thresholds: [0.15, 0.30]          # relative half-width bounding the well and moderately estimated classes
+  widening: auto                    # Gamma on these positive marks
+  proxy: {practical_range: 0.183, nugget: 0.4}   # exponential variogram of the kriging variance, fixed in advance
+  generator_seed: 20261026
+estimators_T: {ci: 300, full: 300}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: well-below-moderate
+    title: "well estimated blocks commit a lower relative error than moderately estimated ones"
+    kind: ordered
+    family: paired-relation
+    estimator: idw
+    better_class: 0
+    worse_class: 1
+  - id: moderate-below-poor
+    title: "moderately estimated blocks commit a lower relative error than poorly estimated ones"
+    kind: ordered
+    family: paired-relation
+    estimator: idw
+    better_class: 1
+    worse_class: 2
+  - id: law-against-proxy
+    title: "the error spreads more across the law's classes than across classes cut from the kriging variance with the same counts"
+    kind: against_proxy
+    family: paired-relation
+    estimator: idw
+provenance:
+  v1: >
+    2026-10-25: first version, in general terms (user decision 2026-10-19): well, moderately and poorly
+    estimated blocks for the theory's measured, indicated and inferred. The book's setting (§12.3.8):
+    relative half-width (q95 - q05) / (2 q50) of the law of the block average, thresholds 0.15 and 0.30,
+    median relative error |q50 - truth| / truth per class. Study on 12 fields before the first run: on the raw
+    members the classes are ordered (median errors 0.057, 0.156, 0.348) but the block law covers its 90 %
+    interval in 61 % of the blocks; on the members widened member by member, 87 % (the book: 87 % to 100 %),
+    errors 0.037, 0.096, 0.239, steps of 2.2 and 3.5 standard deviations per field. User decisions: read the
+    widened members, and add the book's comparison with the kriging variance, its variogram fixed in advance
+    (exponential, practical range 0.183, the side of a square of the mean cell area, nugget 0.4 of the sill as
+    the book's fits gave). With a fixed variogram the proxy orders the error a little (0.095, 0.148, 0.183),
+    less than the book's fitted proxy, which did not order it at all; the law's spread exceeds it by 0.11, 2.1
+    standard deviations per field. Fields where a class is empty drop out of the checks on that class. Sizes
+    for the strictest Holm level of three checks (3.3e-4) with power 0.9 on 2.1 standard deviations:
+    K = ((3.4 + 1.28) / 2.1)^2 = 5.0, so 12 fields in ci and 24 in full.

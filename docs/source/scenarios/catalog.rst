@@ -165,9 +165,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented**
      - —
    * - :ref:`S09 <scenario-S09>`
-     - resource categories under preferential sampling
-     - ready · priority 7
-     - preferential-design generator; classification rule
+     - confidence classes under preferential sampling, against the kriging variance
+     - **implemented**
+     - —
    * - :ref:`S10 <scenario-S10>`
      - the quantile an asymmetric loss chooses, at a location and over a block
      - **implemented**

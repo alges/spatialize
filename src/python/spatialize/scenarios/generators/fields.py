@@ -314,7 +314,7 @@ def simple_kriging_exponential(samples, values, queries, a1, a2=None, theta_deg=
     return cov(np.asarray(queries, float), s) @ np.linalg.solve(c_ss, np.asarray(values, float))
 
 
-def vbm(rng, n_cells, mark_sampler, dim=2, positional=False):
+def vbm(rng, n_cells, mark_sampler, dim=2, positional=False, stretch=None):
     """Voronoi block-mark field: one mark per cell of a Voronoi tessellation.
 
     Parameters
@@ -330,6 +330,9 @@ def vbm(rng, n_cells, mark_sampler, dim=2, positional=False):
     positional : bool, default False
         Call ``mark_sampler(rng, centres)`` with the nuclei instead, for a mark law that changes across
         the domain.
+    stretch : array_like of shape (dim,), optional
+        Lengths by which each coordinate is divided before the nearest nucleus is sought, so the cells
+        come out longer along a coordinate with a larger stretch (elongated bodies, scenario S13).
 
     Returns
     -------
@@ -339,8 +342,10 @@ def vbm(rng, n_cells, mark_sampler, dim=2, positional=False):
     centres = rng.random((n_cells, dim))
     marks = mark_sampler(rng, centres) if positional else mark_sampler(rng, n_cells)
 
+    scale = np.ones(dim) if stretch is None else np.asarray(stretch, float)
+
     def field(x):
-        d = ((np.asarray(x)[:, None, :] - centres[None, :, :]) ** 2).sum(axis=2)
+        d = ((((np.asarray(x)[:, None, :] - centres[None, :, :])) / scale) ** 2).sum(axis=2)
         return marks[np.argmin(d, axis=1)]
     return field
 

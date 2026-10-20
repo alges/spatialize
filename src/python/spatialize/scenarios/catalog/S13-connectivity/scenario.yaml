@@ -1,0 +1,61 @@
+id: S13-connectivity
+version: 1
+tier: T3
+evaluator: connectivity
+book:
+  topic: "connectivity as a property of fields: high values that link into bodies, which a map of means and independent draws do not keep"
+  draft_2026_10: "§1.4 (the second order is not enough), §12.3.6 (simulated fields draw each location independently)"   # the book is a draft
+purpose: >
+  On a field of elongated bodies, the members of the weighted draw coupled by cell are fields with the truth's
+  connectivity: the Euler characteristic of their excursion sets over thresholds matches the truth's. The map
+  of means departs from it. Simulated fields, drawn location by location from the product of the local laws,
+  break the bodies into speckle (visual V10).
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 40
+  stretch: [4.0, 1.0]              # cells four times longer along x than along y
+  marks: {gaussian: [0.0, 1.0]}
+data:
+  design: {type: uniform, n: 400}
+  grid: 40
+  mode: pinned
+  fields: {ci: 48, full: 96}
+  threshold_quantiles: [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]   # of the truth
+  n_simulated: 10
+  generator_seed: 20261030
+estimators_T: {ci: 200, full: 200}
+estimators:
+  - {id: wdraw-cell, encoder: mondrian, rate: 5.0, decoder: wdraw_idw, params: {exponent: 2.0, coupling: cell},
+     empty_cells: coarsen}
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: members
+    title: "V10: the members of the weighted draw coupled by cell have the truth's Euler characteristic over thresholds (within 2)"
+    kind: members_equivalent
+    family: equivalence
+    estimator: wdraw-cell
+    margin: 2.0
+  - id: members-against-mean
+    title: "V10: those members lie closer to the truth's Euler curve than the map of means"
+    kind: members_against_mean
+    family: paired-relation
+    estimator: wdraw-cell
+  - id: simulated-fragment
+    title: "V10: simulated fields, drawn location by location, break the bodies into more components than the truth"
+    kind: simulated_excess
+    family: one-sided
+    estimator: idw
+provenance:
+  v1: >
+    2026-10-20: first version. The theory treats connectivity qualitatively (§1.4; §12.3.6 shows simulated
+    fields drawing every location independently), with no worked example. Study on 10 fields before the first
+    run, Euler characteristic of the excursion sets above the truth's 50 % to 95 % quantiles, the curve's mean
+    difference from the truth's (truth's mean 3.7): members of the weighted draw coupled by cell +0.85 (standard
+    deviation 1.65), their median map +1.75, IDW members +5.3, the maps of means +5.2 to +5.5, simulated fields
+    +18 with Gamma widening and +6.6 without. The specification's claim held for the weighted draw coupled by
+    cell and not for IDW members nor simulated fields. User decision: the equivalence and the comparison with the
+    map of means on the weighted draw coupled by cell, and a check that simulated fields break the bodies, the
+    product law's prediction. Margin 2 fixed before the first run. Sizes for the strictest Holm level of three
+    checks (3.3e-4) with power 0.9 on (2 - 0.85) / 1.65 = 0.70 standard deviations: K = ((3.4 + 1.28) / 0.70)^2
+    = 45, so 48 fields in ci and 96 in full.

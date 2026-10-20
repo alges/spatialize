@@ -65,8 +65,8 @@ halos around extremes, connected bodies — is tested through pre-registered map
    * - V10
      - connectivity of high-value bodies
      - :ref:`S13 <scenario-S13>`
-     - Euler-characteristic curves of members and simulated fields equivalent to the truth's; the mean map departs
-     - ready (connectivity functional) · priority 10
+     - Euler curve of the members of the weighted draw coupled by cell equivalent to the truth's (within 2) and closer to it than the map of means; simulated fields break the bodies
+     - **implemented**
    * - V11
      - shape of the estimated covariance
      - :ref:`S11 <scenario-S11>`
@@ -83,18 +83,15 @@ the criteria needing a kriging baseline coming last but one.
 #. **V3** (S03), the anisotropy in simulated fields. The part on single members is implemented
    (:ref:`scenario-S03`).
 
-   - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, which
-     wait for the runner method for simulated fields of S01.
+   - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, through
+     the runner's method ``simulate`` (:doc:`extending`). Scenarios S01, S07 and S13 found simulated
+     fields drawn location by location, so their texture at the scale of a pixel follows the product of
+     the local laws.
 
 #. **V2** (S03), the anisotropy against a fitted isotropic kriging.
 
    - An ordinary-kriging baseline with an isotropic variogram fitted to the data, by a rule fixed
-     before the first run. S05's baseline
-     (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`) takes a variogram
-     fixed in advance; V2 adds the fitting rule.
+     before the first run. Both exist, the kriging of S05
+     (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`) and the fitting rule
+     of S06 (:func:`~spatialize.scenarios.generators.fields.fit_exponential_variogram`).
    - The coherence of the ensemble's map against the baseline's, paired over S03's 80 fields.
-
-#. **V10** (S13), the connectivity of high-value bodies, with S13.
-
-   - The Euler-characteristic functional over thresholds and the generator of elongated bodies of
-     S13, with the runner method for simulated fields of S01.

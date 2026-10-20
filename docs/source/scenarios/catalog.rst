@@ -181,9 +181,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented**
      - —
    * - :ref:`S13 <scenario-S13>`
-     - connectivity of high-value bodies
-     - ready · priority 11
-     - connectivity functional; elongated-body generator; simulated fields (S01)
+     - connectivity of high-value bodies: members coupled by cell keep it, the map of means and simulated fields do not
+     - **implemented**
+     - —
    * - 
      - **V — visual criteria**
      - 
@@ -227,8 +227,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - V10
      - connectivity of high-value bodies (S13)
-     - ready · priority 10
-     - connectivity functional (with S13)
+     - **implemented**
+     - —
    * - V11
      - shape of estimated covariance level curves (S11)
      - **implemented**

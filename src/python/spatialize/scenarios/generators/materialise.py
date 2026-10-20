@@ -167,7 +167,8 @@ def _vbm_fields(sc):
     written = []
     for k in range(_n_fields(d)):
         sampler = _marks(t["marks"])
-        z = fields.vbm(rng, int(t["n_cells"]), sampler, positional=getattr(sampler, "positional", False))
+        z = fields.vbm(rng, int(t["n_cells"]), sampler, positional=getattr(sampler, "positional", False),
+                       stretch=t.get("stretch"))
         samples = _design(rng, d["design"])
         _save(sc, k, {"samples": samples.astype(np.float32), "values": z(samples).astype(np.float32),
                       "truth": z(grid).astype(np.float32)}, written)

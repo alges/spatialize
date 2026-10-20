@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``, ``connectivity``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -357,6 +357,23 @@ optional method ``law_cdf`` (:doc:`extending`).
 
   - ``law`` (almost sure), ``estimator`` and ``reading``, a reading of ``law_cdf``;
   - ``indicator_kriging`` (almost sure, a negative control with ``expect: {default: reject}``).
+
+Evaluator ``connectivity``
+--------------------------
+
+This evaluator reads the connectivity of high-value bodies through the Euler characteristic of the
+excursion sets, over pinned replicate fields (scenario S13). Its check ``simulated_excess`` needs the
+runner's optional method ``simulate`` (:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``), with ``stretch``, the lengths by which each
+  coordinate is divided before the nearest nucleus is sought, so the cells come out elongated.
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``threshold_quantiles``
+  (the truth's quantiles used as thresholds), ``n_simulated`` and ``generator_seed``.
+- per check, ``kind``, ``estimator`` and its keys:
+
+  - ``members_equivalent`` (equivalence), ``margin``;
+  - ``members_against_mean`` (paired relation), no further key;
+  - ``simulated_excess`` (one-sided), no further key.
 
 Evaluator ``edge_cases``
 ------------------------

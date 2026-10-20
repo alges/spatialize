@@ -429,3 +429,42 @@ def halo_share(z, top_mask, floor, width=3):
     ring = binary_dilation(top, iterations=int(width)) & ~top
     rest = ~ring & ~top
     return float(np.mean(z[ring] < floor)) if ring.any() else 0.0, float(np.mean(z[rest] < floor)) if rest.any() else 0.0
+
+
+def euler_characteristic(mask):
+    """Euler characteristic of a set of pixels, taken as the union of closed unit squares.
+
+    Parameters
+    ----------
+    mask : array_like of bool, shape (m, n)
+        The set, such as an excursion set :math:`\\{z > t\\}`.
+
+    Returns
+    -------
+    int
+        :math:`V - E + F`, the number of connected components minus the number of holes (pixels
+        touching at a corner belong to one component).
+    """
+    a = np.pad(np.asarray(mask, bool), 1)
+    faces = int(a.sum())
+    vertices = int((a[:-1, :-1] | a[1:, :-1] | a[:-1, 1:] | a[1:, 1:]).sum())
+    edges = int((a[:-1, :] | a[1:, :]).sum() + (a[:, :-1] | a[:, 1:]).sum())
+    return vertices - edges + faces
+
+
+def euler_curve(z, thresholds):
+    """Euler characteristics of the excursion sets of a map over thresholds.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, n)
+        The map.
+    thresholds : array_like of shape (k,)
+
+    Returns
+    -------
+    ndarray of shape (k,)
+        :func:`euler_characteristic` of :math:`\\{z > t\\}` for each threshold (criterion V10).
+    """
+    z = np.asarray(z, float)
+    return np.array([euler_characteristic(z > t) for t in np.asarray(thresholds, float)])

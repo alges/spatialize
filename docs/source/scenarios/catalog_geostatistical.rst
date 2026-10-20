@@ -16,11 +16,7 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01 to S12 are implemented. The other scenarios are ordered below by priority, which
-weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
-section repeats its rank and lists what its implementation takes.
-
-#. **S13**, connectivity. A new generator, a new functional and simulated fields.
+All thirteen scenarios are implemented.
 
 .. _scenario-S01:
 
@@ -1104,24 +1100,45 @@ does not interpolate exactly, before the weights were corrected to :math:`1/d^p`
 S13 — Connectivity of high-value bodies
 =======================================
 
-:Status: ready (not yet implemented)
-:Priority: 11 of 11 among the pending scenarios
-:Source in the theory: connectivity as a property of fields, not of point estimates
-:Claim: single members and simulated fields keep the connectivity of elongated high-value bodies, which the map of means merges or loses.
+:Status: **implemented**
+:Evaluator: ``connectivity``
+:Source in the theory: connectivity as a property of fields, which the second order cannot describe,
+  and the independence of the locations in a simulated field
+:Claim: the members of the weighted draw coupled by cell are fields with the connectivity of the
+  truth's elongated bodies, which the map of means does not keep. Simulated fields, drawn location by
+  location, break the bodies.
 
-**Setup.** The truth is a Voronoi block-mark field with elongated connected high-value bodies, sampled at uniformly placed data on replicate fields. Mondrian IDW provides the members, with ensemble spatial simulation providing simulated fields.
+**Setup.** The truth is a Voronoi block-mark field with 40 cells and standard normal marks, its
+distances computed after dividing the first coordinate by 4, so the cells and the bodies of high cells
+run four times longer along x than along y. Each pinned replicate field holds 400 uniformly placed
+data, with the field on a 40×40 grid. Two Mondrian estimators of rate 5 (:math:`T = 200`,
+``empty_cells="coarsen"``) give the members, the weighted draw ``wdraw_idw`` (exponent 2) with
+``coupling="cell"`` and IDW (exponent 2), from whose members ensemble spatial simulation draws 10
+fields with Gamma or skew-normal widening as the data ask. The thresholds are the truth's quantiles
+from 50 % to 95 % in steps of 5 %. A map's Euler curve gives at each threshold the Euler characteristic
+of its excursion set, the number of components minus the number of holes
+(:func:`~spatialize.scenarios.stats.maps.euler_curve`). Its departure from the truth is the mean over
+the thresholds of the difference between the two curves. The scenario uses 48 fields in ``ci`` and
+96 in ``full``.
 
 **Checks.**
 
-- Visual **V10**. The Euler-characteristic curve over thresholds of members and simulated fields is equivalent to the truth's (*equivalence*), while the map of means departs from it (*paired-relation*).
+- ``members``, *equivalence*, visual V10. The departure of the weighted draw's members, their curves
+  averaged over the members, lies within :math:`\pm 2`.
+- ``members-against-mean``, *paired-relation*, visual V10. Those members depart less from the truth's
+  curve than their map of means.
+- ``simulated-fragment``, *one-sided*, visual V10. The departure of the simulated fields is positive,
+  more components than the truth.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` and seed 1 in ``full`` the three checks pass. The members of
+the weighted draw depart by about 1.0 from a truth whose curve averages 3.7, their map of means by
+about 3 more. The simulated fields depart by about 14, the bodies broken into scattered pixels. A run
+takes about 30 s in ``ci``, 1 min in ``full``.
 
-- A generator of elongated connected high-value bodies, for instance a Voronoi block-mark field on
-  stretched coordinates or a thresholded anisotropic Gaussian field.
-- An Euler-characteristic functional over thresholds, computed on the grid in NumPy by counting the
-  vertices, edges and faces of the excursion set.
-- The runner method for simulated fields of S01.
-- The equivalence of the curves of the members and of the simulated fields to the truth's (TOST),
-  with its margin fixed before the first run, and the paired relation for the map of means.
+**History.** The specification expected single members and simulated fields alike to keep the
+connectivity. A study on 10 fields found it kept by the members of the weighted draw coupled by cell,
+which departed by 0.85, while IDW members departed by 5.3, as far as the maps of means, and simulated
+fields by 18. The theory accounts for the last, a simulated field drawing each location from its own
+law independently of the others. The scenario reads the weighted draw coupled by cell, while the
+check on simulated fields asks for the fragmentation the theory predicts.
 

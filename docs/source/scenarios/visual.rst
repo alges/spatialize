@@ -80,9 +80,14 @@ Map functionals
      - e-folding length of the map's autocovariance (:func:`autocovariance`) along the axes over that
        along the diagonals, 1 for circular iso-lines and :math:`\sqrt 2` for diamonds
      - the :math:`\ell_1` covariance of coarse Mondrian partitions stamped on the map (criterion V11)
-   * - planned
-     - connectivity (components and Euler characteristic over thresholds), halo index
-     - see the catalogue
+   * - halo share (:func:`halo_share`)
+     - share of a ring of pixels around the high cells where a map falls below the smallest datum, against
+       the share beyond the ring
+     - halos of a linear predictor around extreme values (criterion V7)
+   * - Euler curve (:func:`euler_curve`)
+     - Euler characteristic, components minus holes (:func:`euler_characteristic`), of the excursion sets
+       :math:`\{z > t\}` over thresholds
+     - connected bodies merged, broken or lost (criterion V10)
 
 The axis-artefact index is confounded with smoothing. Maps of rotation-invariant (Voronoi) estimators
 get the same values as Mondrian ones, while the index barely changes between eight and a hundred

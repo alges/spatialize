@@ -2730,6 +2730,115 @@ def eval_order_relations(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_connectivity(sc: Scenario, runner: Runner, mode: str, seed: int,
+                      save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``connectivity``: the connectivity of high-value bodies read through the Euler
+    characteristic of excursion sets (S13).
+
+    On each pinned field the thresholds are the truth's quantiles of levels ``data.threshold_quantiles``.
+    A map's Euler curve is the Euler characteristic of :math:`\{z > t\}` at each threshold
+    (:func:`~spatialize.scenarios.stats.maps.euler_curve`); its departure from the truth is the mean over
+    the thresholds of the difference between its curve and the truth's. Kinds (key ``kind``):
+
+    - ``members_equivalent`` (equivalence) — the departure of the members of ``estimator``, their curves
+      averaged over the members, lies within ``margin``;
+    - ``members_against_mean`` (paired-relation) — the absolute departure of the members is lower than
+      that of the map of means;
+    - ``simulated_excess`` (one-sided) — the departure of ``data.n_simulated`` fields simulated from the
+      ensemble (the runner's optional method ``simulate``, ``widening="auto"``), averaged over them, is
+      positive: drawn location by location, they break the bodies into more components.
+
+    Reads ``data.grid``, ``data.threshold_quantiles``, ``data.n_simulated``, ``data.fields`` (per mode) and
+    ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache, sims = {}, {}
+
+    def truth_of(k):
+        f = sc.field(k)
+        truth = f["truth"].astype(float)
+        th = np.quantile(truth, [float(x) for x in d["threshold_quantiles"]])
+        return f, truth, th, maps.euler_curve(truth.reshape(m, m), th)
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f, truth, th, ct = truth_of(k)
+            mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            curves = np.array([maps.euler_curve(mem[:, j].reshape(m, m), th) for j in range(mem.shape[1])])
+            with np.errstate(all="ignore"):
+                mean = np.nanmean(mem, axis=1)
+            cache[(eid, k)] = dict(members=float(np.mean(curves.mean(axis=0) - ct)),
+                                   mean=float(np.mean(maps.euler_curve(mean.reshape(m, m), th) - ct)),
+                                   truth=truth, map_of_means=mean, member=mem[:, 0], th=th)
+        return cache[(eid, k)]
+
+    def simulated(eid, k):
+        if (eid, k) not in sims:
+            f, truth, th, ct = truth_of(k)
+            z = np.asarray(runner.simulate(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                           n_fields=int(d["n_simulated"]), seed=_sub_seed(seed, k),
+                                           widening="auto"), float)
+            sims[(eid, k)] = (float(np.mean([np.mean(maps.euler_curve(z[:, j].reshape(m, m), th) - ct)
+                                             for j in range(z.shape[1])])), z[:, 0])
+        return sims[(eid, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est) or (kind == "simulated_excess" and not hasattr(runner, "simulate")):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+            continue
+        if kind == "members_equivalent":
+            margin = float(check["margin"])
+            r = families.tost_mean([read(est.id, k)["members"] for k in range(K)], -margin, margin)
+        elif kind == "members_against_mean":
+            r = families.paired_relation([abs(read(est.id, k)["members"]) for k in range(K)],
+                                         [abs(read(est.id, k)["mean"]) for k in range(K)], better="less")
+        elif kind == "simulated_excess":
+            r = families.mean_greater([simulated(est.id, k)[0] for k in range(K)], 0.0)
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for k in sorted({key[1] for key in cache}):
+            row = []
+            for (eid, kk), c in cache.items():
+                if kk != k:
+                    continue
+                cut = float(c["th"][len(c["th"]) // 2])
+                e = ests[eid]
+                recipe = f"{e.encoder} rate {e.rate:g}, {e.decoder}" + (", by cell" if (e.params or {}).get("coupling") == "cell" else "")
+                if not row:
+                    row.append({"title": "truth above the 75 % quantile", "z": (c["truth"] > cut).reshape(m, m).astype(float),
+                                "vmin": 0, "vmax": 1, "cmap": "Purples"})
+                row.append({"title": f"{recipe}\none member", "z": (c["member"] > cut).reshape(m, m).astype(float),
+                            "vmin": 0, "vmax": 1, "cmap": "Purples"})
+                row.append({"title": f"{recipe}\nmap of means", "z": (c["map_of_means"] > cut).reshape(m, m).astype(float),
+                            "vmin": 0, "vmax": 1, "cmap": "Purples"})
+            cut = float(np.quantile(truth_of(k)[1], 0.75))
+            for (eid, kk), (_, z0) in sims.items():
+                if kk == k:
+                    e = ests[eid]
+                    row.append({"title": f"{e.encoder} rate {e.rate:g}, {e.decoder}\none simulated field",
+                                "z": (z0 > cut).reshape(m, m).astype(float), "vmin": 0, "vmax": 1, "cmap": "Purples"})
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "connectivity", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2855,7 +2964,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "order_relations": eval_order_relations, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "order_relations": eval_order_relations, "connectivity": eval_connectivity, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

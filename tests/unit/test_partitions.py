@@ -146,3 +146,24 @@ def test_indicator_kriging_reads_each_threshold_on_its_own():
     s, v = rng.random((80, 2)), rng.normal(size=80)
     F = indicator_kriging(s, v, rng.random((25, 2)), [-5.0, 0.0, 5.0])
     assert F.shape == (25, 3) and np.all(F[:, 0] == 0.0) and np.all(F[:, 2] == 1.0)
+
+
+def test_euler_characteristic_counts_components_minus_holes():
+    """Scenario S13's functional: empty set 0, a square 1, two squares 2, a ring 0, pixels touching at a
+    corner one component, and the curve over thresholds."""
+    from spatialize.scenarios.stats.maps import euler_characteristic as chi, euler_curve
+    a = np.zeros((9, 9), bool)
+    assert chi(a) == 0
+    a[1:3, 1:3] = True
+    assert chi(a) == 1
+    a[5:7, 5:7] = True
+    assert chi(a) == 2
+    ring = np.ones((5, 5), bool)
+    ring[2, 2] = False
+    assert chi(ring) == 0
+    corner = np.zeros((4, 4), bool)
+    corner[0, 0] = corner[1, 1] = True
+    assert chi(corner) == 1
+    z = np.zeros((9, 9))
+    z[1:3, 1:3], z[5:7, 5:7] = 2.0, 1.0
+    assert list(euler_curve(z, [0.5, 1.5, 2.5])) == [2, 1, 0]

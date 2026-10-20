@@ -221,6 +221,50 @@ def _widen_sample(sample, widening, target_var, target_skew, rng, eps=1e-9):
     return _skew_normal_widen_component(sample, target_var, target_skew, sample.size, rng, eps)
 
 
+def _widen_members(members, family, target_var, target_skew, rng, eps=1e-9):
+    """Widen an ensemble member by member, keeping each draw on its member.
+
+    `members` has shape (q, T). At each location the components are those of `_widen_sample` (the
+    Gamma or skew-normal laws of mean `z_t` calibrated so the mixture variance is `target_var`), but
+    each member draws once from its own component instead of the draws being pooled and resampled,
+    so column `t` stays the widened version of member `t` and the dependence between locations that
+    the members carry survives. Locations whose members already spread enough, and NaN members,
+    are left unchanged. `family` is 'gamma' or 'skew_normal'."""
+    z = np.array(members, dtype=float)
+    finite = np.isfinite(z)
+    count = finite.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = np.where(count > 0, np.nansum(z, axis=1) / np.maximum(count, 1), np.nan)
+        between = np.where(count > 0, np.nansum((z - mean[:, None]) ** 2, axis=1) / np.maximum(count, 1), np.nan)
+        need = np.asarray(target_var, float) - between
+    rows = np.flatnonzero((count > 0) & np.isfinite(need) & (need > eps))
+    out = z.copy()
+    if not rows.size:
+        return out
+    zr, nr = z[rows], need[rows]
+    if family == "gamma":
+        if np.any(zr[np.isfinite(zr)] < eps):
+            warnings.warn(
+                "widening='gamma' received non-positive ensemble members; they were clipped to "
+                "a small positive epsilon before calibration. Use widening='skew_normal' or "
+                "'auto' for variables that may be negative.",
+                UserWarning,
+            )
+        zc = np.clip(zr, eps, None)
+        k = np.clip(np.nanmean(zc ** 2, axis=1) / nr, 0.05, 1e6)
+        draws = rng.gamma(shape=np.broadcast_to(k[:, None], zc.shape),
+                          scale=np.where(np.isfinite(zc), zc, 1.0) / k[:, None])
+    else:
+        skews = np.asarray(target_skew, float)[rows] if target_skew is not None else np.full(rows.size, np.nan)
+        delta = np.array([_delta_from_skewness(t, eps) for t in skews])
+        omega = np.sqrt(nr / np.maximum(1.0 - 2.0 * delta ** 2 / np.pi, eps))
+        alpha = delta / np.sqrt(np.maximum(1.0 - delta ** 2, eps))
+        loc = np.where(np.isfinite(zr), zr, 0.0) - (omega * delta * np.sqrt(2.0 / np.pi))[:, None]
+        draws = skewnorm.rvs(alpha[:, None], loc=loc, scale=omega[:, None], size=zr.shape, random_state=rng)
+    out[rows] = np.where(np.isfinite(zr), draws, np.nan)
+    return out
+
+
 class FittedModelFactory:
     """
     Factory for creating and fitting probabilistic models on sample data.

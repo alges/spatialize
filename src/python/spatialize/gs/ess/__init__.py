@@ -1,3 +1,3 @@
-from ._main import ess_sample, ESSResult
+from ._main import ess_sample, widen_members, ESSResult
 
-__all__ = ["ess_sample", "ESSResult"]
+__all__ = ["ess_sample", "widen_members", "ESSResult"]

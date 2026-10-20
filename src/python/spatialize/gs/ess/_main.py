@@ -9,7 +9,7 @@ from spatialize import logging
 from spatialize.result import Summarised
 from spatialize._parallel import map_chunks
 from spatialize.empirical import (FittedModelFactory, _local_target_variance,
-                                   _local_target_skewness)
+                                   _local_target_skewness, _widen_members)
 from spatialize.logging import log_message, resolve_callback
 from spatialize.viz import plot_colormap_array, PlotStyle
 
@@ -289,3 +289,73 @@ def ess_sample(esi_result,
             desc = f"{n_sims}sims_{fitted_model_factory.point_model_name}_{fitted_model_factory.n_components}_components"
 
     return ESSResult(scenarios, esi_result, desc)
+
+
+def widen_members(esi_result, widening="auto", knn=12, seed=None):
+    r"""Widen the members of an ESI estimation, each member keeping its index.
+
+    Each member :math:`z_t(v)` is replaced by one draw from the law :math:`G_{z_t(v),\,\mathrm{need}(v)}`
+    that the widening of :func:`ess_sample` mixes at location :math:`v`, of mean :math:`z_t(v)`, its
+    variance filling the gap between the variance of the members and the target :math:`\tau^2(v)`
+    read from the :math:`k` nearest data (:doc:`../theory/ess`). The widened members have the law of
+    the widened mixture at every location. Column :math:`t` stays the widened version of member
+    :math:`t` at every location, so the dependence between locations that the members carry
+    survives, while the fields of :func:`ess_sample` draw every location independently. A reading
+    over several locations at once, such as the law of a block average, then comes from the widened
+    members draw by draw.
+
+    Parameters
+    ----------
+    esi_result : ESIResult
+        The result of an ESI estimation, carrying its ``points`` and ``values``.
+    widening : {"auto", "gamma", "skew_normal"}, optional
+        The family of the widening laws, Gamma laws for a positive variable and skew-normal laws,
+        their skewness read from the nearest data, otherwise. ``"auto"`` takes Gamma laws when the
+        data are non-negative, as :func:`ess_sample` does. Default: ``"auto"``.
+    knn : int, optional
+        The number of nearest data the target variance (and skewness) is read from. Default: 12.
+    seed : int, optional
+        Seed of the draws. Default: ``None``, fresh draws.
+
+    Returns
+    -------
+    ESIResult
+        A copy of `esi_result` whose members are the widened ones. Its estimate is that of
+        `esi_result`; :meth:`~spatialize.gs.esi.ESIResult.re_estimate` reads it again from the
+        widened members.
+
+    Raises
+    ------
+    ValueError
+        If `widening` is not one of the families, or `esi_result` does not carry its points and
+        values.
+
+    Notes
+    -----
+    Locations whose members already spread at least as much as the target keep them unchanged, as
+    do undefined (NaN) members. With a single member per location the widened members are
+    independent draws from the target laws.
+
+    Examples
+    --------
+    >>> from spatialize.gs.ess import widen_members
+    >>> widened = widen_members(result, seed=0)
+    >>> members = widened.esi_samples(raw=True)        # (locations, members)
+    >>> block = members[rows].mean(axis=0)             # the law of the average over the rows of a block
+    >>> np.quantile(block, 1 / 6)
+    """
+    if widening not in ("auto", "gamma", "skew_normal"):
+        raise ValueError("widening must be one of 'auto', 'gamma', 'skew_normal'")
+    if esi_result.points is None or esi_result.values is None or esi_result._xi_flat is None:
+        raise ValueError("widen_members needs esi_result to carry its points, values and locations")
+    values = np.asarray(esi_result.values, float)
+    family = widening if widening != "auto" else ("gamma" if np.nanmin(values) >= 0 else "skew_normal")
+    target_var = _local_target_variance(esi_result.points, values, esi_result._xi_flat, knn=knn)
+    target_skew = (_local_target_skewness(esi_result.points, values, esi_result._xi_flat, knn=knn)
+                   if family == "skew_normal" else None)
+    members = np.asarray(esi_result.esi_samples(raw=True), float)
+    widened = _widen_members(members, family, target_var, target_skew, np.random.default_rng(seed))
+    out = copy.copy(esi_result)
+    out._esi_samples = widened
+    out._precision = None
+    return out

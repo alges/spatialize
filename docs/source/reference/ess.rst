@@ -10,6 +10,8 @@ Simulation of whole fields from the predictive laws of an ESI estimation, with t
 
 .. autofunction:: ess_sample
 
+.. autofunction:: widen_members
+
 .. autoclass:: ESSResult
    :members:
    :exclude-members: load, save

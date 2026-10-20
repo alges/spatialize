@@ -68,9 +68,20 @@ Map functionals
      - mean squared difference between neighbouring pixels over four times the map's variance, 1 for
        white noise
      - maps rougher or smoother than a reference (criterion V9)
+   * - edge sharpness (:func:`boundary_sharpness`)
+     - mean gradient magnitude of a probability map on the pixels along the boundary of a true region
+       (:func:`region_boundary`)
+     - blurred boundaries of a dry region (criterion V6)
+   * - local histograms (:func:`local_histogram_distance`)
+     - mean Jensen-Shannon distance, in bits, between the histograms of the map and of the truth in
+       square windows, with bins between the truth's quantiles
+     - local texture smoothed away (scenario S01)
+   * - covariance shape (:func:`covariance_diamond_index`)
+     - e-folding length of the map's autocovariance (:func:`autocovariance`) along the axes over that
+       along the diagonals, 1 for circular iso-lines and :math:`\sqrt 2` for diamonds
+     - the :math:`\ell_1` covariance of coarse Mondrian partitions stamped on the map (criterion V11)
    * - planned
-     - edge sharpness, connectivity (components and Euler characteristic over thresholds), halo index,
-       level-curve shape of an estimated covariance
+     - connectivity (components and Euler characteristic over thresholds), halo index
      - see the catalogue
 
 The axis-artefact index is confounded with smoothing. Maps of rotation-invariant (Voronoi) estimators

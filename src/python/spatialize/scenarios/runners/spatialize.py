@@ -178,10 +178,11 @@ class SpatializeRunner:
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
         return self._run(est, samples, values, samples, n_members, seed, "loo")
 
-    def simulate(self, est, samples, values, queries, *, n_members, n_fields, seed):
+    def simulate(self, est, samples, values, queries, *, n_members, n_fields, seed, widening=False):
         """Fields simulated from the ensemble at the queries: ``n_members`` members of the estimator, then
         ``n_fields`` fields drawn by ensemble spatial simulation (:func:`~spatialize.gs.ess.ess_sample`
-        with its default local model, seeded by ``seed``).
+        with its default local model, seeded by ``seed``, widened as ``widening`` asks, see
+        :class:`~spatialize.empirical.FittedModelFactory`).
 
         Returns
         -------
@@ -196,7 +197,7 @@ class SpatializeRunner:
             estimate = np.nanmean(members, axis=1)
         result = ESIResult(estimate, members, xi=np.asarray(queries, float), points=np.asarray(samples, float),
                            values=np.asarray(values, float))
-        sims = ess_sample(result, n_sims=int(n_fields), fitted_model_factory=FittedModelFactory(seed=int(seed)),
+        sims = ess_sample(result, n_sims=int(n_fields), fitted_model_factory=FittedModelFactory(seed=int(seed), widening=widening),
                           callback=singleton_null_callback)
         return np.asarray(sims.scenarios, float).reshape(len(queries), int(n_fields))
 

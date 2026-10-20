@@ -2031,6 +2031,127 @@ def eval_simulation_texture(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_granularity(sc: Scenario, runner: Runner, mode: str, seed: int,
+                     save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``granularity``: the same estimator at two granularities, read on its median map (S11).
+
+    On each pinned field the members of each estimator on the grid give the median map; its readings take
+    the first ``members`` members of the ensemble (``against_members`` for ``against``, both defaulting to
+    ``estimators_T``). Kinds (key ``kind``):
+
+    - ``law_spread`` (equivalence) — the logarithm of the ratio between the mean standard deviations of
+      ``data.n_simulated`` fields drawn from the widened law (the runner's optional method ``simulate``
+      with ``widening="auto"``) of ``estimator`` and of ``against`` lies within
+      :math:`\pm\log(1 + \text{margin})`;
+    - ``error`` (paired-relation) — the root mean square error of the median map against the truth;
+    - ``axis_lock`` (paired-relation) — the axis-locking of the median map against that of the same
+      members on the data rotated by ``data.rotation_deg``
+      (:func:`~spatialize.scenarios.stats.maps.axis_lock`);
+    - ``diamond`` (paired-relation) — the shape of the iso-lines of the median map's autocovariance
+      (:func:`~spatialize.scenarios.stats.maps.covariance_diamond_index`);
+    - ``contrast`` (one-sided) — the contrast ratio of the median map
+      (:func:`~spatialize.scenarios.stats.maps.contrast_ratio`) exceeds ``above``.
+
+    A paired kind compares ``estimator`` with ``against`` in the direction ``better``.
+
+    Reads ``data.grid``, ``data.rotation_deg``, ``data.n_simulated``, ``data.fields`` (per mode) and
+    ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache, spread = {}, {}
+
+    def members(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            smp, qry, e = _rotated(ests[eid], f["samples"], queries, float(d["rotation_deg"]))
+            rot = np.asarray(runner.members(e, smp, f["values"], qry, n_members=T, seed=_sub_seed(seed, k)), float)
+            cache[(eid, k)] = (mem, rot, f["truth"].astype(float))
+        return cache[(eid, k)]
+
+    def median(x, n):
+        with np.errstate(all="ignore"):
+            return np.nanmedian(x[:, :n], axis=1).reshape(m, m)
+
+    def reading(kind, eid, n, k):
+        mem, rot, truth = members(eid, k)
+        z = median(mem, n)
+        if kind == "error":
+            return float(np.sqrt(np.nanmean((z.ravel() - truth) ** 2)))
+        if kind == "axis_lock":
+            return maps.axis_lock(z, median(rot, n))
+        if kind == "diamond":
+            return maps.covariance_diamond_index(z)
+        if kind == "contrast":
+            return maps.contrast_ratio(z.ravel(), truth)
+        raise ValueError(f"unknown check kind {kind}")
+
+    def law_sd(eid, k):
+        if (eid, k) not in spread:
+            f = sc.field(k)
+            sims = np.asarray(runner.simulate(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                              n_fields=int(d["n_simulated"]), seed=_sub_seed(seed, k),
+                                              widening="auto"), float)
+            spread[(eid, k)] = float(np.nanstd(sims, axis=1).mean())
+        return spread[(eid, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        used = [check["estimator"]] + ([check["against"]] if "against" in check else [])
+        cid, title = check["id"], check["title"]
+        missing = [e for e in used if not runner.supports(ests[e])]
+        if missing or (kind == "law_spread" and not hasattr(runner, "simulate")):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {', '.join(missing) or 'simulate'}"))
+            continue
+        if kind == "law_spread":
+            x = [np.log(law_sd(check["estimator"], k) / law_sd(check["against"], k)) for k in range(K)]
+            margin = np.log1p(float(check["margin"]))
+            r = families.tost_mean(x, -margin, margin)
+        elif kind == "contrast":
+            n = int(check.get("members", T))
+            r = families.mean_greater([reading(kind, check["estimator"], n, k) for k in range(K)], float(check["above"]))
+        else:
+            n, n_against = int(check.get("members", T)), int(check.get("against_members", T))
+            a = [reading(kind, check["estimator"], n, k) for k in range(K)]
+            b = [reading(kind, check["against"], n_against, k) for k in range(K)]
+            r = families.paired_relation(a, b, better=check["better"])
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels, h = [], 12
+        for k in range(K):
+            truth = members(next(iter(ests)), k)[2]
+            lo, hi = float(truth.min()), float(truth.max())
+            row = [{"title": "truth", "z": truth.reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"}]
+            covs = [("truth", truth.reshape(m, m))]
+            for eid in ests:
+                if not runner.supports(ests[eid]):
+                    continue
+                mem = members(eid, k)[0]
+                e = ests[eid]
+                recipe = f"{e.encoder} rate {e.rate:.3g}, {e.decoder}"
+                row += [{"title": f"{recipe}: median of {n}", "z": median(mem, n), "vmin": lo, "vmax": hi, "cmap": "coolwarm"}
+                        for n in (8, T)]
+                covs.append((recipe, median(mem, T)))
+            for name, z in covs:
+                c = maps.autocovariance(z)
+                c = c[m - h:m + h + 1, m - h:m + h + 1] / c[m, m]
+                row.append({"title": f"{name}: covariance of the map", "z": c, "vmin": 0, "vmax": 1, "cmap": "viridis"})
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "granularity", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2155,7 +2276,8 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
-              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture, "law_validity": eval_law_validity,
+              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
+              "granularity": eval_granularity, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

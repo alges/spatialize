@@ -87,9 +87,10 @@ class Runner(Protocol):
     data by the classifier the estimator's ``decoder`` names, one member per partition, NaN where the
     datum's cell held no other datum. Scenario P13 needs it.
 
-    It may also provide ``simulate(estimator, samples, values, queries, *, n_members, n_fields, seed)``,
-    returning an array of shape ``(q, n_fields)``: fields simulated from the ensemble of ``n_members``
-    members at the queries. Scenario S01 needs it.
+    It may also provide ``simulate(estimator, samples, values, queries, *, n_members, n_fields, seed,
+    widening=False)``, returning an array of shape ``(q, n_fields)``: fields simulated from the ensemble
+    of ``n_members`` members at the queries, from the local laws widened as ``widening`` asks
+    (``"auto"`` or ``False``). Scenarios S01 and S11 need it.
 
     It may also provide ``law_cdf(estimator, samples, values, queries, thresholds, *, reading,
     n_members, seed)``, returning an array of shape ``(q, k)``: the cumulative distribution function

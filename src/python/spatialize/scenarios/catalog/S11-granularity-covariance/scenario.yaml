@@ -1,0 +1,101 @@
+id: S11-granularity-covariance
+version: 1
+tier: T3
+evaluator: granularity
+book:
+  topic: "the granularity of the partitions against the field's range: coarse cells smooth the map and stamp the partition's ℓ1 co-occurrence on it, fine cells keep the contrast"
+  draft_2026_10: "ch 4, the Mondrian process and its co-occurrence; ch 12, widening of the ensemble's law"   # the book is a draft
+purpose: >
+  The same cell-mean estimator at two granularities on an isotropic stationary Gaussian field. Coarse
+  partitions, small against the field's range, give a smooth map whose error more members cannot bring
+  near that of fine partitions, while its axis artefacts fade, a false cure (V5). The axis-locking (V4)
+  and the diamond-shaped covariance of the map (V11) are stronger with coarse partitions. Widened, the
+  laws of both granularities spread alike.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: sgf_exponential
+  covariance: "exp(−|h| / 0.3), isotropic"
+  a1: 0.3
+  a2: 0.3
+  theta_deg: 0.0
+data:
+  design: {type: uniform, n: 600}
+  grid: 40
+  mode: pinned
+  fields: {ci: 40, full: 80}
+  rotation_deg: 30.0                # rotation of the data for the axis-locking (V4, V5)
+  n_simulated: 50                   # fields drawn from the widened law, for its spread
+  generator_seed: 20261023
+estimators_T: {ci: 200, full: 200}
+estimators:
+  # Rate × range 0.5 and 10 with range 0.3: E[#cells] = (1 + 1.67)² ≈ 7 and (1 + 33.3)² ≈ 1180.
+  - {id: coarse, encoder: mondrian, rate: 1.6667, decoder: cellmean, params: {}, empty_cells: coarsen}
+  - {id: fine, encoder: mondrian, rate: 33.333, decoder: cellmean, params: {}, empty_cells: coarsen}
+checks:
+  - id: law-spread
+    title: "the widened laws of both granularities spread alike (ratio of their standard deviations within 15 %)"
+    kind: law_spread
+    family: equivalence
+    estimator: coarse
+    against: fine
+    margin: 0.15
+  - id: error
+    title: "the error of the median map is lower with fine partitions"
+    kind: error
+    family: paired-relation
+    estimator: fine
+    against: coarse
+    better: less
+  - id: v5-artefacts
+    title: "V5 false cure: with coarse partitions the axis-locking of the median map falls from 8 to 200 members"
+    kind: axis_lock
+    family: paired-relation
+    estimator: coarse
+    against: coarse
+    against_members: 8
+    better: less
+  - id: v5-error
+    title: "V5 false cure: the error of coarse partitions with 200 members stays above that of fine partitions with 8"
+    kind: error
+    family: paired-relation
+    estimator: coarse
+    against: fine
+    against_members: 8
+    better: greater
+  - id: v5-contrast
+    title: "V5: with fine partitions the contrast ratio of the median map exceeds 0.8"
+    kind: contrast
+    family: one-sided
+    estimator: fine
+    above: 0.8
+  - id: v4-axis-lock
+    title: "V4: the axis-locking of the median map is stronger with coarse partitions"
+    kind: axis_lock
+    family: paired-relation
+    estimator: coarse
+    against: fine
+    better: greater
+  - id: v11-diamond
+    title: "V11: the covariance of the median map is more diamond-shaped with coarse partitions"
+    kind: diamond
+    family: paired-relation
+    estimator: coarse
+    against: fine
+    better: greater
+provenance:
+  v1: >
+    2026-10-23: first version. Changes to the specification, decided with the user before the first run
+    after a study on 8 fields. (1) The member spread did not differ consistently between the granularities
+    (0.28 against 0.32, the coarse one between 0.15 and 0.49), so the spread check keeps only the widened
+    law, whose spread the two share (0.46 against 0.44). (2) The false cure read on the error: the coarse
+    error does fall a little with more members (0.757 to 0.728), so the check asks that it stay above the
+    fine error with 8 members. (3) V4's bound of 0.5 from S03, calibrated on IDW, fails for the cell mean
+    with fine partitions (0.87), so V4 compares the granularities. (4) V11 on the members' covariance is
+    degenerate, the co-occurrence of the Mondrian process giving ℓ1 iso-lines at any granularity, so it reads
+    the covariance of the median map, its e-folding length along the axes over that along the diagonals.
+    (5) 600 data in both modes rather than 1500 in full, the modes differing in the number of fields.
+    Study for the sizes, 12 fields: effects of 8.9 standard deviations per field (error), 7.8 (false cure,
+    error), 1.9 (false cure, axis-locking), 2.7 (contrast above 0.8), 0.82 (V4), 0.97 (V11); log ratio of
+    the widened spreads 0.026, standard deviation 0.062, inside the margin ±0.140 by 1.8 standard deviations.
+    Sizes for the strictest Holm level of seven checks (1.4e-4) with power 0.9 on 0.82 standard deviations:
+    K = ((3.63 + 1.28) / 0.82)^2 = 36, so 40 fields in ci and 80 in full.

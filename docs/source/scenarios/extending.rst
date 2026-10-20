@@ -64,8 +64,9 @@ A runner may also give leave-one-out ensembles of classes, through a method
 classifier the estimator's ``decoder`` names. Scenario P13 needs it, together with ``cells``.
 
 A runner may also give fields simulated from its ensemble, through a method
-``simulate(est, samples, values, queries, *, n_members, n_fields, seed)`` returning an array of shape
-``(n_queries, n_fields)``. Scenario S01 needs it.
+``simulate(est, samples, values, queries, *, n_members, n_fields, seed, widening=False)`` returning an
+array of shape ``(n_queries, n_fields)``. With ``widening="auto"`` the local laws are widened before
+the draws, as the theory's widening of an under-dispersed ensemble asks. Scenarios S01 and S11 need it.
 
 A runner may also give the readings of its law, through a method
 ``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an

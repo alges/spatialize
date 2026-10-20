@@ -174,8 +174,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - loss-optimal quantile readings
    * - :ref:`S11 <scenario-S11>`
      - granularity and covariance
-     - ready · priority 5
-     - covariance-shape reading (V11)
+     - **implemented**
+     - —
    * - :ref:`S12 <scenario-S12>`
      - edge cases: few data, duplicates, queries on data and outside the data box
      - **implemented**
@@ -201,18 +201,18 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented** on members · priority 1 for simulated fields
      - simulated fields (S01)
    * - V4
-     - Mondrian blocks averaged away (S03); S11
-     - **implemented** on S03 · priority 4 on S11
-     - S11
+     - Mondrian blocks averaged away (S03, S11)
+     - **implemented**
+     - —
    * - V5
      - contrast: maps not more washed out than the best linear predictor (S03); the "false cure"
        of coarse partitions (S11)
-     - **implemented** on S03 · priority 5 on S11
-     - S11
+     - **implemented**
+     - —
    * - V6
      - sharp dry-region boundaries (S04)
-     - ready · priority 3
-     - edge-sharpness functional (with S04)
+     - **implemented**
+     - —
    * - V7
      - halos around extreme values (S05)
      - partly ready · priority 9
@@ -230,9 +230,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - ready · priority 10
      - connectivity functional (with S13)
    * - V11
-     - shape of estimated covariance level curves
-     - ready · priority 6
-     - covariance-shape reading (with S11)
+     - shape of estimated covariance level curves (S11)
+     - **implemented**
+     - —
 
 
 Example run

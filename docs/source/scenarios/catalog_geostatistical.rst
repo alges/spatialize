@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S08 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S08, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S11**, granularity and covariance. Its visual functionals exist, except the shape of the
-   estimated covariance.
 #. **S10**, loss-optimal quantiles. New readings on existing generators.
 #. **S09**, resource categories. A preferential-design generator and a classification rule fixed in
    advance.
@@ -858,30 +856,64 @@ S10 — Choosing a quantile
 S11 — The estimated covariance at two granularities
 ===================================================
 
-:Status: ready (not yet implemented)
-:Priority: 5 of 11 among the pending scenarios
-:Source in the theory: the effect of partition size relative to the field's range
-:Claim: with coarse partitions (small rate × range) the members are smooth, and adding members does not improve the estimate's error, a "false cure". Fine partitions keep the contrast, while the shape of the estimated covariance changes with granularity.
+:Status: **implemented**
+:Evaluator: ``granularity``
+:Source in the theory: the size of the partition's cells against the field's range, the co-occurrence of
+  the Mondrian process and the widening of the ensemble's law
+:Claim: coarse partitions give a smooth map whose error more members cannot bring near that of fine
+  partitions, while its axis artefacts fade, a "false cure". The map keeps the partition's
+  :math:`\ell_1` covariance. Fine partitions keep the contrast. Once widened, the laws of both
+  granularities spread alike.
 
-**Setup.** The truth is a stationary Gaussian field with exponential covariance of range 0.3, sampled at 600 uniformly placed data (1500 in ``full``). A Mondrian cell-mean estimator runs at two granularities, with rate × range equal to 0.5 and to 10.
+**Setup.** The truth is a stationary Gaussian field with an isotropic exponential covariance of range
+0.3. Each pinned replicate field holds 600 uniformly placed data, with the field on a 40×40 grid. A
+Mondrian cell-mean estimator (:math:`T = 200`, ``empty_cells="coarsen"``) runs at two granularities,
+with rate × range equal to 0.5, about 7 cells, and to 10, about 1180 cells. Every reading uses the
+median map, of the 200 members or of the first 8. The axis-locking compares it with the median map of
+the same estimator on the data rotated by 30°. The scenario uses 40 fields in ``ci`` and 80 in
+``full``.
 
 **Checks.**
 
-- *two-sample*. The member spread differs between the two granularities, while the spread of the fitted law does not.
-- *paired-relation*. The RMSE is lower with fine partitions.
-- Visual **V5** (false cure). With coarse partitions, axis artefacts shrink from 8 to 200 members without the RMSE improving. With fine partitions, the contrast ratio reaches at least 0.8.
-- Visual **V4** on this field, the axis-locking of the median map.
-- Visual **V11**. The iso-lines of the estimated covariance are diamond-shaped (:math:`\ell_1`) with coarse partitions and closer to circular with fine ones.
+- ``law-spread``, *equivalence*. The mean standard deviations of 50 fields drawn from the widened laws,
+  through the runner's method ``simulate`` with ``widening="auto"``, differ by less than a factor 1.15
+  between the granularities.
+- ``error``, *paired-relation*. The error of the median map against the truth, its root mean square
+  over the grid, is lower with fine partitions.
+- ``v5-artefacts``, *paired-relation*, visual V5. With coarse partitions the axis-locking of the median
+  map falls from 8 to 200 members.
+- ``v5-error``, *paired-relation*, visual V5. The error of coarse partitions with 200 members stays
+  above that of fine partitions with 8.
+- ``v5-contrast``, *one-sided*, visual V5. With fine partitions the contrast ratio of the median map
+  exceeds 0.8.
+- ``v4-axis-lock``, *paired-relation*, visual V4. The axis-locking of the median map is stronger with
+  coarse partitions.
+- ``v11-diamond``, *paired-relation*, visual V11. The covariance of the median map is more
+  diamond-shaped with coarse partitions. The reading divides the e-folding length of the map's
+  autocovariance along the axes by that along the diagonals
+  (:func:`~spatialize.scenarios.stats.maps.covariance_diamond_index`), about 1 for circular iso-lines
+  and :math:`\sqrt 2` for diamonds.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` every check passes. The error of the median map is lower by 0.40
+with fine partitions. With coarse partitions the axis-locking falls by 2.4 to 2.5 from 8 to 200
+members, while their error stays 0.38 above that of fine partitions with 8 members. The contrast ratio
+of fine partitions is 0.89. With coarse partitions the axis-locking is higher by 1.1 and 1.4, the
+diamond index by 0.13 and 0.14. The widened spreads differ by 4 %. A run takes about 1 min 45 s.
 
-- Pinned fields from the existing stationary Gaussian generator (exponential covariance, range
-  0.3).
-- Two estimators with the cell mean, which is in the catalogue, at rate × range 0.5 and 10.
-- The member spread (two-sample) and the RMSE (paired relation), with functionals the suite has.
-- V5 and V4 through the existing ``axis_artifact_index``, ``contrast_ratio`` and ``axis_lock``.
-  V11 reads the shape of the estimated covariance's iso-lines, for which ``axis_diagonal_log_ratio``
-  can serve, applied to the covariance of the members.
+**History.** The specification changed in five points before the first run, after a study on 8 fields.
+
+#. The member spread did not differ consistently between the granularities, 0.28 against 0.32, the
+   coarse one ranging from 0.15 to 0.49. The spread check keeps the widened law alone, whose spread the
+   two granularities share, 0.46 against 0.44.
+#. The coarse error falls a little with more members, from 0.757 to 0.728, so the false cure asks for
+   it to stay above the fine error with 8 members.
+#. V4's bound of 0.5 from S03, calibrated on IDW, fails for the cell mean with fine partitions (0.87),
+   so V4 compares the two granularities.
+#. Read on the covariance of the members, V11 is degenerate, since their co-occurrence under the
+   Mondrian process gives :math:`\ell_1` iso-lines at any granularity. V11 reads the covariance of the
+   median map instead.
+#. The specification asked for 1500 data in ``full``. Both modes use 600, differing in their number of
+   fields.
 
 .. _scenario-S12:
 

@@ -333,3 +333,71 @@ def local_histogram_distance(truth, z, corners, window, bins=10):
     return float(np.mean([jensenshannon(np.histogram(a[i:i + w, j:j + w], edges)[0] + 1e-9,
                                         np.histogram(b[i:i + w, j:j + w], edges)[0] + 1e-9, base=2)
                           for i, j in np.asarray(corners, int)]))
+
+
+def autocovariance(z):
+    """Empirical autocovariance of a map by displacement.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+        The map (NaN are replaced by its mean).
+
+    Returns
+    -------
+    ndarray of shape (2m, 2m)
+        The covariance of the centred map at each displacement, the mean over the pairs of pixels
+        separated by it, with zero displacement at index ``(m, m)``.
+    """
+    z = np.asarray(z, float)
+    z = np.where(np.isfinite(z), z, np.nanmean(z))
+    m = z.shape[0]
+    z = z - z.mean()
+    c = np.fft.ifft2(np.abs(np.fft.fft2(z, s=(2 * m, 2 * m))) ** 2).real
+    pairs = np.fft.ifft2(np.abs(np.fft.fft2(np.ones_like(z), s=(2 * m, 2 * m))) ** 2).real
+    return np.fft.fftshift(c / np.maximum(np.rint(pairs), 1))
+
+
+def _efold_length(profile, step):
+    """Lag at which a covariance profile first falls below 1/e of its value at lag 0, interpolated
+    linearly between the two lags around it (the profile's length when it never does)."""
+    p = np.asarray(profile, float) / profile[0]
+    below = np.flatnonzero(p < np.exp(-1))
+    if not below.size:
+        return len(p) * step
+    j = below[0]
+    a, b = p[j - 1], p[j]
+    return (j - 1 + (a - np.exp(-1)) / (a - b)) * step
+
+
+def covariance_diamond_index(z, margin=4):
+    r"""Shape of the iso-lines of a map's autocovariance: its correlation length along the coordinate axes
+    against its correlation length along the diagonals.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+        The map (NaN are replaced by its mean).
+    margin : int, default 4
+        Largest displacements left out, which too few pairs of pixels support.
+
+    Returns
+    -------
+    float
+        The e-folding length of :func:`autocovariance` along the axes (mean of x and y) divided by its
+        e-folding length along the diagonals, both in units of length. About 1 for circular iso-lines,
+        :math:`\sqrt 2` for diamond-shaped ones, whose covariance depends on the :math:`\ell_1` distance.
+
+    Notes
+    -----
+    A map estimated with axis-aligned cells inherits the :math:`\ell_1` co-occurrence of the Mondrian
+    process when its cells are coarse relative to the field's range. On scenario S11 (isotropic field,
+    range 0.3) Mondrian cell means give about 1.16 at rate × range 0.5 and 1.0 at rate × range 10, the
+    truth itself about 1.0.
+    """
+    c = autocovariance(z)
+    m = c.shape[0] // 2
+    n = m - int(margin)
+    axis = (c[m, m:m + n] + c[m:m + n, m]) / 2
+    diag = c[m + np.arange(n), m + np.arange(n)]
+    return float(_efold_length(axis, 1.0) / _efold_length(diag, np.sqrt(2)))

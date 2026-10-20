@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -243,6 +243,26 @@ histograms, over pinned replicate fields (scenario S01), with the runner's optio
   fields per replicate field), ``windows`` (windows per field), ``generator_seed``.
 - per check, ``kind: local_histograms``, ``estimator`` and ``window`` (the side of the windows, in
   pixels).
+
+Evaluator ``granularity``
+-------------------------
+
+This evaluator compares the same estimator at two granularities through readings of its median map,
+over pinned replicate fields (scenario S11).
+
+- ``truth``: ``generator: sgf_exponential`` (see ``map_visual``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``rotation_deg`` (the
+  rotation of the data for the axis-locking), ``n_simulated`` (fields drawn from the widened law, for
+  its spread) and ``generator_seed``.
+- per check, ``kind`` and its keys:
+
+  - ``law_spread`` (equivalence), ``estimator``, ``against`` and ``margin``: the ratio of the mean
+    standard deviations of the widened laws lies within a factor ``1 + margin``. It needs the runner's
+    optional method ``simulate`` (:doc:`extending`);
+  - ``error``, ``axis_lock`` and ``diamond`` (paired relation), ``estimator``, ``against``, ``better``
+    and optionally ``members`` and ``against_members``, the number of members of each median map
+    (default ``estimators_T``);
+  - ``contrast`` (one-sided), ``estimator`` and ``above``.
 
 Evaluator ``edge_cases``
 ------------------------

@@ -35,13 +35,13 @@ halos around extremes, connected bodies — is tested through pre-registered map
    * - V4
      - Mondrian blocks averaged away
      - :ref:`S03 <scenario-S03>`, :ref:`S11 <scenario-S11>`
-     - axis-locking of the median map below 0.5, with a power check on single members and a Voronoi calibration
-     - **implemented** on S03; S11 · priority 4
+     - axis-locking of the median map below 0.5, with a power check on single members and a Voronoi calibration (S03); stronger with coarse partitions than with fine ones (S11)
+     - **implemented**
    * - V5
      - maps not washed out; the "false cure" of coarse partitions
      - :ref:`S03 <scenario-S03>`, :ref:`S11 <scenario-S11>`
-     - contrast against simple kriging with the true covariance above 0.9 (S03); artefacts shrink without RMSE improving (S11)
-     - **implemented** on S03; S11 · priority 5
+     - contrast against simple kriging with the true covariance above 0.9 (S03); with coarse partitions the axis-locking falls from 8 to 200 members while the error stays above that of fine partitions with 8, whose contrast ratio exceeds 0.8 (S11)
+     - **implemented**
    * - V6
      - sharp dry-region boundaries
      - :ref:`S04 <scenario-S04>`
@@ -70,8 +70,8 @@ halos around extremes, connected bodies — is tested through pre-registered map
    * - V11
      - shape of the estimated covariance
      - :ref:`S11 <scenario-S11>`
-     - iso-lines diamond-shaped with coarse partitions, closer to circular with fine ones
-     - ready · priority 6
+     - the median map's covariance more diamond-shaped with coarse partitions than with fine ones
+     - **implemented**
 
 Pending criteria by priority
 ============================
@@ -85,28 +85,6 @@ the criteria needing a kriging baseline coming last but one.
 
    - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, which
      wait for the runner method for simulated fields of S01.
-
-#. **V6** (S04), sharp dry-region boundaries, with S04.
-
-   - The overlap through the existing ``level_set_iou``. The draw decoders are in the catalogue.
-   - An edge-sharpness functional, such as the mean gradient of :math:`p_{dry}` across the true dry
-     boundary.
-
-#. **V4** on S11, Mondrian blocks averaged away with coarse partitions, with S11.
-
-   - The existing ``axis_lock`` on S11's two granularities, with the power check on single members and
-     the Voronoi calibration of S03.
-
-#. **V5** on S11, the "false cure", with S11.
-
-   - The existing ``axis_artifact_index`` and ``contrast_ratio`` at 8 and 200 members, with the RMSE
-     of S11. The criterion holds when the artefacts shrink while the RMSE does not improve.
-
-#. **V11** (S11), the shape of the estimated covariance, with S11.
-
-   - The covariance of the members at grid offsets, its iso-lines read through
-     ``axis_diagonal_log_ratio`` applied to that covariance. The expected readings are diamonds
-     (:math:`\ell_1`) with coarse partitions and near-circles with fine ones.
 
 #. **V8** (S07), exceedance regions, with S07.
 

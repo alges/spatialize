@@ -1962,6 +1962,75 @@ def eval_selection_curve(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_simulation_texture(sc: Scenario, runner: Runner, mode: str, seed: int,
+                            save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``simulation_texture``: fields simulated from the ensemble reproduce the local histograms
+    of the truth, which the map of means smooths away (S01).
+
+    On each pinned field, ``data.n_simulated`` fields simulated from the ensemble (the runner's optional
+    method ``simulate``) and the map of means of the same members are read against the truth through the
+    mean Jensen–Shannon distance between their histograms in ``data.windows`` windows of side
+    ``window`` placed at random (:func:`~spatialize.scenarios.stats.maps.local_histogram_distance`), the
+    same windows for both. Kind ``local_histograms`` (paired-relation): the distance of the simulated
+    fields, averaged over them, is lower than that of the map of means.
+
+    Reads ``data.grid``, ``data.n_simulated``, ``data.windows``, ``data.fields`` (per mode) and
+    ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def read(est, k):
+        if (est.id, k) not in cache:
+            f = sc.field(k)
+            sims = np.asarray(runner.simulate(est, f["samples"], f["values"], queries, n_members=T,
+                                              n_fields=int(d["n_simulated"]), seed=_sub_seed(seed, k)), float)
+            mem = np.asarray(runner.members(est, f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            cache[(est.id, k)] = (sims, np.nanmean(mem, axis=1), f["truth"].astype(float))
+        return cache[(est.id, k)]
+
+    out = []
+    for check in s["checks"]:
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est) or not hasattr(runner, "simulate"):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} gives no simulated fields for {est.encoder}/{est.decoder}"))
+            continue
+        if check["kind"] != "local_histograms":
+            raise ValueError(f"unknown check kind {check['kind']}")
+        w = int(check["window"])
+        a, b = [], []
+        for k in range(K):
+            sims, mean, truth = read(est, k)
+            corners = np.random.default_rng(_sub_seed(seed, 11, k, w)).integers(0, m - w, (int(d["windows"]), 2))
+            a.append(float(np.mean([maps.local_histogram_distance(truth.reshape(m, m), sims[:, j].reshape(m, m), corners, w)
+                                    for j in range(sims.shape[1])])))
+            b.append(maps.local_histogram_distance(truth.reshape(m, m), mean.reshape(m, m), corners, w))
+        r = families.paired_relation(a, b, better="less")
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for (eid, k), (sims, mean, truth) in sorted(cache.items(), key=lambda kv: kv[0][1]):
+            lo, hi = float(np.min(truth)), float(np.max(truth))
+            row = [{"title": "truth", "z": truth.reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"},
+                   {"title": "map of means", "z": mean.reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"}]
+            row += [{"title": f"simulated {j + 1}", "z": sims[:, j].reshape(m, m), "vmin": lo, "vmax": hi, "cmap": "coolwarm"}
+                    for j in range(min(3, sims.shape[1]))]
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "simulated_fields", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2086,7 +2155,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
-              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "law_validity": eval_law_validity,
+              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

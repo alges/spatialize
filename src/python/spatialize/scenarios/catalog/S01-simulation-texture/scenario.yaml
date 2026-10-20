@@ -1,0 +1,53 @@
+id: S01-simulation-texture
+version: 1
+tier: T3
+evaluator: simulation_texture
+book:
+  topic: "ensemble spatial simulation: fields drawn location by location from the learned local laws keep the local structure of the field"
+  draft_2026_10: "ch 3, the estimator as a generative model; ch 12, ensemble spatial simulation"   # the book is a draft
+  paper: "Egaña et al. 2025, Spatial distributional estimation via ensemble spatial analysis, AIMS Mathematics 10(11), sec. 4.3 (local statistics)"
+purpose: >
+  Ensemble spatial simulation draws each location from its local law, the laws of neighbouring locations
+  depending on each other through the data their neighbourhoods share. The simulated fields keep the
+  local texture of the field, its histogram within small windows, which the map of means smooths away.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 25
+  marks: {gaussian: [0.0, 1.0]}
+data:
+  design: {type: uniform, n: 400}
+  grid: 48
+  mode: pinned
+  fields: {ci: 12, full: 24}
+  n_simulated: 5                    # simulated fields per replicate field
+  windows: 60                       # windows per field, placed at random
+  generator_seed: 20261022
+estimators_T: {ci: 200, full: 200}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: local-histograms-7
+    title: "in 7×7 windows the simulated fields reproduce the truth's histograms better than the map of means"
+    kind: local_histograms
+    family: paired-relation
+    estimator: idw
+    window: 7
+  - id: local-histograms-13
+    title: "in 13×13 windows the simulated fields reproduce the truth's histograms better than the map of means"
+    kind: local_histograms
+    family: paired-relation
+    estimator: idw
+    window: 13
+provenance:
+  v1: >
+    2026-10-22: first version. The specification claimed that simulated fields keep a lag-1 correlation
+    which independent draws from the same local laws lose. Ensemble spatial simulation draws each
+    location independently from its law, so the two are the same: on 8 fields their lag-1 correlations
+    were 0.845 and 0.848 (truth 0.843, map of means 0.930). User decision: test the structure the paper
+    of spatial distributional estimation reads (sec. 4.3), the local histograms in windows. Study before
+    the first run, 12 fields, 5 simulated fields each: Jensen-Shannon distance to the truth 0.557 for the
+    simulated fields against 0.586 for the map of means in 7×7 windows (1.7 standard deviations per field)
+    and 0.517 against 0.557 in 13×13 windows (3.6). Sizes for the paired t-test at the strictest Holm level
+    of two checks (5e-4) with power 0.9 on 1.7 standard deviations: K = ((3.29 + 1.28) / 1.7)^2 = 7.2, so
+    12 fields in ci and 24 in full.

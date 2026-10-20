@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -230,6 +230,19 @@ replicate fields (scenario S08).
 - per check, ``kind: share_above``, ``estimator``, ``quantile`` (the truth's quantile used as the
   cut-off) and ``better``, the direction in which the share of the map of means departs from the
   truth's (paired relation).
+
+Evaluator ``simulation_texture``
+--------------------------------
+
+This evaluator reads fields simulated from the ensemble against the truth through their local
+histograms, over pinned replicate fields (scenario S01), with the runner's optional method ``simulate``
+(:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``n_simulated`` (simulated
+  fields per replicate field), ``windows`` (windows per field), ``generator_seed``.
+- per check, ``kind: local_histograms``, ``estimator`` and ``window`` (the side of the windows, in
+  pixels).
 
 Evaluator ``edge_cases``
 ------------------------

@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S02, S03, S04, S08 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S08 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S01**, simulation keeps the geometry. It is the first test of simulation, needing a runner
-   method for simulated fields.
 #. **S11**, granularity and covariance. Its visual functionals exist, except the shape of the
    estimated covariance.
 #. **S10**, loss-optimal quantiles. New readings on existing generators.
@@ -36,32 +34,44 @@ section repeats its rank and lists what its implementation takes.
 
 .. _scenario-S01:
 
-S01 — Simulation keeps the geometry
-===================================
+S01 — Simulated fields keep the local texture
+=============================================
 
-:Status: ready (not yet implemented)
-:Priority: 4 of 11 among the pending scenarios
-:Source in the theory: ensemble spatial simulation
-:Claim: fields simulated from the ensemble keep the spatial structure of the truth, which independent draws from the same per-location laws lose.
+:Status: **implemented**
+:Evaluator: ``simulation_texture``
+:Source in the theory: ensemble spatial simulation, and the reading of local statistics in the paper on
+  spatial distributional estimation (Egaña et al. 2025, AIMS Mathematics, sec. 4.3)
+:Claim: fields simulated from the ensemble reproduce the histograms of the truth within small windows,
+  which the map of means smooths away.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 25 cells and centred Gaussian marks. 400 uniformly placed data are drawn on each replicate field, estimated by Mondrian IDW (exponent 2) with :math:`T = 200`, then simulated by ensemble spatial simulation.
+**Setup.** The truth is a Voronoi block-mark field with 25 cells and standard normal marks. Each pinned
+replicate field has 400 uniformly placed data with the field on a 48×48 grid. Mondrian IDW (exponent 2,
+rate 5, :math:`T = 200`, ``empty_cells="coarsen"``) gives the members, from which ensemble spatial
+simulation draws 5 fields, through the runner's optional method ``simulate``, with the default local
+model, a kernel density with Gaussian kernels. The reading is the mean Jensen-Shannon distance, in bits,
+between the histograms of the truth and of a map in 60 square windows placed at random, the same
+windows for both, with ten bins between the truth's quantiles. The scenario uses 12 fields in ``ci``
+and 24 in ``full``.
 
 **Checks.**
 
-- *paired-relation*. The lag-1 correlation of a simulated field exceeds that of a field of independent draws from the same per-location laws.
+- ``local-histograms-7``, *paired-relation*. In 7×7 windows the distance of the simulated fields,
+  averaged over them, is lower than that of the map of means.
+- ``local-histograms-13``, *paired-relation*. The same in 13×13 windows.
 
-**To implement.**
+**Results.** On seeds 1 and 2 in ``ci`` both checks pass, the simulated fields lying closer to the
+truth than the map of means by 0.03 in 7×7 windows and by 0.04 in 13×13 windows. A run takes about 10 s.
+The maps of the truth, of the map of means and of three simulated fields are saved with
+``--save-maps``. The simulated fields keep the units of the truth, their placement and their level,
+with a texture within each that the map of means blurs.
 
-- A runner method for simulated fields, ``simulate(estimator, samples, values, queries, *,
-  n_fields, seed)``, optional like ``cells``, which Spatialize's runner gives through
-  :func:`~spatialize.gs.ess.ess_sample`. The suite has no reading of simulation yet.
-- Pinned replicate fields from the existing Voronoi block-mark generator (25 cells, centred Gaussian
-  marks), written with checksums as for S12.
-- An evaluator reading the lag-1 correlation along the rows and columns of the grid, for each
-  simulated field and for a field of independent draws from the members at each location, paired by
-  field.
-- The number of fields, fixed before the first run from
-  :func:`~spatialize.scenarios.stats.budget.min_sign_test_fields` with a margin for power.
+**History.** The specification claimed that a simulated field keeps a lag-1 correlation which
+independent draws from the same local laws lose. Ensemble spatial simulation draws each location
+independently from its law, the dependence lying between the laws, which share the data of their
+neighbourhoods. A simulated field and a field of independent draws from the members are then the
+same kind of object. On 8 fields their lag-1 correlations were 0.845 and 0.848, against 0.843 for the
+truth and 0.930 for the map of means. The check now reads the structure that the paper on spatial
+distributional estimation reads, the local histograms in windows.
 
 .. _scenario-S02:
 

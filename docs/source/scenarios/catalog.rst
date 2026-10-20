@@ -133,9 +133,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - 
      - 
    * - :ref:`S01 <scenario-S01>`
-     - simulation keeps the geometry of the field
-     - ready · priority 4
-     - runner method for simulated fields
+     - simulated fields keep the local texture of the field
+     - **implemented**
+     - —
    * - :ref:`S02 <scenario-S02>`
      - error stops decreasing beyond some ensemble size
      - **implemented**

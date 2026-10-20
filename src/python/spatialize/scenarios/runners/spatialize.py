@@ -178,6 +178,28 @@ class SpatializeRunner:
             raise NotImplementedError(f"{est.encoder}/{est.decoder} in {len(est.domain)}D")
         return self._run(est, samples, values, samples, n_members, seed, "loo")
 
+    def simulate(self, est, samples, values, queries, *, n_members, n_fields, seed):
+        """Fields simulated from the ensemble at the queries: ``n_members`` members of the estimator, then
+        ``n_fields`` fields drawn by ensemble spatial simulation (:func:`~spatialize.gs.ess.ess_sample`
+        with its default local model, seeded by ``seed``).
+
+        Returns
+        -------
+        ndarray of shape (q, n_fields)
+        """
+        from spatialize.empirical import FittedModelFactory
+        from spatialize.gs.esi import ESIResult
+        from spatialize.gs.ess import ess_sample
+        from spatialize.logging import singleton_null_callback
+        members = np.asarray(self.members(est, samples, values, queries, n_members=n_members, seed=seed), float)
+        with np.errstate(all="ignore"):
+            estimate = np.nanmean(members, axis=1)
+        result = ESIResult(estimate, members, xi=np.asarray(queries, float), points=np.asarray(samples, float),
+                           values=np.asarray(values, float))
+        sims = ess_sample(result, n_sims=int(n_fields), fitted_model_factory=FittedModelFactory(seed=int(seed)),
+                          callback=singleton_null_callback)
+        return np.asarray(sims.scenarios, float).reshape(len(queries), int(n_fields))
+
     def cat_loo(self, est, samples, codes, *, n_members, seed):
         """Leave-one-out categorical ensemble: each datum's class predicted from the other data, one member
         per partition, with the classifier named by the estimator's ``decoder`` (as the categorical

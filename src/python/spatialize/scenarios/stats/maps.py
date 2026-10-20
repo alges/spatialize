@@ -303,3 +303,33 @@ def boundary_sharpness(p, mask):
         return float("nan")
     gy, gx = np.gradient(np.asarray(p, float))
     return float(np.hypot(gx, gy)[b].mean())
+
+
+def local_histogram_distance(truth, z, corners, window, bins=10):
+    r"""How far the local histograms of a map lie from those of the truth: the mean Jensen–Shannon distance,
+    in bits, between the histograms of the two maps in square windows.
+
+    Parameters
+    ----------
+    truth, z : array_like of shape (m, m)
+        The truth and the map, indexed ``[y, x]``.
+    corners : array_like of shape (k, 2)
+        The lower corners ``(row, column)`` of the windows.
+    window : int
+        The side of the windows, in pixels.
+    bins : int, optional
+        The number of bins, between the truth's quantiles. Default: 10.
+
+    Returns
+    -------
+    float
+        Between 0, identical local histograms, and 1.
+    """
+    from scipy.spatial.distance import jensenshannon
+    a, b = np.asarray(truth, float), np.asarray(z, float)
+    edges = np.quantile(a, np.linspace(0, 1, int(bins) + 1))
+    edges[0], edges[-1] = -np.inf, np.inf
+    w = int(window)
+    return float(np.mean([jensenshannon(np.histogram(a[i:i + w, j:j + w], edges)[0] + 1e-9,
+                                        np.histogram(b[i:i + w, j:j + w], edges)[0] + 1e-9, base=2)
+                          for i, j in np.asarray(corners, int)]))

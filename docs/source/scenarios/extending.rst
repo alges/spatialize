@@ -63,6 +63,10 @@ A runner may also give leave-one-out ensembles of classes, through a method
 ``(n_samples, n_members)`` of class codes, each datum's class predicted from the other data by the
 classifier the estimator's ``decoder`` names. Scenario P13 needs it, together with ``cells``.
 
+A runner may also give fields simulated from its ensemble, through a method
+``simulate(est, samples, values, queries, *, n_members, n_fields, seed)`` returning an array of shape
+``(n_queries, n_fields)``. Scenario S01 needs it.
+
 A runner may also give the readings of its law, through a method
 ``law_cdf(est, samples, values, queries, thresholds, *, reading, n_members, seed)`` returning an
 array of shape ``(n_queries, n_thresholds)``. It holds the cumulative distribution function that

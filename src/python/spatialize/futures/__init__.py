@@ -10,6 +10,8 @@ Modules
     Spatial entropy and mutual information of the predictive laws.
 :mod:`spatialize.futures.coesi`
     Co-estimation, a variable predicted from several others through two stages of ensembles.
+:mod:`spatialize.futures.variogram`
+    Variogram inference, the anisotropy and the correlation lengths read from an ensemble.
 """
 import warnings
 

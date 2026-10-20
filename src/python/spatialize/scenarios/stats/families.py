@@ -182,7 +182,7 @@ def tost_mean(x, low, high):
 
 
 def coverage_at_least(n_covered, n, level):
-    """Exact binomial test that an interval covers at least at its nominal level.
+    r"""Exact binomial test that an interval covers at least at its nominal level.
 
     Parameters
     ----------

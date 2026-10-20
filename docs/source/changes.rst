@@ -44,6 +44,14 @@ New
   ``functionals.Expectile`` and ``functionals.ExpectedShortfall`` (the mean beyond the value at risk,
   either tail) are new readings of their own, and ``scoring.asymmetric_loss`` charges the same
   loss in cross-validation, so a search chooses the ensemble the use prefers.
+- **Variogram inference from the ensemble** (experimental, :mod:`spatialize.futures.variogram`).
+  :func:`~spatialize.futures.variogram.infer_variogram` reads the direction of a field's anisotropy and its
+  correlation lengths from the data, in two or three dimensions, the direction from the structure tensor of
+  the adaptive-IDW map at the knee of a Pareto search and the lengths from the members of the weighted draw,
+  with the theory's residual weight at every node in place of a nugget and an upper bound on a measurement
+  error of the data, the smallest within-cell variance of the data over a ladder of granularities.
+  :meth:`~spatialize.gs.esi.ESIResult.variogram` reads them from an estimate already on a grid. Scenario
+  :ref:`S14 <scenario-S14>` checks it against the field itself (:doc:`theory/other`).
 - **Widened members keeping their index.** :func:`~spatialize.gs.ess.widen_members` widens the members
   of an ESI estimation member by member, with the laws of the widening of ``ess_sample``, each member
   keeping its column. The members' dependence between locations survives, so the law of a block

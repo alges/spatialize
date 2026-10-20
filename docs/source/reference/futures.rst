@@ -41,3 +41,18 @@ Co-estimation
 .. autofunction:: coesi_nongriddata
 
 .. autofunction:: coesi_marginal_cv
+
+Variogram inference
+===================
+
+.. automodule:: spatialize.futures.variogram
+   :no-members:
+
+.. currentmodule:: spatialize.futures.variogram
+
+.. autofunction:: infer_variogram
+
+.. autofunction:: read_variogram
+
+.. autoclass:: VariogramInference
+   :members: plot, as_dict, anisotropy_ratios

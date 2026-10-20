@@ -546,6 +546,32 @@ class ESIResult(EstimationResult):
         fraction = empty.mean(axis=1)
         return fraction.reshape(self.original_shape) if self.griddata else fraction
 
+    def variogram(self, members=None, sigma=2.0, level=0.9):
+        """The anisotropy and the correlation lengths read from this estimate (experimental).
+
+        The principal directions come from the structure tensor of the map, the correlation lengths from
+        the members read along them. The estimate must be on a regular grid in 2 or 3 dimensions
+        (:func:`esi_griddata`). It belongs to :mod:`spatialize.futures` and warns once per session.
+
+        Parameters
+        ----------
+        members : ESIResult, optional
+            An estimate on the same grid whose members give the lengths, preferably from a drawing decoder
+            such as ``wdraw_adaptiveidw``. Default: this estimate's members.
+        sigma, level : float, optional
+            As in :func:`spatialize.futures.variogram.read_variogram`.
+
+        Returns
+        -------
+        spatialize.futures.variogram.VariogramInference
+
+        See Also
+        --------
+        spatialize.futures.variogram.infer_variogram : the whole recipe from the data.
+        """
+        from spatialize.futures.variogram import read_variogram
+        return read_variogram(self, members=members, sigma=sigma, level=level)
+
     def precision(self, loss_function=lf.mse_loss):
         """Calculate the precision (error) between the estimate and the ESI samples.
 

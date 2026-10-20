@@ -2388,6 +2388,136 @@ def eval_confidence_classes(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_exceedance_area(sc: Scenario, runner: Runner, mode: str, seed: int,
+                         save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``exceedance_area``: the share of the domain above a limit, read from the members and from
+    simulated fields (S07).
+
+    On each pinned field the limit :math:`\ell` is the truth's quantile of level ``data.limit_quantile`` and
+    the true area :math:`A` the share of the grid above it. Each member of ``estimator`` gives one area, its
+    share of the grid above :math:`\ell`, and :math:`E_v`, the share of members above :math:`\ell` at
+    location :math:`v`, the probability of exceeding it. Kinds (key ``kind``):
+
+    - ``coverage`` (coverage, :func:`~spatialize.scenarios.stats.families.coverage_at_least`) — the share
+      of fields whose true area lies in the central interval of level ``level`` of the members' areas is
+      at least ``level``;
+    - ``area_variance`` (identity) — over ``data.n_simulated`` fields simulated from the ensemble (the
+      runner's optional method ``simulate``, ``widening="auto"``), the variance of the area equals
+      :math:`|V|^{-2} \sum_v E_v (1 - E_v)` at their own exceedance probabilities (Proposition 12.3.9 of
+      the theory, draft), corrected by :math:`M/(M-1)` for :math:`M` fields; one standardised difference per
+      field, the standard error of the sample variance being that of a normal area under the null,
+      the formula times :math:`\sqrt{2/(M-1)}`;
+    - ``shared_partition`` (one-sided) — the logarithm of the members' area variance over that formula at
+      the members' probabilities exceeds 0;
+    - ``exceedance_region`` (one-sided, visual V8) — the overlap
+      (:func:`~spatialize.scenarios.stats.maps.level_set_iou`) of :math:`\{E_v > 1/2\}` with the true region
+      above :math:`\ell` exceeds ``above``.
+
+    Reads ``data.grid``, ``data.limit_quantile``, ``data.n_simulated``, ``data.fields`` (per mode) and
+    ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    V = m * m
+    queries = generators.grid(m).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache, sims = {}, {}
+
+    def truth_of(k):
+        f = sc.field(k)
+        truth = f["truth"].astype(float)
+        ell = float(np.quantile(truth, float(d["limit_quantile"])))
+        return f, truth, ell
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f, truth, ell = truth_of(k)
+            mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            above = np.where(np.isfinite(mem), mem > ell, np.nan)
+            cache[(eid, k)] = dict(areas=np.nanmean(above, axis=0), p=np.nanmean(above, axis=1),
+                                   truth=truth, ell=ell, members=mem)
+        return cache[(eid, k)]
+
+    def simulated(eid, k):
+        if (eid, k) not in sims:
+            f, truth, ell = truth_of(k)
+            z = np.asarray(runner.simulate(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                           n_fields=int(d["n_simulated"]), seed=_sub_seed(seed, k),
+                                           widening="auto"), float)
+            above = z > ell
+            sims[(eid, k)] = (above.mean(axis=0), above.mean(axis=1))
+        return sims[(eid, k)]
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est) or (kind == "area_variance" and not hasattr(runner, "simulate")):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+            continue
+        if kind == "coverage":
+            level = float(check["level"])
+            covered = []
+            for k in range(K):
+                r_ = read(est.id, k)
+                lo, hi = np.nanquantile(r_["areas"], [(1 - level) / 2, (1 + level) / 2])
+                covered.append(lo <= np.mean(r_["truth"] > r_["ell"]) <= hi)
+            r = families.coverage_at_least(int(np.sum(covered)), K, level)
+        elif kind == "area_variance":
+            z = []
+            for k in range(K):
+                areas, p = simulated(est.id, k)
+                M = len(areas)
+                formula = np.sum(p * (1 - p)) / V ** 2 * M / (M - 1)
+                # under the null the area is a sum of many independent indicators, nearly normal, so the
+                # sample variance has standard error formula·√(2/(M−1)); a standard error read from the
+                # sample itself shrinks with it and inflates the fields whose variance falls short
+                z.append((areas.var(ddof=1) - formula) / (formula * np.sqrt(2.0 / (M - 1))))
+            r = families.identity(z, "(variance - formula)/se per field")
+        elif kind == "shared_partition":
+            x = []
+            for k in range(K):
+                r_ = read(est.id, k)
+                x.append(np.log(np.nanvar(r_["areas"], ddof=1) / (np.sum(r_["p"] * (1 - r_["p"])) / V ** 2)))
+            r = families.mean_greater(x, 0.0)
+        elif kind == "exceedance_region":
+            x = [maps.level_set_iou((read(est.id, k)["p"] > 0.5).reshape(m, m),
+                                    (read(est.id, k)["truth"] > read(est.id, k)["ell"]).reshape(m, m)) for k in range(K)]
+            r = families.mean_greater(x, float(check["above"]))
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for k in sorted({key[1] for key in cache}):
+            row = []
+            for eid in ests:
+                if (eid, k) not in cache:
+                    continue
+                e, c = ests[eid], cache[(eid, k)]
+                recipe = f"{e.encoder} rate {e.rate:g}, {e.decoder}" + (", by cell" if (e.params or {}).get("coupling") == "cell" else "")
+                if not row:
+                    row.append({"title": "truth above the limit", "z": (c["truth"] > c["ell"]).reshape(m, m).astype(float),
+                                "vmin": 0, "vmax": 1, "cmap": "Reds"})
+                order = np.argsort(c["areas"])
+                for q in (0.05, 0.95):
+                    t = order[min(int(q * len(order)), len(order) - 1)]
+                    row.append({"title": f"{recipe}\nmember at the {int(q * 100)} % area", "z": (c["members"][:, t] > c["ell"]).reshape(m, m).astype(float),
+                                "vmin": 0, "vmax": 1, "cmap": "Reds"})
+                row.append({"title": f"{recipe}\nP(Z > limit)", "z": c["p"].reshape(m, m), "vmin": 0, "vmax": 1, "cmap": "Reds"})
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "exceedance", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2513,7 +2643,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

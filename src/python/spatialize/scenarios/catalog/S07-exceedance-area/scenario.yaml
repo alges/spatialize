@@ -1,0 +1,83 @@
+id: S07-exceedance-area
+version: 1
+tier: T3
+evaluator: exceedance_area
+book:
+  topic: "the area above a limit: its law read from the members, each a field, against the product law of the simulated fields"
+  draft_2026_10: "§12.3.6, eqs (12.3.37)–(12.3.44), Prop 12.3.9, Figs 12.5 and 12.6"   # the book is a draft
+purpose: >
+  The share of the domain above a limit depends on the field jointly at every location, so its law is read
+  from the members, each of them a field. With draws coupled within each cell the members' 90 % band covers
+  the true area at its nominal rate, while averaged members, which lose the spread of the cells, do not.
+  Simulated fields draw every location independently, so the variance of their area follows a closed form
+  (Proposition 12.3.9), which the members exceed through the partition they share. The region where the
+  probability of exceeding the limit passes one half overlaps the true exceeded region (visual V8).
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 30
+  marks: {lognormal: [0.0, 1.0]}
+data:
+  design: {type: uniform, n: 350}
+  grid: 36
+  mode: pinned
+  fields: {ci: 48, full: 96}
+  limit_quantile: 0.8               # the limit is the truth's 80 % quantile
+  n_simulated: 400                  # simulated fields per replicate field, Gamma widening
+  generator_seed: 20261027
+estimators_T: {ci: 300, full: 300}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+  - {id: wdraw-cell, encoder: mondrian, rate: 5.0, decoder: wdraw_idw, params: {exponent: 2.0, coupling: cell},
+     empty_cells: coarsen}
+checks:
+  - id: coverage
+    title: "the members' 90 % band of the exceeded area covers the true area at least at the nominal rate (weighted draw coupled by cell)"
+    kind: coverage
+    family: coverage
+    estimator: wdraw-cell
+    level: 0.9
+  - id: coverage-averaged
+    title: "negative control: the averaged members of IDW lose the area's spread and cover it far below the nominal rate"
+    kind: coverage
+    family: coverage
+    estimator: idw
+    level: 0.9
+    expect: {default: reject}
+  - id: area-variance
+    title: "the variance of the area over simulated fields follows Proposition 12.3.9 at their own exceedance probabilities"
+    kind: area_variance
+    family: identity
+    estimator: idw
+  - id: shared-partition
+    title: "the members' area varies more than Proposition 12.3.9 gives at their probabilities, through the partition they share"
+    kind: shared_partition
+    family: one-sided
+    estimator: idw
+  - id: v8-region
+    title: "V8: the region where the probability of exceeding the limit passes one half overlaps the true region (IoU above 0.5)"
+    kind: exceedance_region
+    family: one-sided
+    estimator: idw
+    above: 0.5
+provenance:
+  v1: >
+    2026-10-20: first version. The closed form the specification asked to derive is Proposition 12.3.9 of the
+    theory (draft): under ensemble simulation Var A = (1/|V|^2) sum_v E_v (1 - E_v). Study on 12 and 24 fields
+    before the first run: the simulated fields follow it (ratio of the measured variance to the formula 0.99,
+    standard deviation 0.05); the IDW members' area varies 12 times more than the formula at their own
+    probabilities (the book: 7.4). The members' 90 % band covered the true area in 1 of 12 fields for IDW (the
+    members understating the area, 0.150 against 0.179), 11 of 24 on members widened member by member, 13 of 24
+    for the weighted draw coupled by location, 23 of 24 for the weighted draw coupled by cell and 24 of 24 for
+    the uniform draw coupled by cell (overlap of V8 0.31). User decision: coverage on the weighted draw coupled
+    by cell, IDW as a negative control. The specification's bracketing of the true area by the member regions is
+    that coverage. V8 level 0.5 fixed before the first run (study: IDW 0.63, from 0.40 to 0.84, 1.2 standard
+    deviations above 0.5 per field). Sizes: 48 fields in ci, so a coverage of 0.75 lies 3.5 standard errors
+    from 0.9; 96 in full.
+    Same day, after the first runs (ci seeds 1 and 2, full seed 1): the band of the weighted draw coupled by
+    cell covered the true area in 48 of 48 and 96 of 96 fields, over-covering, which a two-sided test at the
+    nominal rate would reject with more fields. User decision: the coverage check asks for at least the
+    nominal rate (exact binomial, new family coverage). The identity first took the standard error of the
+    sample variance from the sample's fourth moment, which shrinks with a low sample variance: one field of
+    seed 2 reached z = -4.2 with the simulated indicators of adjacent locations uncorrelated (+0.001). It now
+    takes the standard error under the null, the formula times sqrt(2 / (M - 1)), giving -3.1 for that field.

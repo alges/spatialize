@@ -16,11 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S07, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S07**, exceedance areas. Its coverage check is ready, its identity awaits a derivation.
 #. **S05**, a heavy-tailed field. Its main checks are ready, its comparison with kriging awaits a
    baseline.
 #. **S06**, order relations in a non-stationary field. P4 already covers the ensemble's side, the
@@ -735,31 +734,72 @@ S06 — Order relations in a non-stationary field
 
 .. _scenario-S07:
 
-S07 — Exceedance areas
-======================
+S07 — The area above a limit
+============================
 
-:Status: ready (not yet implemented), with the area-variance identity to be derived before implementation
-:Priority: 8 of 11 among the pending scenarios
-:Source in the theory: worked example of the law of the area above a threshold
-:Claim: the law of the exceeded area read from the members covers the true area at the nominal rate. The variance of the area over simulated fields follows a closed form.
+:Status: **implemented**
+:Evaluator: ``exceedance_area``
+:Source in the theory: the law of the area above a limit, read from the members, against the product law
+  of the simulated fields (Proposition 12.3.9 in the draft)
+:Claim: the members' band of the exceeded area covers the true area at least at its nominal rate when the
+  draws are coupled within each cell, while averaged members lose that spread. Over simulated fields, which
+  draw every location independently, the variance of the area follows a closed form, which the members
+  exceed through the partition they share.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 30 cells and lognormal marks. Each replicate field has 350 uniformly placed data with queries on a 36×36 grid, estimated by Mondrian IDW with :math:`T = 300`.
+**Setup.** The truth is a Voronoi block-mark field with 30 cells and lognormal marks of log-scale 1.0.
+Each pinned replicate field holds 350 uniformly placed data, with the field on a 36×36 grid. The limit
+:math:`\ell` is the truth's 80 % quantile, the area :math:`A` the share of the grid above it. Two Mondrian
+estimators of rate 5 (:math:`T = 300`, ``empty_cells="coarsen"``) give the members, IDW (exponent 2) and
+the weighted draw ``wdraw_idw`` (exponent 2) with ``coupling="cell"``. Each member gives one area. The
+share of members above :math:`\ell` at a location gives its probability of exceeding the limit,
+:math:`E_v`. From the IDW members, ensemble spatial simulation draws 400 fields with Gamma widening. The
+scenario uses 48 fields in ``ci`` and 96 in ``full``.
+
+Under ensemble spatial simulation the locations are drawn independently, each from its own law, so the
+indicators :math:`1\{\tilde Z(v) > \ell\}` are independent Bernoulli variables of parameters :math:`E_v`.
+The exceeded area :math:`A = |V|^{-1} \sum_v 1\{\tilde Z(v) > \ell\}` then has
+
+.. math::
+
+   \mathbb E\, A = \frac{1}{|V|} \sum_{v \in V} E_v,
+   \qquad
+   \operatorname{Var} A = \frac{1}{|V|^2} \sum_{v \in V} E_v (1 - E_v),
+
+the covariances between distinct indicators vanishing. The members of an ensemble share a partition,
+so their indicators are positively dependent, which makes their area vary more.
 
 **Checks.**
 
-- *binomial coverage*. Over replicate fields, the true area falls in the members' interval at the nominal rate.
-- *identity*. The variance of the area over simulated fields matches its closed form, derived independently before implementation.
-- Visual **V8**. The region :math:`P(Z > \ell) > 1/2` overlaps the true exceeded region (IoU above a pre-set level), with member regions bracketing the true area.
+- ``coverage``, *coverage*. The central 90 % interval of the areas of the weighted draw's members
+  holds the true area in at least 90 % of the fields, an exact binomial test which a conservative band
+  passes.
+- ``coverage-averaged``, *coverage*, negative control. The averaged members of IDW lose the spread of
+  the cells, so their band covers far less often, which the test must reject.
+- ``area-variance``, *identity*. Over the simulated fields the variance of the area equals the closed
+  form at their own exceedance probabilities, corrected by :math:`M/(M-1)` for :math:`M` fields, with
+  the standard error of a sample variance of a normal area under the null.
+- ``shared-partition``, *one-sided*. The logarithm of the IDW members' area variance over the closed
+  form at their probabilities exceeds 0.
+- ``v8-region``, *one-sided*, visual V8. The overlap of the region :math:`E_v > 1/2` of IDW with the
+  true region above :math:`\ell` exceeds 0.5.
 
-**To implement.**
+**Results.** On seeds 1 to 3 in ``ci`` and seed 1 in ``full`` every check passes. The weighted draw's
+band covers the true area in every field, a conservative band, while that of IDW covers 44 % to 48 % of
+them. The simulated fields follow the closed form, with standardised differences of mean near 0. The
+IDW members' area varies about 11 times more than the closed form gives, a logarithm of 2.4. The overlap
+of V8 is 0.64. A run takes 24 s in ``ci``, 47 s in ``full``.
 
-- Pinned replicate fields from the Voronoi block-mark generator with lognormal marks.
-- The coverage check (binomial, over the fields), which needs no new derivation. The members'
-  exceeded areas give an interval, against which the true area is read.
-- The closed form of the variance of the exceeded area over simulated fields, derived independently
-  before the identity is added. That check also needs the runner method for simulated fields of
-  S01.
-- V8 through the existing ``level_set_iou``, with its pre-set level fixed before the first run.
+**History.** The specification asked for the closed form to be derived before the identity was added.
+The theory states and proves it. A study on 12 and 24 fields found the IDW members' band covering the
+true area in 1 of 12 fields, the members understating the area, 0.150 against 0.179. Widened member by
+member they covered 11 of 24, coupled by location in the weighted draw 13 of 24, coupled by cell 23 of
+24, so the coverage check reads the weighted draw coupled by cell, with IDW as a negative control. The
+specification's bracketing of the true area by the member regions is that coverage. The first runs
+found the band covering every field, which a two-sided test at the nominal rate would reject with more
+fields, so the check asks for at least the nominal rate. The identity first took its standard error
+from the fourth moment of the simulated areas. That error shrinks with a low sample variance, so it
+inflated such fields, one of them reaching :math:`z = -4.2` with the indicators of adjacent locations
+uncorrelated. It now takes the standard error under the null.
 
 .. _scenario-S08:
 

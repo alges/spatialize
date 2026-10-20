@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -301,6 +301,24 @@ optional method ``widened_members`` (:doc:`extending`).
 
   - ``ordered`` (paired relation), ``better_class`` and ``worse_class``;
   - ``against_proxy`` (paired relation), no further key.
+
+Evaluator ``exceedance_area``
+-----------------------------
+
+This evaluator reads the share of the domain above a limit from the members and from simulated
+fields, over pinned replicate fields (scenario S07). Its check ``area_variance`` needs the runner's
+optional method ``simulate`` (:doc:`extending`).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``limit_quantile`` (the
+  limit, as a quantile of the truth), ``n_simulated`` (simulated fields per replicate field) and
+  ``generator_seed``.
+- per check, ``kind``, ``estimator`` and its keys:
+
+  - ``coverage`` (coverage), ``level``, the level of the members' central interval of the area;
+  - ``area_variance`` (identity), no further key;
+  - ``shared_partition`` (one-sided), no further key;
+  - ``exceedance_region`` (one-sided, V8), ``above``.
 
 Evaluator ``edge_cases``
 ------------------------

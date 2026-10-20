@@ -4,7 +4,8 @@ Every check of a scenario is decided by one of these functions. Each returns a
 :class:`TestResult` holding the test statistic, the p-value and the family's **pass rule**:
 
 - ``pass_if="not_reject"`` — goodness of fit to a closed form, identities, two-sample comparisons
-  (:func:`gof_proportions`, :func:`gof_counts`, :func:`identity`, :func:`two_sample_ks`): an implementation conforms unless the data
+  (:func:`gof_proportions`, :func:`gof_counts`, :func:`identity`, :func:`two_sample_ks`,
+  :func:`coverage_at_least`): an implementation conforms unless the data
   reject the null hypothesis. The level bounds *false failures*; the declared power at the minimum
   detectable effect bounds false passes.
 - ``pass_if="reject"`` — one-sided bounds, equivalence (TOST) and paired relations
@@ -31,7 +32,7 @@ class TestResult:
     ----------
     family : str
         Test family: ``"gof-closed"``, ``"identity"``, ``"almost-sure"``, ``"equivalence"``,
-        ``"one-sided"``, ``"paired-relation"`` or ``"two-sample"``.
+        ``"one-sided"``, ``"paired-relation"``, ``"two-sample"`` or ``"coverage"``.
     statistic : float
         The test statistic (χ², number of violations, mean, ...), as named in ``detail``.
     p_value : float
@@ -178,6 +179,28 @@ def tost_mean(x, low, high):
         p = float(max(p_low, p_high))
     return TestResult("equivalence", float(m), p, "reject",
                       f"mean={m:.4g} se={se:.3g} margin=({low:g}, {high:g}) K={n}")
+
+
+def coverage_at_least(n_covered, n, level):
+    """Exact binomial test that an interval covers at least at its nominal level.
+
+    Parameters
+    ----------
+    n_covered, n : int
+        Number of replicate fields whose truth falls in the interval, and number of fields.
+    level : float
+        Nominal coverage of the interval, in (0, 1).
+
+    Returns
+    -------
+    TestResult
+        Family ``"coverage"``, pass rule ``"not_reject"``: the p-value is
+        :math:`\Pr(X \le` ``n_covered``:math:`)` for :math:`X \sim \mathrm{Bin}(n, \text{level})`, so
+        under-coverage rejects while over-coverage, a conservative interval, passes.
+    """
+    p = float(stats.binom.cdf(int(n_covered), int(n), float(level)))
+    return TestResult("coverage", n_covered / n, p, "not_reject",
+                      f"covered {int(n_covered)} of {int(n)} ({n_covered / n:.3f}) against at least {level:g}")
 
 
 def mean_greater(x, bound):

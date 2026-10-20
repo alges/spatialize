@@ -55,8 +55,8 @@ halos around extremes, connected bodies — is tested through pre-registered map
    * - V8
      - exceedance regions
      - :ref:`S07 <scenario-S07>`
-     - IoU of :math:`P(Z>\ell)>1/2` with the true exceeded region above a pre-set level; member regions bracket the true area
-     - ready · priority 7
+     - IoU of :math:`P(Z>\ell)>1/2` with the true exceeded region above 0.5; the members' band of the area covers the true area (S07's coverage)
+     - **implemented**
    * - V9
      - roughness
      - :ref:`S03 <scenario-S03>`
@@ -85,13 +85,6 @@ the criteria needing a kriging baseline coming last but one.
 
    - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, which
      wait for the runner method for simulated fields of S01.
-
-#. **V8** (S07), exceedance regions, with S07.
-
-   - The existing ``level_set_iou`` of :math:`P(Z > \ell) > 1/2` with the true exceeded region, its
-     pre-set level fixed before the first run.
-   - The bracketing of the true area by the members' exceeded areas, shared with S07's coverage
-     check.
 
 #. **V2** (S03), the anisotropy against a fitted isotropic kriging.
 

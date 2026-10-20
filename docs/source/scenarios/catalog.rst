@@ -157,9 +157,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - partly ready · priority 10
      - indicator-kriging baseline (negative control), writable in NumPy
    * - :ref:`S07 <scenario-S07>`
-     - exceedance areas
-     - ready · priority 8
-     - closed form of the area variance; simulated fields (S01)
+     - the area above a limit, read from the members and from simulated fields
+     - **implemented**
+     - —
    * - :ref:`S08 <scenario-S08>`
      - support effect on selection curves
      - **implemented**
@@ -219,8 +219,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - halo index; ordinary-kriging baseline (V2)
    * - V8
      - exceedance regions (S07)
-     - ready · priority 7
-     - pre-set IoU level (with S07)
+     - **implemented**
+     - —
    * - V9
      - roughness against a global simple-kriging reference (S03)
      - **implemented**

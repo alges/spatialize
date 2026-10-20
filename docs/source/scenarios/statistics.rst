@@ -52,6 +52,10 @@ passing means *not rejecting* or *rejecting* the null hypothesis.
      - a law must not change (e.g. the law at a location when other queries change)
      - Kolmogorov–Smirnov or Anderson–Darling, two-proportion :math:`z`
      - do not reject, with the declared power
+   * - **coverage**
+     - an interval covers the truth at least at its nominal level across :math:`K` fields
+     - exact binomial lower tail, :math:`\Pr(X \le k)` for :math:`X \sim \mathrm{Bin}(K, \text{level})`
+     - do not reject, with the declared power; a conservative interval passes
 
 **Why the asymmetry matters.** For a check of the form "the law equals X", not rejecting counts as a
 pass. A test with too few draws never rejects, so on its own it would pass anything. Those families

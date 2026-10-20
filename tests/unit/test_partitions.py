@@ -92,3 +92,14 @@ def test_block_kriging_variance_follows_the_data_locations():
     assert bkv(s, [on_datum], practical_range=0.3, nugget=0.4)[0] >= 0.4
     block = np.array([[0.5, 0.5], [0.52, 0.5], [0.5, 0.52], [0.52, 0.52]])
     assert bkv(s, [block], 0.3)[0] < bkv(s, [block[:1]], 0.3)[0]
+
+
+def test_coverage_family_rejects_under_coverage_only():
+    """The coverage family of scenario S07: a conservative interval passes, an interval covering well
+    below its level rejects, with the exact binomial lower tail as p-value."""
+    from scipy import stats
+    from spatialize.scenarios.stats.families import coverage_at_least
+    assert coverage_at_least(48, 48, 0.9).p_value == 1.0
+    low = coverage_at_least(21, 48, 0.9)
+    assert abs(low.p_value - stats.binom.cdf(21, 48, 0.9)) < 1e-15 and low.p_value < 1e-10
+    assert low.pass_if == "not_reject"

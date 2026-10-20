@@ -2518,6 +2518,134 @@ def eval_exceedance_area(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_heavy_tail(sc: Scenario, runner: Runner, mode: str, seed: int,
+                    save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``heavy_tail``: a field without variance, read through the median and the mean of the
+    members, the range of the data and the top decile, against ordinary kriging (S05).
+
+    On each pinned field the members of each estimator on the grid give the median map and the mean map.
+    The estimator ``ordinary_kriging`` names the baseline, global ordinary kriging under the exponential
+    variogram of ``data.baseline``
+    (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`). The top decile is the
+    set of grid cells where the truth reaches its quantile of level ``data.top_quantile``. Kinds (key
+    ``kind``):
+
+    - ``median_beats_mean`` (paired-relation) — the logarithm of the mean absolute error of the median map
+      is lower than that of the mean map, the logarithm keeping one field from outweighing the others;
+    - ``data_range`` (almost-sure) — no finite member of ``estimators`` falls below the smallest datum, by
+      more than 4 single-precision ulps of it (the rounding of a weighted average in single precision);
+    - ``leaves_range`` (one-sided) — the share of members below the smallest datum exceeds 0;
+    - ``top_decile`` (one-sided) — the mean error of the map over the top decile, relative to the truth,
+      is below 0 (the median map, or the baseline's map);
+    - ``halo`` (one-sided, visual V7) — the share of the ring of ``data.halo_width`` pixels around the top
+      decile where the map falls below the smallest datum
+      (:func:`~spatialize.scenarios.stats.maps.halo_share`) exceeds 0;
+    - ``halo_local`` (paired-relation, visual V7) — that share exceeds the share beyond the ring.
+
+    Reads ``data.grid``, ``data.top_quantile``, ``data.halo_width``, ``data.baseline``, ``data.fields``
+    (per mode) and ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    m = int(d["grid"])
+    queries = generators.grid(m).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def read(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            truth = f["truth"].astype(float)
+            top = truth >= np.quantile(truth, float(d["top_quantile"]))
+            if eid == "ordinary_kriging":
+                b = d["baseline"]
+                z = generators.fields.ordinary_kriging_exponential(f["samples"], f["values"], queries,
+                                                                   float(b["practical_range"]), float(b.get("nugget", 0.0)))
+                cache[(eid, k)] = dict(median=z, mean=z, members=None, truth=truth, top=top, floor=float(f["values"].min()))
+            else:
+                mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                                seed=_sub_seed(seed, k)), float)
+                with np.errstate(all="ignore"):
+                    cache[(eid, k)] = dict(median=np.nanmedian(mem, axis=1), mean=np.nanmean(mem, axis=1), members=mem,
+                                           truth=truth, top=top, floor=float(f["values"].min()))
+        return cache[(eid, k)]
+
+    def supported(eid):
+        return eid == "ordinary_kriging" or runner.supports(ests[eid])
+
+    out = []
+    for check in s["checks"]:
+        kind = check["kind"]
+        used = check.get("estimators") or [check["estimator"]]
+        cid, title = check["id"], check["title"]
+        missing = [e for e in used if not supported(e)]
+        if missing:
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {', '.join(missing)}"))
+            continue
+        eid = used[0]
+        if kind == "median_beats_mean":
+            a = [np.log(np.nanmean(np.abs(read(eid, k)["median"] - read(eid, k)["truth"]))) for k in range(K)]
+            b = [np.log(np.nanmean(np.abs(read(eid, k)["mean"] - read(eid, k)["truth"]))) for k in range(K)]
+            r = families.paired_relation(a, b, better="less")
+        elif kind == "data_range":
+            bad, n = 0, 0
+            for e in used:
+                for k in range(K):
+                    c = read(e, k)
+                    fin = c["members"][np.isfinite(c["members"])]
+                    # members are single precision: a weighted average can round an ulp or two below its
+                    # smallest term, so the floor allows 4 ulps
+                    tol = 4 * np.finfo(np.float32).eps * abs(c["floor"])
+                    bad += int(np.sum(fin < c["floor"] - tol))
+                    n += fin.size
+            r = families.almost_sure(bad, n)
+        elif kind == "leaves_range":
+            x = []
+            for k in range(K):
+                c = read(eid, k)
+                fin = c["members"][np.isfinite(c["members"])]
+                x.append(float(np.mean(fin < c["floor"])))
+            r = families.mean_greater(x, 0.0)
+        elif kind == "top_decile":
+            x = [float(np.mean((read(eid, k)["median"][read(eid, k)["top"]] - read(eid, k)["truth"][read(eid, k)["top"]])
+                               / read(eid, k)["truth"][read(eid, k)["top"]])) for k in range(K)]
+            r = families.mean_less(x, 0.0)
+        elif kind in ("halo", "halo_local"):
+            shares = [maps.halo_share(read(eid, k)["median"].reshape(m, m), read(eid, k)["top"].reshape(m, m),
+                                      read(eid, k)["floor"], int(d["halo_width"])) for k in range(K)]
+            ring, rest = np.array(shares).T
+            r = families.mean_greater(ring, 0.0) if kind == "halo" else families.paired_relation(ring, rest, better="greater")
+        else:
+            raise ValueError(f"unknown check kind {kind}")
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    if save_maps and cache:
+        from .figures import save_field_panels
+        panels = []
+        for k in sorted({key[1] for key in cache}):
+            first = next(c for (e, kk), c in cache.items() if kk == k)
+            truth = first["truth"]
+            hi = float(np.quantile(truth, 0.98))
+            row = [{"title": "truth", "z": truth.reshape(m, m), "vmin": 0, "vmax": hi, "cmap": "viridis"}]
+            for (eid, kk), c in cache.items():
+                if kk != k:
+                    continue
+                if eid == "ordinary_kriging":
+                    row.append({"title": "ordinary kriging, exponential", "z": c["median"].reshape(m, m), "vmin": 0, "vmax": hi, "cmap": "viridis"})
+                    row.append({"title": "ordinary kriging\nbelow the smallest datum", "z": (c["median"] < c["floor"]).reshape(m, m).astype(float),
+                                "vmin": 0, "vmax": 1, "cmap": "Greys"})
+                else:
+                    e = ests[eid]
+                    row.append({"title": f"{e.encoder} rate {e.rate:g}, {e.decoder}\nmedian of the members", "z": c["median"].reshape(m, m),
+                                "vmin": 0, "vmax": hi, "cmap": "viridis"})
+            panels.append(row)
+        save_field_panels(save_maps, sc.id, "heavy_tail", panels)
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2643,7 +2771,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
               "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "simulation_texture": eval_simulation_texture,
-              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "law_validity": eval_law_validity,
+              "granularity": eval_granularity, "quantile_choice": eval_quantile_choice, "confidence_classes": eval_confidence_classes, "exceedance_area": eval_exceedance_area, "heavy_tail": eval_heavy_tail, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

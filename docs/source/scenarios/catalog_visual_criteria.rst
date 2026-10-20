@@ -50,8 +50,8 @@ halos around extremes, connected bodies — is tested through pre-registered map
    * - V7
      - no halos around extreme values
      - :ref:`S05 <scenario-S05>`
-     - halo index of ordinary kriging negative around top-decile cells; ensemble maps never below the data minimum
-     - partly ready (kriging baseline) · priority 9
+     - share of a 3-pixel ring around the top-decile cells where ordinary kriging falls below the smallest datum above 0 and above the share beyond the ring; members of the averaging and drawing decoders never below it
+     - **implemented**
    * - V8
      - exceedance regions
      - :ref:`S07 <scenario-S07>`
@@ -89,15 +89,10 @@ the criteria needing a kriging baseline coming last but one.
 #. **V2** (S03), the anisotropy against a fitted isotropic kriging.
 
    - An ordinary-kriging baseline with an isotropic variogram fitted to the data, by a rule fixed
-     before the first run. It can be written in NumPy, as the suite's simple kriging is, and serves V7
-     too.
+     before the first run. S05's baseline
+     (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`) takes a variogram
+     fixed in advance; V2 adds the fitting rule.
    - The coherence of the ensemble's map against the baseline's, paired over S03's 80 fields.
-
-#. **V7** (S05), no halos around extreme values, with S05.
-
-   - A halo index, the mean of the map minus the data minimum in a ring around the top-decile cells,
-     negative when a map dips below the data.
-   - The ordinary-kriging baseline of V2.
 
 #. **V10** (S13), the connectivity of high-value bodies, with S13.
 

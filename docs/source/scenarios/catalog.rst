@@ -149,9 +149,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - **implemented**
      - —
    * - :ref:`S05 <scenario-S05>`
-     - heavy-tailed field
-     - partly ready · priority 9
-     - ordinary-kriging baseline (V7), writable in NumPy
+     - heavy-tailed field: the median against the mean, the data range, the top decile, the halos of ordinary kriging
+     - **implemented**
+     - —
    * - :ref:`S06 <scenario-S06>`
      - non-stationary field, order relations of the estimated law
      - partly ready · priority 10
@@ -215,8 +215,8 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - V7
      - halos around extreme values (S05)
-     - partly ready · priority 9
-     - halo index; ordinary-kriging baseline (V2)
+     - **implemented**
+     - —
    * - V8
      - exceedance regions (S07)
      - **implemented**

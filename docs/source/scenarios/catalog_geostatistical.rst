@@ -16,12 +16,10 @@ Voronoi tessellation with uniform nuclei, the marks independent of the cells. A 
 field* does the same on a Mondrian partition. A *stationary Gaussian field* is drawn jointly at data
 and queries, so the grid holds the field itself.
 
-S01, S02, S03, S04, S07, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
+S01, S02, S03, S04, S05, S07, S08, S09, S10, S11 and S12 are implemented. The other scenarios are ordered below by priority, which
 weighs what a scenario adds to the claims already tested against what it still needs. Each scenario's
 section repeats its rank and lists what its implementation takes.
 
-#. **S05**, a heavy-tailed field. Its main checks are ready, its comparison with kriging awaits a
-   baseline.
 #. **S06**, order relations in a non-stationary field. P4 already covers the ensemble's side, the
    negative control awaits an indicator-kriging baseline.
 #. **S13**, connectivity. A new generator, a new functional and simulated fields.
@@ -678,32 +676,58 @@ only the places close to a dry datum and the draw blurring the edges that the we
 S05 — Heavy-tailed field
 ========================
 
-:Status: partly ready (not yet implemented)
-:Priority: 9 of 11 among the pending scenarios
-:Source in the theory: worked example of a heavy-tailed variable
-:Claim: with heavy tails the median of the members makes a better point estimate than their mean. The ensemble never estimates below the data minimum, while extremes are underestimated and kriging produces halos around them.
+:Status: **implemented**
+:Evaluator: ``heavy_tail``
+:Source in the theory: the functional that survives a heavy tail, and the range a decoder can reach
+:Claim: on a field whose marks have a finite mean and no variance, the median of the members errs less
+  than their mean under every decoder. Decoders that average or draw within the cell never leave the
+  range of the data, while kriging within the cell does. Every reading understates the highest values.
+  Ordinary kriging, whose weights take either sign, dips below the smallest datum around the high
+  cells.
 
-**Setup.** The truth is a Voronoi block-mark field, with one mark per cell of a Voronoi tessellation with uniform nuclei, here with 45 cells and Pareto marks (type I, minimum 1, tail index 1.05). Each replicate field has 350 uniformly placed data with queries on a 36×36 grid. The estimators combine Mondrian partitions with IDW, adaptive IDW, kriging and weighted draw, compared with an ordinary-kriging baseline and with widened laws.
+**Setup.** The truth is a Voronoi block-mark field with 45 cells and Pareto marks of type I, minimum 1
+and tail index 1.05, whose mean is finite while their variance is not. Each pinned replicate field
+holds 350 uniformly placed data, with the field on a 36×36 grid. Four Mondrian estimators of rate 5
+(:math:`T = 200`, ``empty_cells="coarsen"``) give the members, IDW (exponent 2), adaptive IDW, kriging
+within the cell (exponential, practical range 0.447, three times the side of a square of the mean cell
+area) and the weighted draw ``wdraw_idw`` (exponent 2). The baseline is global ordinary kriging under
+an exponential variogram fixed in advance, of practical range 0.3 and no nugget
+(:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`). The top decile is the
+set of grid cells where the truth reaches its 90 % quantile. The scenario uses 20 fields in ``ci`` and
+40 in ``full``.
 
 **Checks.**
 
-- *paired-relation*. The MAE of the median map lies below the MAE of the mean map, for every decoder.
-- *almost-sure*. No ensemble value falls below the data minimum (IDW, adaptive IDW, weighted draw).
-- *one-sided*. The signed error in the top decile is negative.
-- Visual **V7**. Ordinary kriging shows negative halos around the top-decile cells, while the ensemble maps never go below the data minimum.
+- ``median-idw``, ``median-aidw``, ``median-krig`` and ``median-wdraw``, *paired-relation*. The
+  logarithm of the mean absolute error of the median map lies below that of the mean map, the logarithm
+  keeping a field with a large mark from outweighing the others.
+- ``data-range``, *almost-sure*. No member of IDW, adaptive IDW or the weighted draw falls below the
+  smallest datum, by more than 4 single-precision ulps of it.
+- ``krig-leaves-range``, *one-sided*. A share of the members of kriging within the cell falls below the
+  smallest datum.
+- ``top-idw``, ``top-aidw``, ``top-wdraw`` and ``top-ok``, *one-sided*. Over the top decile the error of
+  the median map, or of ordinary kriging, relative to the truth is negative on average.
+- ``v7-halo``, *one-sided*, visual V7. Ordinary kriging falls below the smallest datum in part of the
+  ring of 3 pixels around the top decile (:func:`~spatialize.scenarios.stats.maps.halo_share`).
+- ``v7-halo-local``, *paired-relation*, visual V7. It does so more often in that ring than beyond it.
 
-**To implement.**
+**Results.** On seeds 1 to 3 in ``ci`` and seed 1 in ``full`` every check passes. The median errs less
+than the mean by 5 % for IDW and kriging within the cell, 30 % for adaptive IDW and 80 % for the
+weighted draw, the differences of the logarithms being 0.05, 0.27 and 0.59. No member of the averaging
+and drawing decoders leaves the range of the data, while 3.4 % of those of kriging within the cell do.
+The median maps understate the top decile by 16 % to 27 % of the truth, ordinary kriging by 19 %.
+Ordinary kriging falls below the smallest datum in 9 % of the ring around the top decile, 5 points more
+than beyond it. A run takes about 1 min in ``ci``, 2 min in ``full``.
 
-- A Pareto mark sampler (type I, minimum 1, tail index 1.05) for the Voronoi block-mark generator,
-  with pinned replicate fields.
-- An evaluator for the MAE of the median map against that of the mean map (paired, per decoder),
-  the data minimum (almost-sure) and the signed error in the top decile (one-sided). None of these
-  needs a baseline. The decoders, weighted draw included, are in the catalogue.
-- The widened laws, read through the runner's ``law_cdf`` (P4).
-- For V7 and the comparisons with kriging, an ordinary-kriging baseline. The suite already computes
-  simple kriging in NumPy (``simple_kriging_exponential``), so ordinary kriging can be added the
-  same way, with its variogram fixed before the first run, which keeps the suite free of external
-  packages.
+**History.** The theory reads the median and the mean on members widened by the Gamma variant. A study
+on 12 fields found the median ahead on the raw members under all four decoders, while on the widened
+members it fell behind the mean under adaptive IDW and kriging within the cell, the widening raising
+the median's error under every decoder. The specification speaks of the members, so the scenario reads
+them raw. The halos of ordinary kriging depend on its variogram, absent with a nugget of 0.4,
+covering 8 % of the ring with an exponential variogram of range 0.3 and 38 % with a Gaussian one.
+The exponential variogram of range 0.3 without nugget was fixed before the first run. The first runs
+found members of IDW and adaptive IDW one or two single-precision ulps below the smallest datum, the
+rounding of a weighted average in single precision, so the check of the data range allows 4 ulps.
 
 .. _scenario-S06:
 

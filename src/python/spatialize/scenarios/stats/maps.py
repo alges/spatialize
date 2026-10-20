@@ -401,3 +401,31 @@ def covariance_diamond_index(z, margin=4):
     axis = (c[m, m:m + n] + c[m:m + n, m]) / 2
     diag = c[m + np.arange(n), m + np.arange(n)]
     return float(_efold_length(axis, 1.0) / _efold_length(diag, np.sqrt(2)))
+
+
+def halo_share(z, top_mask, floor, width=3):
+    """Share of a ring of pixels around high cells where a map falls below a floor.
+
+    Parameters
+    ----------
+    z : array_like of shape (m, m)
+        The map.
+    top_mask : array_like of bool, shape (m, m)
+        The high cells, such as the truth's top decile.
+    floor : float
+        The floor, such as the smallest datum.
+    width : int, default 3
+        The width of the ring, in steps between 4-neighbouring pixels.
+
+    Returns
+    -------
+    tuple of float
+        The share of the ring below ``floor`` and the share of the pixels beyond the ring (and outside
+        the high cells) below it. A linear predictor whose weights take either sign spreads a high value
+        outwards with negative weights, dipping below the data around it (criterion V7).
+    """
+    from scipy.ndimage import binary_dilation
+    z, top = np.asarray(z, float), np.asarray(top_mask, bool)
+    ring = binary_dilation(top, iterations=int(width)) & ~top
+    rest = ~ring & ~top
+    return float(np.mean(z[ring] < floor)) if ring.any() else 0.0, float(np.mean(z[rest] < floor)) if rest.any() else 0.0

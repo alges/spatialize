@@ -70,6 +70,46 @@ def preferential_design(rng, n_uniform, n_box, box, dim=2):
     return np.vstack([rng.random((n_uniform, dim)), inner])
 
 
+def ordinary_kriging_exponential(samples, values, queries, practical_range, nugget=0.0):
+    r"""Global ordinary kriging under an isotropic exponential variogram of unit sill, the classical baseline
+    of scenarios S05 and S06.
+
+    The variogram is :math:`\gamma(h) = c_0 + (1 - c_0)(1 - e^{-3h/r})` for :math:`h > 0`, ``nugget``
+    :math:`c_0` and practical range :math:`r` (the convention of the kriging decoder). The weights do not
+    depend on the sill, which is therefore fixed at 1. They take either sign, so the map can leave the range
+    of the data.
+
+    Parameters
+    ----------
+    samples : ndarray of shape (n, 2)
+        Data locations.
+    values : ndarray of shape (n,)
+        Data values.
+    queries : ndarray of shape (q, 2)
+        Prediction locations.
+    practical_range, nugget : float
+        Variogram parameters, the nugget as a share of the unit sill.
+
+    Returns
+    -------
+    ndarray of shape (q,)
+        The kriged values, the mean estimated under the constraint that the weights sum to 1.
+    """
+    s = np.asarray(samples, float)
+    n = len(s)
+    c1 = 1.0 - float(nugget)
+
+    def cov(p, q):
+        return c1 * np.exp(-3.0 * np.linalg.norm(p[:, None, :] - q[None, :, :], axis=2) / float(practical_range))
+    lhs = np.ones((n + 1, n + 1))
+    lhs[:n, :n] = cov(s, s)
+    np.fill_diagonal(lhs[:n, :n], 1.0)
+    lhs[n, n] = 0.0
+    rhs = np.ones((n + 1, len(queries)))
+    rhs[:n] = cov(s, np.asarray(queries, float))
+    return np.linalg.solve(lhs, rhs)[:n].T @ np.asarray(values, float)
+
+
 def block_kriging_variance_exponential(samples, block_points, practical_range, nugget=0.0):
     r"""Ordinary-kriging variance of block averages under an isotropic exponential variogram of unit sill.
 

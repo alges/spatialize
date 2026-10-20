@@ -94,6 +94,9 @@ def _marks(spec):
     if "lognormal" in spec:
         mu, sd = spec["lognormal"]
         return lambda r, n: r.lognormal(mu, sd, n)
+    if "pareto" in spec:
+        x_min, index = spec["pareto"]
+        return lambda r, n: float(x_min) * (1.0 + r.pareto(float(index), n))   # Pareto type I
     if "centred_lognormal" in spec:
         mu, sd = spec["centred_lognormal"]
 

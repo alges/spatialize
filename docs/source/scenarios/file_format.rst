@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -319,6 +319,27 @@ optional method ``simulate`` (:doc:`extending`).
   - ``area_variance`` (identity), no further key;
   - ``shared_partition`` (one-sided), no further key;
   - ``exceedance_region`` (one-sided, V8), ``above``.
+
+Evaluator ``heavy_tail``
+------------------------
+
+This evaluator reads a field without variance through the median and the mean of the members, the
+range of the data and the top decile, against global ordinary kriging, over pinned replicate fields
+(scenario S05).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``), with ``marks: {pareto: [x_min, index]}``,
+  Pareto marks of type I.
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``top_quantile`` (the level
+  of the truth's quantile above which a cell is in the top decile), ``halo_width`` (the ring's width,
+  in pixels), ``baseline`` (``practical_range`` and ``nugget`` of the exponential variogram of ordinary
+  kriging) and ``generator_seed``.
+- per check, ``kind`` and ``estimator`` (``ordinary_kriging`` names the baseline) or ``estimators``:
+
+  - ``median_beats_mean`` (paired relation);
+  - ``data_range`` (almost sure), with ``estimators``;
+  - ``leaves_range`` (one-sided);
+  - ``top_decile`` (one-sided);
+  - ``halo`` and ``halo_local`` (one-sided and paired relation, V7), on the baseline.
 
 Evaluator ``edge_cases``
 ------------------------

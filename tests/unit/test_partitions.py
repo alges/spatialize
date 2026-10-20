@@ -103,3 +103,23 @@ def test_coverage_family_rejects_under_coverage_only():
     low = coverage_at_least(21, 48, 0.9)
     assert abs(low.p_value - stats.binom.cdf(21, 48, 0.9)) < 1e-15 and low.p_value < 1e-10
     assert low.pass_if == "not_reject"
+
+
+def test_ordinary_kriging_baseline_interpolates_and_keeps_constants():
+    """Scenario S05's ordinary kriging: without nugget it returns the data at their own locations, and its
+    weights summing to 1 reproduce a constant field anywhere."""
+    from spatialize.scenarios.generators.fields import ordinary_kriging_exponential as ok
+    rng = np.random.default_rng(1)
+    s, v = rng.random((60, 2)), rng.lognormal(size=60)
+    assert np.allclose(ok(s, v, s[:10], practical_range=0.3), v[:10], atol=1e-8)
+    assert np.allclose(ok(s, np.full(60, 2.5), rng.random((30, 2)), practical_range=0.3, nugget=0.3), 2.5)
+
+
+def test_halo_share_reads_the_ring_around_high_cells():
+    from spatialize.scenarios.stats.maps import halo_share
+    z = np.ones((20, 20))
+    top = np.zeros((20, 20), bool)
+    top[9:11, 9:11] = True
+    z[8, 8:12] = -1.0                                     # one row of the ring dips below the floor
+    ring, rest = halo_share(z, top, floor=0.0, width=2)
+    assert abs(ring - 4 / 20) < 1e-12 and rest == 0.0       # 20 pixels within two 4-neighbour steps

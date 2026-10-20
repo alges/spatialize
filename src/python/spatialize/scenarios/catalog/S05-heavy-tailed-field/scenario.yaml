@@ -1,0 +1,78 @@
+id: S05-heavy-tailed-field
+version: 1
+tier: T3
+evaluator: heavy_tail
+book:
+  topic: "the functional that survives a heavy tail: the median against the mean, the range of the data, the top decile understated, the halos of a linear predictor"
+  draft_2026_10: "§12.3.4, eqs (12.3.30)–(12.3.32), Fig 12.3"   # the book is a draft
+purpose: >
+  On a field whose marks have a finite mean and no variance, the median of the members errs less than their
+  mean under every decoder. Decoders that average or draw within the cell never leave the range of the data,
+  while kriging within the cell does. Every reading understates the highest values. Ordinary kriging, whose
+  weights take either sign, dips below the smallest datum in rings around the high cells (visual V7).
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 45
+  marks: {pareto: [1.0, 1.05]}      # Pareto type I, minimum 1, tail index 1.05: finite mean, no variance
+data:
+  design: {type: uniform, n: 350}
+  grid: 36
+  mode: pinned
+  fields: {ci: 20, full: 40}
+  top_quantile: 0.9                 # the top decile of the truth
+  halo_width: 3                     # pixels of the ring around the top decile
+  baseline: {practical_range: 0.3, nugget: 0.0}   # ordinary kriging, exponential variogram fixed in advance
+  generator_seed: 20261028
+estimators_T: {ci: 200, full: 200}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+  - {id: aidw, encoder: mondrian, rate: 5.0, decoder: adaptiveidw, params: {metric: mae}, empty_cells: coarsen}
+  # isotropic exponential kriging within the cell, practical range 3 × 0.149 (the side of a square of the
+  # mean cell area 1/45), its variogram a hyperparameter of the decoder
+  - {id: krig, encoder: mondrian, rate: 5.0, decoder: kriging,
+     params: {model: exponential, nugget: 0.0, range: 0.447, sill: 1.0}, empty_cells: coarsen}
+  - {id: wdraw, encoder: mondrian, rate: 5.0, decoder: wdraw_idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - {id: median-idw, title: "the median of the members errs less than their mean (IDW)", kind: median_beats_mean,
+     family: paired-relation, estimator: idw}
+  - {id: median-aidw, title: "the median of the members errs less than their mean (adaptive IDW)", kind: median_beats_mean,
+     family: paired-relation, estimator: aidw}
+  - {id: median-krig, title: "the median of the members errs less than their mean (kriging in the cell)", kind: median_beats_mean,
+     family: paired-relation, estimator: krig}
+  - {id: median-wdraw, title: "the median of the members errs less than their mean (weighted draw)", kind: median_beats_mean,
+     family: paired-relation, estimator: wdraw}
+  - {id: data-range, title: "no member of IDW, adaptive IDW or the weighted draw falls below the smallest datum", kind: data_range,
+     family: almost-sure, estimators: [idw, aidw, wdraw]}
+  - {id: krig-leaves-range, title: "members of kriging in the cell fall below the smallest datum", kind: leaves_range,
+     family: one-sided, estimator: krig}
+  - {id: top-idw, title: "the median map understates the top decile (IDW)", kind: top_decile, family: one-sided, estimator: idw}
+  - {id: top-aidw, title: "the median map understates the top decile (adaptive IDW)", kind: top_decile, family: one-sided, estimator: aidw}
+  - {id: top-wdraw, title: "the median map understates the top decile (weighted draw)", kind: top_decile, family: one-sided, estimator: wdraw}
+  - {id: top-ok, title: "ordinary kriging understates the top decile", kind: top_decile, family: one-sided, estimator: ordinary_kriging}
+  - {id: v7-halo, title: "V7: ordinary kriging falls below the smallest datum in the ring around the top decile", kind: halo,
+     family: one-sided, estimator: ordinary_kriging}
+  - {id: v7-halo-local, title: "V7: ordinary kriging falls below the smallest datum more often in that ring than beyond it", kind: halo_local,
+     family: paired-relation, estimator: ordinary_kriging}
+provenance:
+  v1: >
+    2026-10-20: first version. The book (§12.3.4, draft) reads the median and the mean on members widened by the
+    Gamma variant. A study on 12 fields before the first run: per field the mean absolute errors spread over a
+    factor of 20, so the median and the mean are compared through their logarithms, the top decile through
+    the error relative to the truth. On the raw members the median beats the mean under all four decoders
+    (1.3, 2.4, 2.1 and 3.5 standard deviations per field for IDW, adaptive IDW, kriging in the cell and the
+    weighted draw); on the Gamma-widened members only under IDW (0.7) and the weighted draw (2.5), reversing
+    under adaptive IDW (-0.25) and kriging (-0.33), the widening raising the median's error under every decoder;
+    the specification speaks of the members, so the scenario reads them raw. No member of IDW, adaptive IDW or
+    the weighted draw fell below the smallest datum; 2.9 % of the kriging decoder's did. The top decile is
+    understated by 19 % to 29 % of the truth (4.5 to 5.7 standard deviations). The halos of ordinary kriging
+    depend on its variogram: none with a nugget of 0.4 and range 0.149, 2.8 % of the ring below the smallest
+    datum with range 0.149 and no nugget, 8 % with range 0.3 (2.6 standard deviations), 11 % for a spherical
+    variogram of range 0.3, 38 % for a Gaussian one, negative almost everywhere. Fixed: exponential, range
+    0.3 (twice the cell side), no nugget, against which 3.4 % of the pixels beyond the ring fall below the
+    smallest datum. Sizes for the strictest Holm level of twelve checks (8.3e-5) with power 0.9 on 1.3
+    standard deviations: K = ((3.77 + 1.28) / 1.3)^2 = 15, so 20 fields in ci and 40 in full.
+    Same day, first runs (ci seeds 1 and 2): the check of the data range found about 1900 of 15.6 million members
+    below the smallest datum, by at most 1.2e-7 for IDW and 2.4e-7 for adaptive IDW, one and two single-precision
+    ulps, the rounding of a weighted average in single precision; the weighted draw, returning data, had none.
+    The check allows 4 ulps of the smallest datum.

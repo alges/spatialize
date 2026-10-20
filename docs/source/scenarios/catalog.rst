@@ -161,9 +161,9 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - ready · priority 8
      - closed form of the area variance; simulated fields (S01)
    * - :ref:`S08 <scenario-S08>`
-     - support effect on tonnage curves
-     - ready · priority 3
-     - tonnage functional
+     - support effect on selection curves
+     - **implemented**
+     - —
    * - :ref:`S09 <scenario-S09>`
      - resource categories under preferential sampling
      - ready · priority 7

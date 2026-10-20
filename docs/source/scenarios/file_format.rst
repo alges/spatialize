@@ -37,7 +37,7 @@ Top-level keys
      - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
-       ``error_floor``, ``atom_at_zero``,
+       ``error_floor``, ``atom_at_zero``, ``selection_curve``,
        ``law_validity`` or
        ``uncorrelated_covariance`` (below).
    * - ``book``
@@ -218,6 +218,18 @@ pinned replicate fields (scenario S04).
 - per check, ``kind`` (``dry_fraction``, ``contrast``, ``dry_iou``, ``dry_edges``, each a paired
   relation of ``estimator`` against ``against`` in the direction ``better``; ``support``, almost sure,
   over ``estimators``).
+
+Evaluator ``selection_curve``
+-----------------------------
+
+This evaluator reads the support effect on the share of the domain above a cut-off, over pinned
+replicate fields (scenario S08).
+
+- ``truth``: ``generator: vbm`` (see ``atom_at_zero``).
+- ``data``: ``design``, ``grid``, ``mode: pinned``, ``fields`` (per mode), ``generator_seed``.
+- per check, ``kind: share_above``, ``estimator``, ``quantile`` (the truth's quantile used as the
+  cut-off) and ``better``, the direction in which the share of the map of means departs from the
+  truth's (paired relation).
 
 Evaluator ``edge_cases``
 ------------------------

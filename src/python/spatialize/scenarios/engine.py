@@ -1911,6 +1911,57 @@ def eval_atom_at_zero(sc: Scenario, runner: Runner, mode: str, seed: int,
     return out
 
 
+def eval_selection_curve(sc: Scenario, runner: Runner, mode: str, seed: int,
+                         save_maps=None) -> List[CheckOutcome]:
+    r"""Evaluator ``selection_curve``: the support effect read on the share of the domain above a cut-off
+    (S08).
+
+    On each pinned field the map of means of ``estimator`` (the mean of its members on the grid) and the
+    truth give the share of the grid above the cut-off, the truth's quantile of level ``quantile``. Kind
+    ``share_above`` (paired-relation): the share of the map of means is ``better`` (``"greater"`` or
+    ``"less"``) than the truth's, a smoother map holding more of the domain above a low cut-off and less
+    above a high one.
+
+    Reads ``data.grid``, ``data.fields`` (per mode) and ``estimators_T``.
+    """
+    s = sc.spec
+    d = s["data"]
+    K = int(_mode_value(d["fields"], mode))
+    T = int(_mode_value(s["estimators_T"], mode))
+    queries = generators.grid(int(d["grid"])).astype(np.float32)
+    ests = {e["id"]: sc.estimator(e) for e in s["estimators"]}
+    cache = {}
+
+    def maps_of(eid, k):
+        if (eid, k) not in cache:
+            f = sc.field(k)
+            mem = np.asarray(runner.members(ests[eid], f["samples"], f["values"], queries, n_members=T,
+                                            seed=_sub_seed(seed, k)), float)
+            cache[(eid, k)] = (np.nanmean(mem, axis=1), f["truth"].astype(float))
+        return cache[(eid, k)]
+
+    out = []
+    for check in s["checks"]:
+        est = ests[check["estimator"]]
+        cid, title = check["id"], check["title"]
+        if not runner.supports(est):
+            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                    skipped=f"{runner.name} does not support {est.encoder}/{est.decoder}"))
+            continue
+        if check["kind"] != "share_above":
+            raise ValueError(f"unknown check kind {check['kind']}")
+        a, b = [], []
+        for k in range(K):
+            mean, truth = maps_of(est.id, k)
+            cut = float(np.quantile(truth, float(check["quantile"])))
+            a.append(float(np.mean(mean > cut)))
+            b.append(float(np.mean(truth > cut)))
+        r = families.paired_relation(a, b, better=check["better"])
+        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                known_failure=check.get("known_failure", "")))
+    return out
+
+
 def eval_law_validity(sc: Scenario, runner: Runner, mode: str, seed: int,
                       save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``law_validity``: every reading of the law is a cumulative distribution function (P4).
@@ -2035,7 +2086,7 @@ EVALUATORS = {"pair_cooccurrence": eval_pair_cooccurrence, "map_visual": eval_ma
               "locality": eval_locality, "empty_cells": eval_empty_cells, "cv_selection": eval_cv_selection,
               "posterior_audit": eval_posterior_audit, "cat_posterior_audit": eval_cat_posterior_audit,
               "mark_law": eval_mark_law,
-              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "law_validity": eval_law_validity,
+              "convergence": eval_convergence, "error_floor": eval_error_floor, "atom_at_zero": eval_atom_at_zero, "selection_curve": eval_selection_curve, "law_validity": eval_law_validity,
               "uncorrelated_covariance": eval_uncorrelated_covariance}
 
 

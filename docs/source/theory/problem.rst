@@ -32,8 +32,8 @@ Many practical questions are functionals of these laws and not of a map.
   the tail of one marginal law.
 - The area above the limit, :math:`|\{v \in D : Z(v) > t\}|`, whose law depends on how the values at
   different locations move together, so it needs the joint law.
-- The tonnage above a cut-off grade, again a functional of the joint law, which a map of averages
-  gets wrong by smoothing the extremes away.
+- The amount held above a cut-off, the sum of the values that exceed it, again a functional of the
+  joint law, which a map of averages gets wrong by smoothing the extremes away.
 
 The view of kriging
 ===================

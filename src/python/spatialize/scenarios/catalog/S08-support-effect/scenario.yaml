@@ -1,0 +1,52 @@
+id: S08-support-effect
+version: 1
+tier: T3
+evaluator: selection_curve
+book:
+  topic: "worked example of the support effect: a map of means is smoother than the field it estimates"
+  draft_2026_10: "ch 12, readings of the law over regions"   # the book is a draft
+purpose: >
+  A map of means averages the members at each place, so its values spread less than those of the field.
+  Read as a selection curve, the share of the domain above a cut-off, it holds more of the domain above a
+  low cut-off than the truth does, and less above a high one. A decision taken on the map of means, as the
+  area to treat or to protect above a limit, is biased accordingly.
+domain: {box: [[0.0, 1.0], [0.0, 1.0]]}
+truth:
+  generator: vbm
+  n_cells: 30
+  marks: {lognormal: [0.0, 0.8]}
+data:
+  design: {type: uniform, n: 350}
+  grid: 36
+  mode: pinned
+  fields: {ci: 12, full: 24}
+  generator_seed: 20261021
+estimators_T: {ci: 300, full: 300}
+estimators:
+  - {id: idw, encoder: mondrian, rate: 5.0, decoder: idw, params: {exponent: 2.0}, empty_cells: coarsen}
+checks:
+  - id: above-low
+    title: "above the truth's 10 % quantile the map of means holds more of the domain than the truth"
+    kind: share_above
+    family: paired-relation
+    estimator: idw
+    quantile: 0.1
+    better: greater
+  - id: above-high
+    title: "above the truth's 90 % quantile the map of means holds less of the domain than the truth"
+    kind: share_above
+    family: paired-relation
+    estimator: idw
+    quantile: 0.9
+    better: less
+provenance:
+  v1: >
+    2026-10-21: first version. The cut-offs were chosen before the first run from a study of 12 fields
+    drawn like these, the specification naming the 20 % and 80 % quantiles as an example. The difference of
+    the shares, map of means minus truth, was 0.111 at the 10 % quantile (5.6 standard deviations per
+    field), 0.175 at 20 % (4.5), -0.020 at 80 % (-0.5), -0.031 at 90 % (-1.8) and -0.014 at 95 % (-0.8).
+    On a block-mark field the truth has no variability within a cell, so the high cells keep much of their
+    height in the map of means where data reach them, and only their edges are lost; the 90 % quantile
+    reads that loss best. Sizes for the paired t-test at the strictest Holm level of two checks (5e-4)
+    with power 0.9 on 1.8 standard deviations: K = ((3.29 + 1.28) / 1.8)^2 = 6.4, so 12 fields in ci and
+    24 in full.

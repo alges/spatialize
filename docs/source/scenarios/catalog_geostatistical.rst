@@ -602,9 +602,6 @@ they need become available.
   a lower RMSE than every ensemble estimator (needs an ordinary-kriging baseline).
 - *paired-relation*. The coverage of widened prediction intervals is at least that of raw ensemble
   intervals.
-- visual **V2**: the coherence of the ensemble map exceeds that of ordinary kriging with a fitted
-  isotropic variogram, which blurs the short axis (needs the kriging baseline).
-- visual **V3** on simulated fields, which waits for the runner method for simulated fields of S01.
 
 **Visual criteria V3 and V9 (version 13).** V3 reads the anisotropy in single members, the first
 five members of each field without empty cells. Their coherence over the truth's must lie within
@@ -614,6 +611,20 @@ pass both (coherence ratios 0.83 and 0.84, log range ratios :math:`-0.12` and :m
 Kriging and Voronoi IDW pass the ranges but keep only 0.62 and 0.52 of the coherence, and Mondrian
 IDW keeps 0.50 of it, its range ratio (log :math:`-0.38`) lying too close to the margin. These four
 outcomes are recorded as known failures.
+
+**Visual criteria V2 and V3 on simulated fields (version 14).** V2 compares the coherence of the
+median map, over the truth's, with that of global ordinary kriging under an isotropic exponential
+variogram fitted to the data by the rule of S06
+(:func:`~spatialize.scenarios.generators.fields.fit_exponential_variogram`), paired over the 80
+fields. The fitted kriging keeps about 0.76 of the truth's coherence, the data's anisotropy showing
+through an isotropic variogram. On seed 1 adaptive IDW keeps 0.23 more, while IDW keeps 0.16 less and
+kriging within the cell 0.03 less, both recorded as known failures. V3 on simulated fields reads 5
+fields per replicate field, drawn by ensemble spatial simulation from the members' own laws, with the
+margins of V3 on members. Adaptive IDW keeps the ranges (log ratio :math:`-0.15`) while its coherence,
+0.73 of the truth's, falls just below the margin. IDW keeps 0.48 of the coherence, its log range ratio
+of :math:`-0.36` lying too close to the margin. These three outcomes are known failures. Widened, the
+simulated fields lose more, down to 0.39 and 0.19 of the coherence in a study on 16 fields, the noise
+drawn independently at each location washing the anisotropy out, so no check reads them.
 
 V9 compares the roughness of the median map with that of simple kriging with the true covariance.
 The averaging decoders give smoother maps, IDW 0.75, kriging 0.64 and Voronoi IDW 0.73 times the

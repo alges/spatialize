@@ -26,12 +26,12 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - the ensemble keeps the short axis that a fitted isotropic kriging blurs
      - :ref:`S03 <scenario-S03>`
      - coherence of the ensemble map > that of ordinary kriging with a fitted isotropic variogram (paired)
-     - blocked (ordinary-kriging baseline) · priority 8
+     - **implemented** (adaptive IDW passes; IDW and kriging within the cell known failures)
    * - V3
      - the anisotropy is in the fields, not only in the mean
      - :ref:`S03 <scenario-S03>`
      - coherence and range ratio of members and simulated fields equivalent to the truth's
-     - **implemented** on members (adaptive decoders pass, four known failures); simulated fields · priority 1
+     - **implemented** on members (adaptive decoders pass, four known failures) and on simulated fields (adaptive IDW keeps the ranges, three known failures)
    * - V4
      - Mondrian blocks averaged away
      - :ref:`S03 <scenario-S03>`, :ref:`S11 <scenario-S11>`
@@ -72,26 +72,3 @@ halos around extremes, connected bodies — is tested through pre-registered map
      - :ref:`S11 <scenario-S11>`
      - the median map's covariance more diamond-shaped with coarse partitions than with fine ones
      - **implemented**
-
-Pending criteria by priority
-============================
-
-The order puts first the criteria of scenarios already implemented, S03 and S12, whose fields and
-evaluators exist. The others follow the priority of their scenario (:doc:`catalog_geostatistical`),
-the criteria needing a kriging baseline coming last but one.
-
-#. **V3** (S03), the anisotropy in simulated fields. The part on single members is implemented
-   (:ref:`scenario-S03`).
-
-   - The same functionals, ``orientation_coherence`` and ``range_ratio``, on simulated fields, through
-     the runner's method ``simulate`` (:doc:`extending`). Scenarios S01, S07 and S13 found simulated
-     fields drawn location by location, so their texture at the scale of a pixel follows the product of
-     the local laws.
-
-#. **V2** (S03), the anisotropy against a fitted isotropic kriging.
-
-   - An ordinary-kriging baseline with an isotropic variogram fitted to the data, by a rule fixed
-     before the first run. Both exist, the kriging of S05
-     (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`) and the fitting rule
-     of S06 (:func:`~spatialize.scenarios.generators.fields.fit_exponential_variogram`).
-   - The coherence of the ensemble's map against the baseline's, paired over S03's 80 fields.

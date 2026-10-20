@@ -194,12 +194,12 @@ independently before a scenario is implemented, and computed by the evaluator wh
      - —
    * - V2
      - anisotropy against a fitted isotropic kriging (S03)
-     - blocked · priority 8
-     - ordinary-kriging baseline with a fitted isotropic variogram, writable in NumPy
+     - **implemented** (adaptive IDW passes, two known failures)
+     - —
    * - V3
      - anisotropy in members and simulations (S03)
-     - **implemented** on members · priority 1 for simulated fields
-     - simulated fields (S01)
+     - **implemented** (known failures on members and on simulated fields)
+     - —
    * - V4
      - Mondrian blocks averaged away (S03, S11)
      - **implemented**

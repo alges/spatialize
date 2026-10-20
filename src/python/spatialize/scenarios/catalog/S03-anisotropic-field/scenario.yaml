@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 13
+version: 14
 tier: T3
 evaluator: map_visual
 book:
@@ -215,6 +215,33 @@ checks:
      family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25}
   - {id: v3b-sharp, title: "V3 single members keep the anisotropy's ranges (sharp)", estimator: sharp,
      family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+  # V2 against global ordinary kriging with an isotropic exponential variogram fitted to the data by
+  # the rule of S06 (fields.fit_exponential_variogram): the coherence of the median map over the
+  # truth's, paired with the kriging's over the 80 fields. Study (16 fields): fitted kriging 0.76,
+  # adaptive IDW 1.01 (+4.9 standard deviations), kriging within the cell 0.74, IDW 0.61.
+  - {id: v2-aidw, title: "V2 the median map keeps more of the anisotropy than a fitted isotropic kriging (aidw)", estimator: aidw,
+     family: paired-relation, functional: coherence_against_fitted_kriging, map: point}
+  - {id: v2-idw, title: "V2 the median map keeps more of the anisotropy than a fitted isotropic kriging (idw)", estimator: idw,
+     family: paired-relation, functional: coherence_against_fitted_kriging, map: point,
+     known_failure: "the IDW median map keeps 0.16 less of the truth's coherence than the fitted isotropic kriging (seed 1, 80 fields; study 0.61 against 0.76)"}
+  - {id: v2-krig, title: "V2 the median map keeps more of the anisotropy than a fitted isotropic kriging (krig)", estimator: krig,
+     family: paired-relation, functional: coherence_against_fitted_kriging, map: point,
+     known_failure: "the median map of kriging within the cell keeps 0.03 less of the truth's coherence than the fitted isotropic kriging (seed 1, 80 fields)"}
+  # V3 on simulated fields: 5 fields per replicate field drawn by ensemble spatial simulation from the
+  # members' own laws (no widening, as S01), with the margins of V3 on members. Study (16 fields): with
+  # widening the coherence falls to 0.39 (aidw) and 0.19 (idw) of the truth's, the noise drawn
+  # independently at each location washing the anisotropy out; without it 0.745 and 0.48.
+  - {id: v3a-sim-aidw, title: "V3 simulated fields keep the anisotropy's strength (aidw)", estimator: aidw,
+     family: equivalence, functional: coherence_ratio_simulated, map: simulated, n_simulated: 5, margin: 0.25,
+     known_failure: "simulated fields of adaptive IDW keep 0.73 of the truth's coherence (seed 1, 80 fields), below the margin 0.75"}
+  - {id: v3b-sim-aidw, title: "V3 simulated fields keep the anisotropy's ranges (aidw)", estimator: aidw,
+     family: equivalence, functional: range_ratio_simulated, map: simulated, n_simulated: 5, margin: 0.405}
+  - {id: v3a-sim-idw, title: "V3 simulated fields keep the anisotropy's strength (idw)", estimator: idw,
+     family: equivalence, functional: coherence_ratio_simulated, map: simulated, n_simulated: 5, margin: 0.25,
+     known_failure: "simulated fields of IDW keep 0.48 of the truth's coherence (seed 1, 80 fields), below the margin 0.75"}
+  - {id: v3b-sim-idw, title: "V3 simulated fields keep the anisotropy's ranges (idw)", estimator: idw,
+     family: equivalence, functional: range_ratio_simulated, map: simulated, n_simulated: 5, margin: 0.405,
+     known_failure: "the log range ratio of IDW's simulated fields is -0.36 against the truth's (seed 1, 80 fields), too close to the margin ±log 1.5 for the equivalence"}
   # V9 roughness against global simple kriging with the true covariance (roughness: mean squared
   # neighbour difference over 4 × variance). Averaging decoders give smoother maps than the reference;
   # the adaptive ones fit a high exponent and the sharpened one raises it further, so their maps are
@@ -303,3 +330,11 @@ provenance:
     covariance, below it for the averaging decoders and above it, by design, for the adaptive ones,
     with a control by simple kriging from the 8 nearest data. Margins and bounds fixed before the
     first run; earlier checks, sizes and thresholds unchanged.
+  v14: >
+    2026-10-20: V2 against global ordinary kriging with an isotropic exponential variogram fitted to the
+    data (the rule of S06), paired on the coherence ratio for aidw, idw and krig; and V3 on simulated
+    fields of aidw and idw, drawn from the members' own laws, with the margins of V3 on members. User
+    decisions after a study on 16 fields: checks per decoder, with known failures for idw and krig in V2
+    and for three of the four V3 outcomes, their values from the study; the widened simulated fields,
+    whose coherence falls to 0.39 and 0.19 of the truth's, recorded here without a check. Earlier
+    checks, sizes and thresholds unchanged.

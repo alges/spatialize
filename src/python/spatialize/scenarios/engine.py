@@ -337,6 +337,14 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
     - ``roughness_local_reference`` — roughness of simple kriging from the ``k`` nearest data over
       that of global simple kriging, above ``min_value``: the functional sees the jumps of a cropped
       neighbourhood (V9 control, independent of the estimator);
+    - ``coherence_against_fitted_kriging`` — coherence of the median map against that of global ordinary
+      kriging under an isotropic exponential variogram fitted to the data
+      (:func:`~spatialize.scenarios.generators.fields.fit_exponential_variogram`), both over the truth's,
+      higher for the estimator (paired t-test; V2);
+    - ``coherence_ratio_simulated`` and ``range_ratio_simulated`` — the readings of
+      ``coherence_ratio_members`` and ``range_ratio_members`` on ``n_simulated`` fields simulated from the
+      ensemble (the runner's optional method ``simulate``, widened as ``widening`` says, default none),
+      within ``±margin`` (V3);
     - ``paired_relation`` — the estimator beats ``against`` field by field on ``metric``, either
       ``coverage`` (share of the grid inside the members' 90 % interval) or ``rmse`` (error of the
       median map), in the direction ``better`` (paired t-test).
@@ -407,6 +415,31 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
         _say(f"    {what}: done in {time.monotonic() - t0:.0f} s")
         return rows
 
+    fitted_cache: Dict[int, float] = {}
+    sim_cache: Dict[tuple, list] = {}
+
+    def fitted_kriging_coherence(k):
+        if k not in fitted_cache:
+            f = sc.field(k)
+            model = generators.fields.fit_exponential_variogram(f["samples"], f["values"])
+            z = generators.fields.ordinary_kriging_exponential(f["samples"], f["values"], queries,
+                                                               model["practical_range"], model["nugget"])
+            fitted_cache[k] = maps.orientation_coherence(z.reshape(m_grid, m_grid))[1]
+        return fitted_cache[k]
+
+    def simulated(est, n_fields, widening):
+        key = (est.id, n_fields, widening)
+        if key not in sim_cache:
+            _say(f"  {est.id}: {K} fields, {n_fields} simulated fields each")
+            rows_ = []
+            for k in range(K):
+                f = sc.field(k)
+                z = np.asarray(runner.simulate(est, f["samples"], f["values"], queries, n_members=T, n_fields=n_fields,
+                                               seed=seed + k, widening=widening), float)
+                rows_.append([z[:, j].reshape(m_grid, m_grid) for j in range(z.shape[1])])
+            sim_cache[key] = rows_
+        return sim_cache[key]
+
     def reference(k):
         if k not in ref_cache:
             f = sc.field(k)
@@ -471,6 +504,25 @@ def eval_map_visual(sc: Scenario, runner: Runner, mode: str, seed: int,
                 th_t = float(t["theta_deg"])
                 x = [float(np.mean([np.log(maps.range_ratio(z, th_t)) for z in r["finite_members"][:j]]))
                      - np.log(maps.range_ratio(r["truth"], th_t)) for r in rows if r["finite_members"]]
+                r = families.tost_mean(x, -check["margin"], check["margin"])
+        elif fn == "coherence_against_fitted_kriging":
+            r = families.paired_relation([row["coherence"] / row["coherence_truth"] for row in rows],
+                                         [fitted_kriging_coherence(k) / row["coherence_truth"] for k, row in enumerate(rows)],
+                                         better="greater")
+        elif fn in ("coherence_ratio_simulated", "range_ratio_simulated"):
+            if not hasattr(runner, "simulate"):
+                out.append(CheckOutcome(sc.id, check["id"], title, families.TestResult("visual", np.nan, 1.0, "reject"),
+                                        skipped=f"{runner.name} gives no simulated fields"))
+                continue
+            fields_ = simulated(est, int(check["n_simulated"]), check.get("widening", False))
+            if fn == "coherence_ratio_simulated":
+                x = [float(np.mean([maps.orientation_coherence(z)[1] for z in zs])) / row["coherence_truth"]
+                     for zs, row in zip(fields_, rows)]
+                r = families.tost_mean(x, 1.0 - check["margin"], 1.0 + check["margin"])
+            else:
+                th_t = float(t["theta_deg"])
+                x = [float(np.mean([np.log(maps.range_ratio(z, th_t)) for z in zs])) - np.log(maps.range_ratio(row["truth"], th_t))
+                     for zs, row in zip(fields_, rows)]
                 r = families.tost_mean(x, -check["margin"], check["margin"])
         elif fn in ("roughness_reference", "roughness_local_reference"):
             if fn == "roughness_reference":

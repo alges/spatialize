@@ -189,6 +189,29 @@ This evaluator decides visual criteria on median maps over pinned replicate fiel
      * - ``contrast_ratio_reference``
        - ``min_ratio``: spread of the map over that of simple kriging with the true covariance,
          above it (V5).
+     * - ``coherence_ratio_members``
+       - ``members_checked``, ``margin``: coherence of single members without empty cells over the
+         truth's, within ±margin of 1 (V3).
+     * - ``range_ratio_members``
+       - ``members_checked``, ``margin``: log of their directional range ratio over the truth's,
+         within ±margin (V3).
+     * - ``coherence_ratio_simulated``
+       - ``n_simulated``, ``margin`` and optionally ``widening`` (default none): the same on fields
+         simulated from the ensemble through the runner's ``simulate`` (V3).
+     * - ``range_ratio_simulated``
+       - ``n_simulated``, ``margin``, ``widening``: the same for the range ratio (V3).
+     * - ``coherence_against_fitted_kriging``
+       - none: coherence of the map against that of ordinary kriging with an isotropic exponential
+         variogram fitted to the data, higher for the estimator (paired, V2).
+     * - ``roughness_reference``
+       - ``max_value`` or ``min_value``: roughness of the map over that of simple kriging with the
+         true covariance (V9).
+     * - ``roughness_local_reference``
+       - ``k``, ``min_value``: roughness of simple kriging from the ``k`` nearest data over that of
+         global simple kriging (V9 control).
+     * - ``paired_relation``
+       - ``against``, ``metric`` (``coverage`` or ``rmse``), ``better``: the estimator beats
+         ``against`` field by field.
 
 Evaluator ``error_floor``
 -------------------------

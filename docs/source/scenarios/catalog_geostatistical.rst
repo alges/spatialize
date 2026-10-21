@@ -36,8 +36,8 @@ rate 5, :math:`T = 200`, ``empty_cells="coarsen"``) gives the members, from whic
 simulation draws 5 fields, through the runner's optional method ``simulate``, with the default local
 model, a kernel density with Gaussian kernels. The reading is the mean Jensen-Shannon distance, in bits,
 between the histograms of the truth and of a map in 60 square windows placed at random, the same
-windows for both, with ten bins between the truth's quantiles. The scenario uses 12 fields in ``ci``
-and 24 in ``full``.
+windows for both, with ten bins between the truth's quantiles. The scenario uses 32 fields in ``ci``
+and 64 in ``full``.
 
 **Checks.**
 
@@ -57,7 +57,7 @@ independently from its law, the dependence lying between the laws, which share t
 neighbourhoods. A simulated field and a field of independent draws from the members are then the
 same kind of object. On 8 fields their lag-1 correlations were 0.845 and 0.848, against 0.843 for the
 truth and 0.930 for the map of means. The check now reads the structure that the paper on spatial
-distributional estimation reads, the local histograms in windows.
+distributional estimation reads, the local histograms in windows. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 32 fields in ``ci`` and 64 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S02:
 
@@ -611,7 +611,8 @@ five members of each field without empty cells. Their coherence over the truth's
 pass both (coherence ratios 0.83 and 0.84, log range ratios :math:`-0.12` and :math:`-0.09`).
 Kriging and Voronoi IDW pass the ranges but keep only 0.62 and 0.52 of the coherence, and Mondrian
 IDW keeps 0.50 of it, its range ratio (log :math:`-0.38`) lying too close to the margin. These four
-outcomes are recorded as known failures.
+outcomes are recorded as known failures. The first full run of the catalogue added a fifth, the range
+ratio of Voronoi IDW (log :math:`-0.33`), which passes alone but not at the catalogue's Holm level.
 
 **Visual criteria V2 and V3 on simulated fields (version 14).** V2 compares the coherence of the
 median map, over the truth's, with that of global ordinary kriging under an isotropic exponential
@@ -655,7 +656,7 @@ S04 — Zero-inflated field (rain)
 placed data with the field on a 36×36 grid. Mondrian partitions of rate 5 carry three decoders, IDW,
 draw and weighted draw (IDW weights), with :math:`T = 300` and ``empty_cells="coarsen"``. The reading
 is the probability of a dry location, :math:`p_{dry}`, the share of members below 0.1, a level the wet
-marks reach with probability near :math:`10^{-6}`. The scenario uses 10 fields in ``ci`` and 20 in
+marks reach with probability near :math:`10^{-6}`. The scenario uses 20 fields in ``ci`` and 40 in
 ``full``.
 
 **Checks.**
@@ -676,6 +677,8 @@ the draw. The weighted draw raises the contrast by 0.37, the overlap by 0.15 and
 edges by 0.20 per pixel, while none of 7.8 million drawn members is anything but a data value. A run
 takes about a second. The maps of :math:`p_{dry}` are saved with ``--save-maps``, IDW marking as dry
 only the places close to a dry datum and the draw blurring the edges that the weighted draw keeps.
+
+**History.** After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 20 fields in ``ci`` and 40 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S05:
 
@@ -699,8 +702,8 @@ within the cell (exponential, practical range 0.447, three times the side of a s
 area) and the weighted draw ``wdraw_idw`` (exponent 2). The baseline is global ordinary kriging under
 an exponential variogram fixed in advance, of practical range 0.3 and no nugget
 (:func:`~spatialize.scenarios.generators.fields.ordinary_kriging_exponential`). The top decile is the
-set of grid cells where the truth reaches its 90 % quantile. The scenario uses 20 fields in ``ci`` and
-40 in ``full``.
+set of grid cells where the truth reaches its 90 % quantile. The scenario uses 36 fields in ``ci`` and
+72 in ``full``.
 
 **Checks.**
 
@@ -733,7 +736,7 @@ them raw. The halos of ordinary kriging depend on its variogram, absent with a n
 covering 8 % of the ring with an exponential variogram of range 0.3 and 38 % with a Gaussian one.
 The exponential variogram of range 0.3 without nugget was fixed before the first run. The first runs
 found members of IDW and adaptive IDW one or two single-precision ulps below the smallest datum, the
-rounding of a weighted average in single precision, so the check of the data range allows 4 ulps.
+rounding of a weighted average in single precision, so the check of the data range allows 4 ulps. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 36 fields in ``ci`` and 72 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S06:
 
@@ -859,8 +862,8 @@ S08 — Support effect on selection curves
 **Setup.** The truth is a Voronoi block-mark field with 30 cells and lognormal marks (log-sd 0.8). Each
 pinned replicate field has 350 uniformly placed data with the field on a 36×36 grid, estimated by
 Mondrian IDW (exponent 2, rate 5, :math:`T = 300`, ``empty_cells="coarsen"``). The selection curve is
-the share of the grid above a cut-off, read on the map of means and on the truth. The scenario uses 12
-fields in ``ci`` and 24 in ``full``.
+the share of the grid above a cut-off, read on the map of means and on the truth. The scenario uses 24
+fields in ``ci`` and 48 in ``full``.
 
 **Checks.**
 
@@ -877,7 +880,7 @@ run measured the difference of the shares at several levels, 4.5 standard deviat
 against -0.5 at 80 %, -1.8 at 90 % and -0.8 at 95 %. On a block-mark field the truth does not vary within
 a cell, so the high cells keep much of their height in the map of means where data reach them, and only
 their edges are lost. The 90 % quantile reads that loss best, with the 10 % quantile as its
-counterpart.
+counterpart. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 24 fields in ``ci`` and 48 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S09:
 
@@ -905,7 +908,7 @@ average, a class's error the median over its blocks. The proxy ranks the blocks 
 ordinary-kriging variance under an exponential variogram fixed in advance, with a practical range of
 0.183, the side of a square of the mean cell area, and a nugget of 0.4 of the sill
 (:func:`~spatialize.scenarios.generators.fields.block_kriging_variance_exponential`). Its classes
-receive the law's counts. The scenario uses 12 fields in ``ci`` and 24 in ``full``.
+receive the law's counts. The scenario uses 28 fields in ``ci`` and 56 in ``full``.
 
 **Checks.**
 
@@ -930,7 +933,7 @@ ordered, while the block law covered its 90 % interval in 61 % of the blocks. On
 member by member it covered 87 %, so the scenario reads the widened members. The comparison with the
 kriging variance was added after the same study. With a variogram fixed in advance the proxy orders
 the error a little, 0.095, 0.148 and 0.183 across its classes against 0.037, 0.096 and 0.239 for the
-law.
+law. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 28 fields in ``ci`` and 56 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S10:
 
@@ -953,8 +956,8 @@ skew-normal laws (:func:`~spatialize.gs.ess.widen_members`, through the runner's
 ``widened_members``). A block's law is that of the block averages of the widened members, column by
 column. The loss of reporting :math:`\hat z` for the truth :math:`z` is :math:`c(\hat z - z)` above
 the truth and :math:`z - \hat z` below. The optimal level is the level, among 0.01, 0.02, …, 0.99,
-whose quantile map has the lowest mean loss against the truth. The scenario uses 12 fields in ``ci``
-and 24 in ``full``.
+whose quantile map has the lowest mean loss against the truth. The scenario uses 24 fields in ``ci``
+and 48 in ``full``.
 
 **Checks.**
 
@@ -985,7 +988,7 @@ under-dispersed. The theory reads the widened members draw by draw, while the li
 drawing each location's law anew, lost the member index. The library gained
 :func:`~spatialize.gs.ess.widen_members`, which keeps it, so the scenario reads the widened members. The two checks
 against :math:`1/(1 + c)` are registered as known failures, since the study placed the optimal level
-0.145 above 1/6 and 0.078 below 5/6 with standard deviations near 0.02.
+0.145 above 1/6 and 0.078 below 5/6 with standard deviations near 0.02. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 24 fields in ``ci`` and 48 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S11:
 
@@ -1006,7 +1009,7 @@ S11 — The estimated covariance at two granularities
 Mondrian cell-mean estimator (:math:`T = 200`, ``empty_cells="coarsen"``) runs at two granularities,
 with rate × range equal to 0.5, about 7 cells, and to 10, about 1180 cells. Every reading uses the
 median map, of the 200 members or of the first 8. The axis-locking compares it with the median map of
-the same estimator on the data rotated by 30°. The scenario uses 40 fields in ``ci`` and 80 in
+the same estimator on the data rotated by 30°. The scenario uses 100 fields in ``ci`` and 200 in
 ``full``.
 
 **Checks.**
@@ -1036,7 +1039,7 @@ members, while their error stays 0.38 above that of fine partitions with 8 membe
 of fine partitions is 0.89. With coarse partitions the axis-locking is higher by 1.1 and 1.4, the
 diamond index by 0.13 and 0.14. The widened spreads differ by 4 %. A run takes about 1 min 45 s.
 
-**History.** The specification changed in five points before the first run, after a study on 8 fields.
+**History.** The specification changed in five points before the first run, after a study on 8 fields. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 100 fields in ``ci`` and 200 in ``full``; it had been sized for its own checks alone.
 
 #. The member spread did not differ consistently between the granularities, 0.28 against 0.32, the
    coarse one ranging from 0.15 to 0.49. The spread check keeps the widened law alone, whose spread the
@@ -1130,8 +1133,8 @@ fields with Gamma or skew-normal widening as the data ask. The thresholds are th
 from 50 % to 95 % in steps of 5 %. A map's Euler curve gives at each threshold the Euler characteristic
 of its excursion set, the number of components minus the number of holes
 (:func:`~spatialize.scenarios.stats.maps.euler_curve`). Its departure from the truth is the mean over
-the thresholds of the difference between the two curves. The scenario uses 48 fields in ``ci`` and
-96 in ``full``.
+the thresholds of the difference between the two curves. The scenario uses 72 fields in ``ci`` and
+144 in ``full``.
 
 **Checks.**
 
@@ -1152,7 +1155,7 @@ connectivity. A study on 10 fields found it kept by the members of the weighted 
 which departed by 0.85, while IDW members departed by 5.3, as far as the maps of means, and simulated
 fields by 18. The theory accounts for the last, a simulated field drawing each location from its own
 law independently of the others. The scenario reads the weighted draw coupled by cell, while the
-check on simulated fields asks for the fragmentation the theory predicts.
+check on simulated fields asks for the fragmentation the theory predicts. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 72 fields in ``ci`` and 144 in ``full``; it had been sized for its own checks alone.
 
 .. _scenario-S14:
 
@@ -1179,7 +1182,7 @@ at the same granularity, and the bound from the smallest pooled within-cell vari
 ladder of granularities (:doc:`../theory/other`). The suite reads the field's direction with
 ``orientation_coherence`` and its lengths with ``directional_range`` along that direction and across it.
 For the bound with an error, an error of 0.3 of the field's variance is added to the data, Gaussian and
-seeded per field. The scenario uses 16 fields in ``ci`` and 32 in ``full``.
+seeded per field. The scenario uses 24 fields in ``ci`` and 48 in ``full``.
 
 **Checks.**
 
@@ -1209,4 +1212,4 @@ whose nugget, sill and scale traded against one another. Version 4 reads the err
 instead, as an upper bound. Its first run failed the check on clean data, 0.34 against 0.3, because the
 ladder stopped one granularity earlier than the threshold assumed, a mistake in setting the threshold. The
 ladder's stop was lowered from a quarter to 15 % of the data, with the threshold kept, and seeds 3 and 4
-confirmed it.
+confirmed it. After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 24 fields in ``ci`` and 48 in ``full``; it had been sized for its own checks alone.

@@ -161,6 +161,15 @@ p-values with few fields when the effect is consistent, or a sign or Wilcoxon te
 means 10 fields for a single test and 16 for :math:`m = 50`. "Better on all six fields" counts as
 good evidence, short of a formal test at this level.
 
+**7. Sizing against the whole run.** Holm's levels depend on how many checks the run holds, so a check is
+sized for the run it joins, not for its scenario alone. A scenario run alone with ``--id`` gives its
+checks levels of the order of :math:`\alpha/m` for its own :math:`m`, while the full catalogue, about 360
+checks, gives its strictest check :math:`10^{-3}/360 \approx 2.8\cdot10^{-6}`. With few replicate fields
+the :math:`t` law makes the difference large. An effect of 1.4 standard deviations per field, enough with
+12 fields at the level of a scenario's own five checks, needs 27 fields at the catalogue's. Fields are
+therefore sized with the noncentral :math:`t` law at the catalogue's strictest level, a margin of about a
+fifth covering effects measured on a single run.
+
 **7. Two modes.** The rules stay the same while the declared effect changes.
 
 - ``ci`` (every change) declares :math:`\delta \approx 0.05`, with a few thousand draws per check,

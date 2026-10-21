@@ -1,5 +1,5 @@
 id: S03-anisotropic-field
-version: 14
+version: 15
 tier: T3
 evaluator: map_visual
 book:
@@ -210,7 +210,8 @@ checks:
      family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25,
      known_failure: "single members of Voronoi IDW keep 0.52 of the truth's coherence (seed 1, members without empty cells), below the margin 0.75"}
   - {id: v3b-vor-uniform-idw, title: "V3 single members keep the anisotropy's ranges (vor-uniform-idw)", estimator: vor-uniform-idw,
-     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405}
+     family: equivalence, functional: range_ratio_members, map: member, members_checked: 5, margin: 0.405,
+     known_failure: "the members' log range ratio is -0.33 (seed 1, full catalogue), too close to the margin ±log 1.5 for the equivalence at the catalogue's Holm level (about 190 fields needed)"}
   - {id: v3a-sharp, title: "V3 single members keep the anisotropy's strength (sharp)", estimator: sharp,
      family: equivalence, functional: coherence_ratio_members, map: member, members_checked: 5, margin: 0.25}
   - {id: v3b-sharp, title: "V3 single members keep the anisotropy's ranges (sharp)", estimator: sharp,
@@ -338,3 +339,8 @@ provenance:
     and for three of the four V3 outcomes, their values from the study; the widened simulated fields,
     whose coherence falls to 0.39 and 0.19 of the truth's, recorded here without a check. Earlier
     checks, sizes and thresholds unchanged.
+  v15: >
+    2026-10-21: v3b-vor-uniform-idw recorded as a known failure after the first full catalogue run (seed 1, ci):
+    its log range ratio, -0.33 against a margin of ±log 1.5 = 0.405, passes alone (p 1.1e-4) but not at the
+    catalogue's strictest Holm level (2.8e-6), which would need about 190 fields at its effect of 0.43
+    standard deviations per field; the same situation as v3b-idw.

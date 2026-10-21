@@ -591,7 +591,7 @@ ensembles of classes come from the runner's optional method ``cat_loo``, with th
 the Mondrian partition of rate 5/2 (Spatialize's ``alpha`` = 0.8), :math:`T = 100` members and
 ``empty_cells="coarsen"``. The cross reading weighs its data with the partition of rate 5 (``alpha`` =
 0.9). The readings are those of :class:`~spatialize.gs.spa.CategoricalPosteriorAudit` with its
-defaults. The scenario uses 12 fields in ``ci`` and 30 in ``full``.
+defaults. The scenario uses 24 fields in ``ci`` and 48 in ``full``.
 
 **Checks.**
 
@@ -608,5 +608,5 @@ at a p-value of 0.05 or less.
 **History.** The ranking checks were first set against a bound of 0.5, with no reference. The first
 run (seed 1) measured 0.70 and 0.68, short of significance with 12 fields. The bound became 0.25, five
 times the share of chance, 0.05, and seeds 2 and 3 confirmed it before the first commit
-(``provenance`` of the descriptor).
+(``provenance`` of the descriptor). After the first full run of the catalogue the scenario was sized again for the strictest Holm level of that run, about 360 checks, with the t law, which raised it to 24 fields in ``ci`` and 48 in ``full``; it had been sized for its own checks alone.
 

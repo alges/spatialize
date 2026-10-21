@@ -1,5 +1,4 @@
 import numpy as np
-from cv2 import bilateralFilter
 
 from spatialize import SpatializeError
 
@@ -36,6 +35,8 @@ class BilateralFilteringFusion:
         self.weights = None
 
     def filter_cube(self):
+        # OpenCV is imported here, the only place it is used, so that importing spatialize does not need it
+        from cv2 import bilateralFilter
         local_cube = self.cube
         filtered_cube = np.empty(local_cube.shape, dtype=np.float32)
         m, n, k = local_cube.shape

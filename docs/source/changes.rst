@@ -4,8 +4,8 @@
 Release notes
 #############
 
-1.3.0 (in development)
-======================
+1.3.0 (2026-10-21)
+==================
 
 Some results differ from version 1.2.0. The section *Results that change* lists where and why. A result computed with 1.2.0 keeps its value once saved, every result recording the settings it was computed with in its ``effective_config``.
 

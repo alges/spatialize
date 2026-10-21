@@ -36,7 +36,7 @@ def _cat_members(points, codes, kwargs):
     """The leave-one-out members, as class codes, NaN where the datum's cell held no other datum."""
     from spatialize.gs.cat_esi.classifiers import get_classifier_fns
     names = ("n_neighbors", "max_points", "n_cv_splits", "sklearn_classifier", "C", "kernel", "gamma",
-             "n_estimators", "max_depth", "min_samples_split", "random_state")
+             "n_estimators", "max_depth", "min_samples_split", "random_state", "seed")
     set_fn, clf_fn = get_classifier_fns(kwargs["classifier"], **{k: kwargs.get(k) for k in names})
     alpha = kwargs["alpha"]
     if kwargs["p_process"] == partitioning_process.VORONOI and not kwargs["data_cond"]:

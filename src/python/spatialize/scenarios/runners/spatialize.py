@@ -260,7 +260,9 @@ class SpatializeRunner:
         from spatialize.gs.cat_esi.classifiers import get_classifier_fns
         if est.encoder not in PROFILES or est.decoder not in CLASSIFIERS:
             raise NotImplementedError(f"{est.encoder}/{est.decoder}")
-        set_fn, clf_fn = get_classifier_fns(est.decoder, **dict(est.params or {}))
+        params = dict(est.params or {})
+        params.setdefault("seed", int(seed))             # the classifier's own draws follow the run's seed
+        set_fn, clf_fn = get_classifier_fns(est.decoder, **params)
         partition, alpha, q = self._partition(est, samples, samples)
         try:
             with self._session.override(empty_cells=est.empty_cells):

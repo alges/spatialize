@@ -177,6 +177,11 @@ New
 - **Leave-one-out by name.** Every cross-validated search and the posterior analysis take
   ``k="loo"`` for leave-one-out, as the Pareto search already did, besides ``-1`` and the number of
   data.
+- **The posterior analysis of categories repeats with its seed.** ``cat_posterior_audit`` passed its
+  seed to the partitions but not to the classifiers, so the cross-validation inside ``knn_pca`` and the
+  random state of ``rf`` and ``dt`` drew from the operating system, and two audits with the same seed
+  gave different members, laws and lists of actions. The seed now reaches the classifiers, as it already
+  did in ``cat_esi_griddata`` and ``cat_esi_nongriddata``.
 
 Under study
 -----------

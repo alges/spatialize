@@ -1,5 +1,5 @@
 id: P13-categorical-audit
-version: 2
+version: 3
 tier: T2
 evaluator: cat_posterior_audit
 book:
@@ -63,3 +63,8 @@ provenance:
     0.70 lies well inside with 12 fields; confirmed on fresh seeds (2 and 3) before the first commit.
   v2: >
     2026-10-21: re-sized after the first full catalogue run (seed 1, ci: 332 passed, 7 failed, 19 known). The scenarios of release 1.3 had been sized at the strictest Holm level among their own checks, as when run alone; Holm applies to every check of a run, about 360 in the full catalogue, so the strictest level is 1e-3/360 = 2.8e-6. Sized again with the t law (noncentral t for power 0.9) on the effects per field measured in that run, the weakest check of this scenario needing 21 fields; 24 in ci and 48 in full, a margin of about a fifth for effects read on one run. The existing pinned fields are unchanged, the new ones drawn after them by the same generator.
+  v3: >
+    2026-10-21: the runner's categorical leave-one-out passes the run's seed to the classifier, which had
+    drawn its own randomness (the cross-validation inside knn_pca) from the operating system, so two runs
+    with the same seed differed; the library's cat_posterior_audit had the same defect, fixed with it. Seeds
+    1 and 2 pass, every p-value below 8e-8.

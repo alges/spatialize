@@ -79,3 +79,16 @@ def test_categorical_audit_lists_a_mislabel_and_a_conflicting_pair():
         _audit(pts, lith).recommend(null=null)
     legend = [x.get_text() for x in a.plot_recommendations(rec).axes[0].get_legend().get_texts()]
     assert any(x.startswith("check first (") or x.startswith("measure again (") for x in legend)
+
+
+@pytest.mark.parametrize("classifier", ["knn_pca", "rf"])
+def test_categorical_audit_repeats_with_its_seed(classifier):
+    """Two audits with the same seed give the same leave-one-out members and the same mixture: the seed
+    reaches the classifiers' own draws (the cross-validation of knn_pca, the random state of the others),
+    which had drawn from the operating system's entropy."""
+    s = _golden()
+    pts, vals = s[["x", "y"]].values, s["lithology"].values
+    a, b = _audit(pts, vals, classifier=classifier), _audit(pts, vals, classifier=classifier)
+    assert np.array_equal(a.members, b.members, equal_nan=True)
+    a.calibration(), b.calibration()
+    assert np.allclose(a.mixture, b.mixture)

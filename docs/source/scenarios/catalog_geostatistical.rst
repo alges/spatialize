@@ -665,7 +665,8 @@ marks reach with probability near :math:`10^{-6}`. The scenario uses 20 fields i
   :math:`p_{dry}` against the true share, is lower for the draw than for IDW.
 - ``contrast``, *paired-relation*. The mean of :math:`p_{dry}` over the true dry region minus that over
   the wet region is higher for the weighted draw than for the draw.
-- ``support``, *almost-sure*. Every member of the draw and of the weighted draw is a data value.
+- ``support-draw`` and ``support-wdraw``, *almost-sure*. Every member of the draw, or of the weighted
+  draw, is a data value.
 - ``dry-overlap``, *paired-relation*, visual **V6**. The overlap (IoU) of the region
   :math:`p_{dry} > 1/2` with the true dry region is higher for the weighted draw than for the draw.
 - ``dry-edges``, *paired-relation*, visual **V6**. The mean magnitude of the gradient of
@@ -710,8 +711,9 @@ set of grid cells where the truth reaches its 90 % quantile. The scenario uses 3
 - ``median-idw``, ``median-aidw``, ``median-krig`` and ``median-wdraw``, *paired-relation*. The
   logarithm of the mean absolute error of the median map lies below that of the mean map, the logarithm
   keeping a field with a large mark from outweighing the others.
-- ``data-range``, *almost-sure*. No member of IDW, adaptive IDW or the weighted draw falls below the
-  smallest datum, by more than 4 single-precision ulps of it.
+- ``data-range-idw``, ``data-range-aidw`` and ``data-range-wdraw``, *almost-sure*. No member of IDW,
+  adaptive IDW or the weighted draw falls below the smallest datum, by more than 4 single-precision ulps
+  of it.
 - ``krig-leaves-range``, *one-sided*. A share of the members of kriging within the cell falls below the
   smallest datum.
 - ``top-idw``, ``top-aidw``, ``top-wdraw`` and ``top-ok``, *one-sided*. Over the top decile the error of

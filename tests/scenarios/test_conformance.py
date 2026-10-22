@@ -38,7 +38,8 @@ def _ids():
 
 @pytest.mark.parametrize("check", _ids())
 def test_check(report, check):
-    o = next(o for o in report.outcomes if f"{o.scenario}/{o.check}" == check)
+    o = next((o for o in report.outcomes if f"{o.scenario}/{o.check}" == check), None)
+    assert o is not None, f"{check} has no outcome in the report: its evaluator and check_ids name it differently"
     if o.skipped:
         pytest.skip(o.skipped)
     if o.status == "KNOWN":

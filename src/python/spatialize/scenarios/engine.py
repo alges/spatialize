@@ -236,6 +236,17 @@ def check_ids(sc):
     return ids
 
 
+def _per_estimator(check, used):
+    """``(outcome id, title, estimators read)`` of each outcome of ``check``, named as in :func:`check_ids`.
+
+    A check listing ``estimators`` gives one outcome per estimator; any other check gives one outcome,
+    which reads the estimators in ``used`` (``None`` entries dropped).
+    """
+    if "estimators" in check:
+        return [(f"{check['id']}-{e}", f"{check['title']} ({e})", [e]) for e in check["estimators"]]
+    return [(check["id"], check["title"], [e for e in used if e is not None])]
+
+
 def _mode_value(v, mode):
     return v[mode] if isinstance(v, dict) and mode in v else v
 
@@ -1927,29 +1938,27 @@ def eval_atom_at_zero(sc: Scenario, runner: Runner, mode: str, seed: int,
 
     out = []
     for check in s["checks"]:
-        kind = check["kind"]
-        used = check.get("estimators") or [check["estimator"], check["against"]]
-        cid, title = check["id"], check["title"]
-        missing = [e for e in used if not runner.supports(ests[e])]
-        if missing:
-            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
-                                    skipped=f"{runner.name} does not support {', '.join(missing)}"))
-            continue
-        if kind == "support":
-            bad, n = 0, 0
-            for eid in used:
+        for cid, title, used in _per_estimator(check, [check.get("estimator"), check.get("against")]):
+            kind = check["kind"]
+            missing = [e for e in used if not runner.supports(ests[e])]
+            if missing:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {', '.join(missing)}"))
+                continue
+            if kind == "support":
+                bad, n = 0, 0
                 for k in range(K):
-                    mem, _, _, vals = read(eid, k)
+                    mem, _, _, vals = read(used[0], k)
                     fin = mem[np.isfinite(mem)].astype(np.float32)
                     bad += int((~np.isin(fin, vals)).sum())
                     n += fin.size
-            r = families.almost_sure(bad, n)
-        else:
-            a = [reading(kind, check["estimator"], k) for k in range(K)]
-            b = [reading(kind, check["against"], k) for k in range(K)]
-            r = families.paired_relation(a, b, better=check["better"])
-        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
-                                known_failure=check.get("known_failure", "")))
+                r = families.almost_sure(bad, n)
+            else:
+                a = [reading(kind, check["estimator"], k) for k in range(K)]
+                b = [reading(kind, check["against"], k) for k in range(K)]
+                r = families.paired_relation(a, b, better=check["better"])
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                    known_failure=check.get("known_failure", "")))
     if save_maps:
         from .figures import save_field_panels
         panels = []
@@ -2629,51 +2638,49 @@ def eval_heavy_tail(sc: Scenario, runner: Runner, mode: str, seed: int,
 
     out = []
     for check in s["checks"]:
-        kind = check["kind"]
-        used = check.get("estimators") or [check["estimator"]]
-        cid, title = check["id"], check["title"]
-        missing = [e for e in used if not supported(e)]
-        if missing:
-            out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
-                                    skipped=f"{runner.name} does not support {', '.join(missing)}"))
-            continue
-        eid = used[0]
-        if kind == "median_beats_mean":
-            a = [np.log(np.nanmean(np.abs(read(eid, k)["median"] - read(eid, k)["truth"]))) for k in range(K)]
-            b = [np.log(np.nanmean(np.abs(read(eid, k)["mean"] - read(eid, k)["truth"]))) for k in range(K)]
-            r = families.paired_relation(a, b, better="less")
-        elif kind == "data_range":
-            bad, n = 0, 0
-            for e in used:
+        for cid, title, used in _per_estimator(check, [check.get("estimator")]):
+            kind = check["kind"]
+            missing = [e for e in used if not supported(e)]
+            if missing:
+                out.append(CheckOutcome(sc.id, cid, title, families.TestResult(check["family"], np.nan, 1.0, "not_reject"),
+                                        skipped=f"{runner.name} does not support {', '.join(missing)}"))
+                continue
+            eid = used[0]
+            if kind == "median_beats_mean":
+                a = [np.log(np.nanmean(np.abs(read(eid, k)["median"] - read(eid, k)["truth"]))) for k in range(K)]
+                b = [np.log(np.nanmean(np.abs(read(eid, k)["mean"] - read(eid, k)["truth"]))) for k in range(K)]
+                r = families.paired_relation(a, b, better="less")
+            elif kind == "data_range":
+                bad, n = 0, 0
                 for k in range(K):
-                    c = read(e, k)
+                    c = read(eid, k)
                     fin = c["members"][np.isfinite(c["members"])]
                     # members are single precision: a weighted average can round an ulp or two below its
                     # smallest term, so the floor allows 4 ulps
                     tol = 4 * np.finfo(np.float32).eps * abs(c["floor"])
                     bad += int(np.sum(fin < c["floor"] - tol))
                     n += fin.size
-            r = families.almost_sure(bad, n)
-        elif kind == "leaves_range":
-            x = []
-            for k in range(K):
-                c = read(eid, k)
-                fin = c["members"][np.isfinite(c["members"])]
-                x.append(float(np.mean(fin < c["floor"])))
-            r = families.mean_greater(x, 0.0)
-        elif kind == "top_decile":
-            x = [float(np.mean((read(eid, k)["median"][read(eid, k)["top"]] - read(eid, k)["truth"][read(eid, k)["top"]])
-                               / read(eid, k)["truth"][read(eid, k)["top"]])) for k in range(K)]
-            r = families.mean_less(x, 0.0)
-        elif kind in ("halo", "halo_local"):
-            shares = [maps.halo_share(read(eid, k)["median"].reshape(m, m), read(eid, k)["top"].reshape(m, m),
-                                      read(eid, k)["floor"], int(d["halo_width"])) for k in range(K)]
-            ring, rest = np.array(shares).T
-            r = families.mean_greater(ring, 0.0) if kind == "halo" else families.paired_relation(ring, rest, better="greater")
-        else:
-            raise ValueError(f"unknown check kind {kind}")
-        out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
-                                known_failure=check.get("known_failure", "")))
+                r = families.almost_sure(bad, n)
+            elif kind == "leaves_range":
+                x = []
+                for k in range(K):
+                    c = read(eid, k)
+                    fin = c["members"][np.isfinite(c["members"])]
+                    x.append(float(np.mean(fin < c["floor"])))
+                r = families.mean_greater(x, 0.0)
+            elif kind == "top_decile":
+                x = [float(np.mean((read(eid, k)["median"][read(eid, k)["top"]] - read(eid, k)["truth"][read(eid, k)["top"]])
+                                   / read(eid, k)["truth"][read(eid, k)["top"]])) for k in range(K)]
+                r = families.mean_less(x, 0.0)
+            elif kind in ("halo", "halo_local"):
+                shares = [maps.halo_share(read(eid, k)["median"].reshape(m, m), read(eid, k)["top"].reshape(m, m),
+                                          read(eid, k)["floor"], int(d["halo_width"])) for k in range(K)]
+                ring, rest = np.array(shares).T
+                r = families.mean_greater(ring, 0.0) if kind == "halo" else families.paired_relation(ring, rest, better="greater")
+            else:
+                raise ValueError(f"unknown check kind {kind}")
+            out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, "default"),
+                                    known_failure=check.get("known_failure", "")))
     if save_maps and cache:
         from .figures import save_field_panels
         panels = []

@@ -4,6 +4,18 @@
 Release notes
 #############
 
+1.4.0 (in development)
+======================
+
+Renamed
+-------
+
+- **Two checks of the conformance tests** give one outcome per estimator, as every other check listing
+  several estimators does, so a runner can look each one up by the identifier
+  :func:`~spatialize.scenarios.engine.check_ids` gives it. ``support`` of
+  :ref:`S04 <scenario-S04>` becomes ``support-draw`` and ``support-wdraw``. ``data-range`` of
+  :ref:`S05 <scenario-S05>` becomes ``data-range-idw``, ``data-range-aidw`` and ``data-range-wdraw``.
+
 1.3.0 (2026-10-21)
 ==================
 

@@ -7,6 +7,15 @@ Release notes
 1.4.0 (in development)
 ======================
 
+Results that change
+-------------------
+
+- **The folds of k-fold cross-validation** (``k`` above zero in the searches, the posterior analysis
+  and plain IDW). The folds were drawn from a number in [0, 1) that the engine truncated to the seed 0,
+  so every ``folding_seed`` gave the same folds, the default drawn per call included. The folds now
+  follow ``folding_seed``. Every k-fold score changes, with the searches that rank configurations by one.
+  Leave-one-out and estimation are unchanged.
+
 Renamed
 -------
 

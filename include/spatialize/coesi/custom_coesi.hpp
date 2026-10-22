@@ -296,9 +296,7 @@ namespace sptlz{
 
 			std::vector<std::vector<float>> k_fold(int k, int seed=206936){
 				std::stringstream json;
-				auto fold_rand = std::mt19937(seed);
-				std::uniform_real_distribution<float> uni_float;
-				auto folds = get_folds(values.size(), k, uni_float(fold_rand));
+				auto folds = get_folds(values.size(), k, static_cast<unsigned int>(seed));
 				std::vector<std::vector<float>> results(coords.size());
 				int n = mondrian_forest.size();
 

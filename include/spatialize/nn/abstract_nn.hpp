@@ -120,10 +120,8 @@ namespace sptlz{
 
 			std::vector<float> k_fold(int k, int seed=206936){
 				std::stringstream json;
-				std::uniform_real_distribution<float> uni_float;
-				std::mt19937 my_rand(seed);
 				std::vector<float> result;
-				auto folds = get_folds(static_cast<int>(values.size()), k, uni_float(my_rand));
+				auto folds = get_folds(static_cast<int>(values.size()), k, static_cast<unsigned int>(seed));
 				float value;
 				int n = static_cast<int>(coords.size());
 

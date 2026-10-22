@@ -423,9 +423,7 @@ namespace sptlz{
 			}
 
 			std::vector<std::vector<float>> k_fold(int k, int seed=206936){
-				auto fold_rand = std::mt19937(seed);
-				std::uniform_real_distribution<float> uni_float;
-				auto folds = get_folds(static_cast<int>(values.size()), k, uni_float(fold_rand));
+				auto folds = get_folds(static_cast<int>(values.size()), k, static_cast<unsigned int>(seed));
 				int n = static_cast<int>(forest.size());
 				std::vector<std::vector<float>> results(coords.size(), std::vector<float>(n, NAN));
 

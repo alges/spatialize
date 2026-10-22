@@ -383,9 +383,10 @@ namespace sptlz{
     return(result);
   }
 
-  std::vector<int> get_folds(int n, int k, float seed){
+  // folds of n data, balanced and drawn from the integer seed (k-fold's folding_seed)
+  std::vector<int> get_folds(int n, int k, unsigned int seed){
     std::vector<int> result(n);
-    std::mt19937 my_rand((unsigned int)seed);
+    std::mt19937 my_rand(seed);
     std::uniform_real_distribution<float> uni_float(0, 1);
     std::vector<std::pair<int, float>> permutation;
 

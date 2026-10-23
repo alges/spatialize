@@ -118,9 +118,11 @@ jobs:
           - os: macos-15-intel
             arch: x86_64
             python: "3.13"
+            platform: macosx-10.13-x86_64
           - os: macos-latest
             arch: arm64
             python: "3.14"
+            platform: macosx-11.0-arm64
 
     env:
       # Pin build to native arch (Homebrew's libomp is native-arch only).
@@ -148,6 +150,11 @@ jobs:
 
       - name: Build project (macOS)
         run: python -m build
+        env:
+          # setup-python's macOS Pythons are python.org universal2 builds, so setuptools tags the
+          # wheel universal2 whatever ARCHFLAGS says, and delocate then rejects it for lacking the
+          # other arch. Tag it with the arch actually built.
+          _PYTHON_HOST_PLATFORM: ${{ matrix.platform }}
 
       - name: Bundle libomp into the wheel
         run: |

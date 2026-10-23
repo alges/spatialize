@@ -115,6 +115,9 @@ jobs:
         # one combination per architecture: an `include` entry added to an existing combination
         # would overwrite the previous one's os/arch
         include:
+          - os: macos-15-intel
+            arch: x86_64
+            python: "3.14"
           - os: macos-latest
             arch: arm64
             python: "3.14"
@@ -140,6 +143,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade setuptools wheel
+          export ARCHFLAGS="-arch x86_64"
           pip install -r requirements.txt
           pip install build delocate
 

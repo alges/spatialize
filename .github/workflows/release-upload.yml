@@ -144,7 +144,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade setuptools wheel
           export ARCHFLAGS="-arch x86_64"
-          pip install -r requirements.txt
+          pip install --only-binary=numba,llvmlite -r requirements.txt
           pip install build delocate
 
       - name: Build project (macOS)

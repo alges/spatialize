@@ -39,10 +39,10 @@ jobs:
       - name: Build wheels with manylinux
         run: python -m cibuildwheel --output-dir dist
         env:
-          CIBW_BUILD: "cp313-*"
+          CIBW_BUILD: "cp314-*"
 
       - name: Get WHL
-        run: echo "WHEEL_FILE=$(ls dist/*cp313*.whl | head -n 1)" >> $GITHUB_ENV
+        run: echo "WHEEL_FILE=$(ls dist/*cp314*.whl | head -n 1)" >> $GITHUB_ENV
 
       - name: Install whl
         run: pip install ${{ env.WHEEL_FILE }}
@@ -115,10 +115,7 @@ jobs:
         # one combination per architecture: an `include` entry added to an existing combination
         # would overwrite the previous one's os/arch
         include:
-          - os: macos-15-intel
-            arch: x86_64
-            python: "3.14"
-          - os: macos-15
+          - os: macos-latest
             arch: arm64
             python: "3.14"
 

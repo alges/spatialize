@@ -49,7 +49,7 @@ class TestResult:
     detail: str = ""
 
 
-def gof_proportions(p_hat, p0, n):
+def gof_proportions(p_hat, p0, n, cov=None):
     r"""Goodness of fit of estimated proportions to closed-form targets.
 
     Parameters
@@ -60,6 +60,10 @@ def gof_proportions(p_hat, p0, n):
         Target proportions under the null hypothesis, in (0, 1).
     n : int
         Number of draws behind each proportion.
+    cov : array_like of shape (k, k), optional
+        Covariance under the null hypothesis of the k indicators of one draw, when the proportions
+        are read from the same draws (its diagonal is :math:`p_i(1-p_i)`). Default: independent
+        proportions.
 
     Returns
     -------
@@ -69,18 +73,29 @@ def gof_proportions(p_hat, p0, n):
 
     Notes
     -----
-    With :math:`z_i = (\hat p_i - p_i)/\sqrt{p_i(1-p_i)/n}`, the statistic
-    :math:`\sum_i z_i^2` is asymptotically :math:`\chi^2_k` under the null hypothesis when the
-    proportions are independent.
+    With :math:`d = \hat p - p` and :math:`\Sigma` the covariance of the indicators, the statistic
+    :math:`n\, d^\top \Sigma^{+} d` is asymptotically :math:`\chi^2_r` under the null hypothesis,
+    :math:`r` the rank of :math:`\Sigma` (its pseudo-inverse :math:`\Sigma^{+}` drops indicators
+    that always agree). Without ``cov`` the indicators are taken as independent,
+    :math:`\Sigma = \mathrm{diag}(p_i(1-p_i))`, and the statistic is :math:`\sum_i z_i^2` with
+    :math:`z_i = (\hat p_i - p_i)/\sqrt{p_i(1-p_i)/n}`. Proportions read from the same draws are
+    correlated, and treating them as independent rejects a true null hypothesis more often than its
+    level.
     """
     p_hat, p0 = np.atleast_1d(p_hat).astype(float), np.atleast_1d(p0).astype(float)
     z = (p_hat - p0) / np.sqrt(p0 * (1 - p0) / n)
-    chi2 = float(np.sum(z ** 2))
-    p = float(stats.chi2.sf(chi2, df=len(z)))
+    if cov is None:
+        chi2, df = float(np.sum(z ** 2)), len(z)
+    else:
+        cov = np.asarray(cov, float)
+        d = p_hat - p0
+        chi2 = float(n * d @ np.linalg.pinv(cov, rcond=1e-10, hermitian=True) @ d)
+        df = int(np.linalg.matrix_rank(cov, tol=1e-10 * np.abs(cov).max(), hermitian=True))
+    p = float(stats.chi2.sf(chi2, df=df))
     worst = int(np.argmax(np.abs(z)))
     return TestResult("gof-closed", chi2, p, "not_reject",
-                      f"k={len(z)} N={n} max|z|={abs(z[worst]):.2f} at #{worst} "
-                      f"(p̂={p_hat[worst]:.4f} vs {p0[worst]:.4f})")
+                      f"k={len(z)}" + ("" if cov is None else f" rank={df}") + f" N={n} "
+                      f"max|z|={abs(z[worst]):.2f} at #{worst} (p̂={p_hat[worst]:.4f} vs {p0[worst]:.4f})")
 
 
 def identity(z, what="z"):

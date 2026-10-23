@@ -112,8 +112,14 @@ fraction of finite members at a query at displacement :math:`h` then estimates
 diagonal (with :math:`\ell_1`-normalised steps) give :math:`k = 8` proportions, at rate
 :math:`\lambda = 3`.
 
-**Test.** A *gof-closed* test, with :math:`\sum_{i=1}^{8} z_i^2 \sim \chi^2_8` under the closed
-form. It uses :math:`N = 3\,100` members in ``ci`` (:math:`\delta = 0.05`) and :math:`19\,300` in
+**Test.** A *gof-closed* test against the closed form. The eight proportions are read from the same
+partitions, which correlates them (up to about 0.75). The statistic is
+:math:`N\, d^\top \Sigma^{-1} d \sim \chi^2_8`, with :math:`d = \hat p - p` and :math:`\Sigma` the
+covariance of the eight indicators of one partition, which the closed form gives,
+:math:`e(\{x_0, x_a, x_b\}) - e(\{x_0, x_a\})\, e(\{x_0, x_b\})` (as in E3, :math:`e` of a set is
+:math:`\exp(-\lambda \sum_c \mathrm{range}_c)`). Treating the proportions as independent rejected the
+theory's process at about twice the level (10 % of 200 seeds at 0.05; with the covariance, 3 % of 150).
+It uses :math:`N = 3\,100` members in ``ci`` (:math:`\delta = 0.05`) and :math:`19\,300` in
 ``full`` (:math:`\delta = 0.02`), which give power 0.9 at :math:`\delta` for up to 50 tests under Holm.
 
 **Estimators.** The check reads two estimators with the IDW decoder, ``idw-theory`` on the
@@ -123,9 +129,10 @@ of Spatialize 1.2 (``"mondrian-legacy"``).
 **Expectation per profile.** The theory's process should pass, while the partition of Spatialize 1.2
 should reject, making that outcome a negative control. That partition deviates
 from the theory's process by design (:doc:`encoders`), by 4–21 % on the unit square. The
-test sees the deviation with :math:`p \approx 10^{-87}` in ``ci``, its largest :math:`|z| = 9.6`
-falling at displacement 0.2 along the diagonal (:math:`\hat p = 0.463` against :math:`0.549`), and
-with :math:`|z| \approx 27` in ``full``. A test unable to reject here would lack the power its passes
+test sees the deviation with :math:`p` between :math:`10^{-26}` and :math:`10^{-23}` in ``ci`` (seeds 1
+to 3; at most :math:`8 \cdot 10^{-13}` over 150 seeds), its largest :math:`|z|` near 9.6 falling at
+displacement 0.2 along the diagonal (:math:`\hat p = 0.463` against :math:`0.549`), and with
+:math:`|z| \approx 27` in ``full``. A test unable to reject here would lack the power its passes
 elsewhere claim.
 
 .. _scenario-E3:
@@ -151,10 +158,14 @@ form, which reduces to E2 for two points.
 
 - *gof-closed*. The share of partitions putting each triple in one cell against :math:`e(S)`,
   combined as :math:`\sum_i z_i^2 \sim \chi^2_5`, with :math:`N = 4\,000` partitions in ``ci`` and
-  :math:`16\,000` in ``full``. The cells are read as in E1.
+  :math:`16\,000` in ``full``. The cells are read as in E1, each triple with a seed of its own, so the
+  five proportions are independent whatever an implementation does with one seed on different points
+  (read with one seed, two triples spanning the same box agreed at every partition, the test then
+  rejecting the theory's process at 12 % of 160 seeds at 0.05, against 6 % of 150 with a seed per
+  triple).
 
-**Results.** On seeds 1 to 3 the theory's process passes (p between 0.24 and 0.58) while the Mondrian
-partition of version 1.2 rejects with :math:`|z|` up to 11.6, on the collinear triples above all.
+**Results.** On seeds 1 to 3 the theory's process passes (p between 0.08 and 0.91) while the Mondrian
+partition of version 1.2 rejects with :math:`|z|` up to 12.2, on the collinear triples above all.
 
 Beyond E2, it tests the process on sets of more than two locations, on ``"mondrian"`` as an
 ordinary check and on the Mondrian partition of version 1.2 as a negative control.

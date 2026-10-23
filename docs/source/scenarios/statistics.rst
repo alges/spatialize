@@ -27,6 +27,9 @@ passing means *not rejecting* or *rejecting* the null hypothesis.
    * - **gof-closed**
      - an estimated probability or curve against a closed form or exact law
      - :math:`z_i = (\hat p_i - p_i)/\sqrt{p_i(1-p_i)/N}`, combined as :math:`\sum z_i^2 \sim \chi^2_k`
+       for independent proportions. Proportions read from the same draws use their covariance
+       :math:`\Sigma` under the null hypothesis, :math:`N\, d^\top \Sigma^{+} d \sim \chi^2_r` with
+       :math:`d = \hat p - p` and :math:`r` the rank of :math:`\Sigma`
      - do not reject, with the declared power
    * - **almost-sure**
      - an invariant the theory guarantees (support of a draw decoder, monotone CDF, ...)

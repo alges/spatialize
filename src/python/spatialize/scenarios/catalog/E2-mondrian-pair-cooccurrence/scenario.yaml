@@ -1,5 +1,5 @@
 id: E2-mondrian-pair-cooccurrence
-version: 4
+version: 5
 tier: T1
 evaluator: pair_cooccurrence
 book:
@@ -35,3 +35,4 @@ provenance:
   v2: "2026-10-06: encoder profiles renamed (mondrian, mondrian-theory, voronoi, voronoi-data); results unchanged"
   v3: "2026-10-06: estimator idw-theory on the theory's Mondrian process (spatialize's p_process='mondrian-raw'); c1 now reads both estimators, the default Mondrian remaining the negative control"
   v4: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."
+  v5: "2026-10-23: the eight proportions are read from the same partitions, so the test uses their covariance under the closed form (issue #10); the naive test rejected the theory at 10 % of seeds at 0.05. Sizes unchanged."

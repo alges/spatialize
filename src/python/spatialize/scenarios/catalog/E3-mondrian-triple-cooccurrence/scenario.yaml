@@ -1,5 +1,5 @@
 id: E3-mondrian-triple-cooccurrence
-version: 2
+version: 3
 tier: T1
 evaluator: partition_law
 book:
@@ -34,3 +34,4 @@ checks:
 provenance:
   v1: "2026-10-07: first version, with the cell-mean decoder and mondrian-raw (phase 2); sizes fixed before the first run"
   v2: "2026-10-09: Spatialize's default Mondrian became the theory's process (p_process 'mondrian'); the negative control now reads the Mondrian partition of Spatialize 1.2, profile mondrian-legacy, which keeps failing the closed form. Thresholds and sizes unchanged."
+  v3: "2026-10-23: each triple read with a seed of its own, so the five proportions are independent for any runner (issue #10); with one seed two triples spanning the same box always agreed and the test rejected the theory at 12 % of seeds at 0.05. Sizes unchanged."

@@ -260,6 +260,21 @@ def _expect(check, profile):
     return exp.get(profile, exp.get("default", "pass")) if isinstance(exp, dict) else exp
 
 
+def _mondrian_cooccurrence(points, lam):
+    """Probability that ``points`` share a cell of a Mondrian process of rate ``lam``: no cut meets
+    their bounding box, ``exp(−λ · sum of its sides)``."""
+    P = np.asarray(points, float)
+    return float(np.exp(-lam * np.sum(P.max(axis=0) - P.min(axis=0))))
+
+
+def _mondrian_indicator_cov(sets, lam):
+    """Covariance of the indicators that each of ``sets`` lies in one cell of the same Mondrian draw:
+    ``e(A ∪ B) − e(A) e(B)``."""
+    e = [_mondrian_cooccurrence(A, lam) for A in sets]
+    return np.array([[_mondrian_cooccurrence(np.vstack([A, B]), lam) - e[i] * e[j] for j, B in enumerate(sets)]
+                     for i, A in enumerate(sets)])
+
+
 def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
                            save_maps=None) -> List[CheckOutcome]:
     r"""Evaluator ``pair_cooccurrence``: the partition law read through the estimator (E2).
@@ -267,7 +282,9 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
     With a single datum (value 1) and empty cells as NaN, a member is finite exactly when the query
     shares the datum's cell, so the fraction of finite members at a query estimates the
     co-occurrence :math:`e(\{x, y\})`. It is compared with :math:`\exp(-\lambda \lVert x-y
-    \rVert_1)` by :func:`~spatialize.scenarios.stats.families.gof_proportions`.
+    \rVert_1)` by :func:`~spatialize.scenarios.stats.families.gof_proportions`, with the covariance
+    the closed form gives the indicators of one draw, since every query is read from the same
+    partitions.
 
     Reads ``data.datum``, ``data.directions``, ``data.displacements`` and, per check,
     ``estimator`` or ``estimators``, ``n_members`` (per mode) and ``expect``.
@@ -313,7 +330,8 @@ def eval_pair_cooccurrence(sc: Scenario, runner: Runner, mode: str, seed: int,
             m = runner.members(est, centre[None, :].astype(np.float32), np.ones(1, np.float32), q, n_members=n, seed=seed)
             p_hat = np.isfinite(m).mean(axis=1)
             p0 = np.exp(-est.rate * np.asarray(l1))
-            r = families.gof_proportions(p_hat, p0, n)
+            r = families.gof_proportions(p_hat, p0, n,
+                                         cov=_mondrian_indicator_cov([np.vstack([centre, x]) for x in q], est.rate))
             out.append(CheckOutcome(sc.id, cid, title, r, expect=_expect(check, profile), route=_route(runner, est), known_failure=check.get("known_failure", "")))
     return out
 
@@ -886,10 +904,12 @@ def eval_partition_law(sc: Scenario, runner: Runner, mode: str, seed: int,
             elif kind == "set_cooccurrence":
                 sets = [np.asarray(S, float) for S in s["data"]["sets"]]
                 p_hat, p0 = [], []
-                for S in sets:
-                    same = _same_cell(runner, est, S, n, seed)
+                # one run per set, each with its own seed: independent proportions whatever the
+                # runner does with a seed across runs on different points
+                for i, S in enumerate(sets):
+                    same = _same_cell(runner, est, S, n, _sub_seed(seed, i))
                     p_hat.append(float(np.mean(same[:, 0, :].all(axis=1))))
-                    p0.append(float(np.exp(-lam * np.sum(S.max(axis=0) - S.min(axis=0)))))
+                    p0.append(_mondrian_cooccurrence(S, lam))
                 r = families.gof_proportions(np.array(p_hat), np.array(p0), n)
             elif kind == "fourth_cumulant":
                 rng = np.random.default_rng(seed)

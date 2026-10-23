@@ -15,6 +15,12 @@ Results that change
   so every ``folding_seed`` gave the same folds, the default drawn per call included. The folds now
   follow ``folding_seed``. Every k-fold score changes, with the searches that rank configurations by one.
   Leave-one-out and estimation are unchanged.
+- **Two checks of the conformance tests at their level.** :ref:`E2 <scenario-E2>` read its eight
+  proportions from the same partitions and tested them as independent, so it rejected the theory's
+  Mondrian process at about twice its level (10 % of seeds at 0.05). It now uses their covariance, which
+  the closed form gives. :ref:`E3 <scenario-E3>` reads each triple with a seed of its own, which makes
+  its proportions independent for any implementation (12 % of seeds before, 6 % after). The negative
+  controls still reject, far below the level of the catalogue.
 
 Renamed
 -------

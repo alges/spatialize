@@ -15,6 +15,10 @@ Results that change
   so every ``folding_seed`` gave the same folds, the default drawn per call included. The folds now
   follow ``folding_seed``. Every k-fold score changes, with the searches that rank configurations by one.
   Leave-one-out and estimation are unchanged.
+- **The cumulative distribution function of a fitted law** (``EmpiricalModel.cdf`` and its inverse).
+  Its interpolant could return 1 + 2·10⁻¹⁶ or step down by 10⁻¹⁶, which failed scenario
+  :ref:`P4 <scenario-P4>` at some seeds (6 of its checks, 22 times in 80 seeds). The values now stay in
+  their range and never decrease, so they change by an ulp at most, where they did not.
 - **Two checks of the conformance tests at their level.** :ref:`E2 <scenario-E2>` read its eight
   proportions from the same partitions and tested them as independent, so it rejected the theory's
   Mondrian process at about twice its level (10 % of seeds at 0.05). It now uses their covariance, which

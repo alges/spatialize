@@ -1215,6 +1215,7 @@ class EmpiricalModel(BaseEmpiricalModel):
                 overshoot next to a sharp step. Default: False (Akima).
             """
             self.__outside = outside
+            self.__monotone = monotone
             # Ensure x is sorted for interpolation
             sort_indices = np.argsort(x)
             x_sorted = x[sort_indices]
@@ -1226,6 +1227,11 @@ class EmpiricalModel(BaseEmpiricalModel):
             unique_y = y_sorted[unique_indices]
             
             self.__f = (PchipInterpolator if monotone else Akima1DInterpolator)(unique_x, unique_y)
+            lo_y, hi_y = float(np.min(unique_y)), float(np.max(unique_y))
+            if outside is not None:
+                lo_y, hi_y = min(lo_y, *outside), max(hi_y, *outside)
+            self.__range = (lo_y, hi_y)
+            self.__increasing = bool(unique_y[-1] >= unique_y[0])
 
         def __call__(self, x):
             """
@@ -1246,9 +1252,37 @@ class EmpiricalModel(BaseEmpiricalModel):
                 lo, hi = self.__f.x[0], self.__f.x[-1]
                 xa = np.asarray(x)
                 y = np.where(xa < lo, self.__outside[0], np.where(xa > hi, self.__outside[1], y))
-                if np.ndim(x) == 0:
-                    y = float(y)
+            if self.__monotone:
+                y = self.__keep_monotone(np.asarray(x, float), np.asarray(y, float))
+            if np.ndim(x) == 0:
+                y = float(y)
             return y
+
+        def __keep_monotone(self, x, y):
+            """PCHIP keeps monotone values monotone and within their range in exact arithmetic, while in
+            floating point a value can land an ulp outside the range of the nodes, or an ulp below the
+            value at a smaller x (a cumulative probability of 1 + 2e-16, or a step of −1e-16). Clip to the
+            range of the nodes (and of the values outside the grid) and make the evaluated values
+            monotone in x."""
+            lo, hi = self.__range
+            if y.ndim == 0 or y.size < 2:
+                return np.clip(y, lo, hi)
+            # the common case, a sorted grid whose values are already in range and monotone, costs
+            # two comparisons per value and no copy
+            flat_x, flat_y = x.ravel(), y.ravel()
+            if not (flat_y.min() >= lo and flat_y.max() <= hi):     # also true when NaN is present
+                flat_y = np.clip(flat_y, lo, hi)
+            acc = np.maximum.accumulate if self.__increasing else np.minimum.accumulate
+            if np.all(flat_x[1:] >= flat_x[:-1]):                    # sorted, no NaN
+                d = flat_y[1:] - flat_y[:-1]
+                if np.any(d < 0) if self.__increasing else np.any(d > 0):
+                    flat_y = acc(flat_y)
+                return flat_y.reshape(y.shape)
+            flat_y = flat_y.copy()
+            ok = np.isfinite(flat_x) & np.isfinite(flat_y)
+            idx = np.flatnonzero(ok)[np.argsort(flat_x[ok], kind="stable")]
+            flat_y[idx] = acc(flat_y[idx])
+            return flat_y.reshape(y.shape)
 
         def derivative(self):
             """

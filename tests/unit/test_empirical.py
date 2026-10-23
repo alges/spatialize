@@ -163,3 +163,18 @@ def test_widen_members_needs_the_data():
     r, _ = _widening_case(10)
     with pytest.raises(ValueError):
         widen_members(r, widening="normal")
+
+
+def test_a_fitted_law_is_a_law_to_the_last_ulp():
+    """The cumulative distribution function of a fitted law stays in [0, 1] and never decreases, to
+    the last ulp: its interpolant could return 1 + 2e-16 or step down by 1e-16, which failed scenario
+    P4 at these seeds (issue #11)."""
+    import warnings
+    from spatialize import scenarios
+    from spatialize.scenarios.runners.spatialize import SpatializeRunner
+    sc, runner = scenarios.catalog()["P4-law-validity"], SpatializeRunner()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        bad = [(seed, o.check, o.result.detail) for seed in (5, 10, 35, 54)
+               for o in scenarios.run(sc, runner, mode="ci", seed=seed).outcomes if not o.ok]
+    assert not bad, bad

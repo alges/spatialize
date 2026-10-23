@@ -13,48 +13,13 @@
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 #include "spatialize/grad_descent.hpp"
+#include "spatialize/decoders/idw.hpp"
 
 namespace sptlz{
   // Constants for numerical stability and algorithm parameters
   constexpr float EPSILON = 1e-10f;  // Small value to prevent division by zero
   constexpr float DEFAULT_EXPONENT = 2.0f;
   constexpr float DEFAULT_ANISOTROPY = 1.0f;
-
-  // Inverse-distance prediction with weights relative to the nearest datum,
-  //   w_j = b_j (d_min / d_j)^p,
-  // the same normalised weights as b_j / d_j^p, with the largest equal to 1: no power under- or
-  // overflows, so the prediction does not depend on the units of the coordinates (1/(eps + d^p)
-  // vanished for large coordinates and fitted exponents). Data at distance 0 take all the weight
-  // (their mean). `each(f)` calls f(distance, value, boost) for every datum; NaN without data.
-  template <typename Each>
-  inline float relative_idw(Each each, float p){
-    float dmin = INFINITY;
-    int n = 0;
-    each([&](float d, float, float){ if(d < dmin) dmin = d; n++; });
-    if(n == 0) return(NAN);
-    float s = 0.0f, sv = 0.0f;
-    if(dmin == 0.0f){
-      each([&](float d, float v, float){ if(d == 0.0f){ s += 1.0f; sv += v; } });
-      return(sv/s);
-    }
-    each([&](float d, float v, float b){
-      float w = b*std::pow(dmin/d, p);
-      s += w;
-      sv += w*v;
-    });
-    return((s > 0.0f) ? sv/s : NAN);
-  }
-
-  // the weights themselves (one per datum), with the same convention
-  inline std::vector<float> relative_idw_weights(const std::vector<float> &d, const std::vector<float> &boost, float p){
-    std::vector<float> w(d.size(), 0.0f);
-    float dmin = INFINITY;
-    for(float x: d) if(x < dmin) dmin = x;
-    for(size_t j=0; j<d.size(); j++){
-      w[j] = (dmin == 0.0f) ? (d[j] == 0.0f ? 1.0f : 0.0f) : boost[j]*std::pow(dmin/d[j], p);
-    }
-    return(w);
-  }
 
   // Leave-one-out error of IDW on a line, as a function of the exponent alone.
   class LOO1D{

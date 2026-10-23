@@ -11,6 +11,7 @@
 #include "spatialize/decoder.hpp"
 #include "spatialize/utils.hpp"
 #include "spatialize/decoders/kriging.hpp"
+#include "spatialize/decoders/idw.hpp"
 
 namespace sptlz{
   // Decoders that return a draw (the theory's distance-weighted draw and its relatives): at each
@@ -99,17 +100,10 @@ namespace sptlz{
       std::vector<std::vector<float>> at(std::vector<std::vector<float>> *cell_coords, std::vector<float> *cell_values, std::vector<std::vector<float>> *points, std::vector<float> *params){
         std::vector<std::vector<float>> result;
         for(auto &p: *points){
-          std::vector<float> d, w;
-          bool exact = false;
-          for(auto &c: *cell_coords){
-            float dist = distance(&p, &c);
-            d.push_back(dist);
-            if(dist == 0) exact = true;
-          }
-          for(float dist: d){
-            w.push_back(exact ? (dist == 0 ? 1.0f : 0.0f) : 1/std::pow(dist, exponent));
-          }
-          result.push_back(w);
+          std::vector<float> d;
+          for(auto &c: *cell_coords) d.push_back(distance(&p, &c));
+          // 1/d^p relative to the nearest datum (data at distance 0 take all the weight)
+          result.push_back(relative_idw_weights(d, exponent));
         }
         return(result);
       }

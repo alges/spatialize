@@ -210,7 +210,9 @@ The engine reproduces earlier results bit for bit, except where a defect was cor
 The following corrections change numbers.
 
 - **IDW weights** are :math:`1/d^p` everywhere, in estimation, leave-one-out and k-fold, on Mondrian
-  and Voronoi partitions, with a datum at distance 0 taking all the weight. Earlier versions used
+  and Voronoi partitions, with a datum at distance 0 taking all the weight. Since 1.4 they are
+  computed relative to the nearest datum, :math:`(d_{\min}/d)^p`, in IDW and its weighted draw as in
+  the adaptive decoders, so no power under- or overflows. Earlier versions used
   :math:`1/(1+d^p)` in leave-one-out and k-fold, so cross-validation scored a different decoder from
   the one that predicts. The Voronoi IDW used it everywhere, which on a unit-scale domain comes close
   to a cell mean.

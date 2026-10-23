@@ -63,7 +63,9 @@ between the field's dependence and the co-occurrence hold exactly for it.
    w_j(v) = \lVert v - v_j \rVert^{-p},
 
 with a datum at distance 0 taking all the weight. A large exponent :math:`p` makes the nearest datum
-dominate, while :math:`p \to 0` approaches the cell mean. Prefer it as a fast, transparent baseline,
+dominate, while :math:`p \to 0` approaches the cell mean. The weights are computed relative to the
+nearest datum, :math:`(d_{\min}/d_j)^p`, as for adaptive IDW below, so no power under- or overflows
+whatever the units of the coordinates and the exponent. Prefer it as a fast, transparent baseline,
 on fields without a marked direction, and for quick hyperparameter searches.
 
 **Kriging** (``kriging``). The weights :math:`\lambda_j(v)` solve the ordinary kriging system of a

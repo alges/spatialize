@@ -15,6 +15,13 @@ Results that change
   so every ``folding_seed`` gave the same folds, the default drawn per call included. The folds now
   follow ``folding_seed``. Every k-fold score changes, with the searches that rank configurations by one.
   Leave-one-out and estimation are unchanged.
+- **IDW and its weighted draw with small or large coordinates** (``idw``, ``wdraw_idw``). Their
+  weights :math:`1/d^p` were computed in single precision, so with coordinates near :math:`10^{-3}`
+  and an exponent of 14 every weight was infinite, every IDW member undefined and every draw the last
+  datum of its cell, while with coordinates in thousands and a large exponent they vanished. The weights
+  are now relative to the nearest datum, as in the adaptive decoders since 1.3, which removes both
+  effects. At ordinary scales the weighted draws are unchanged and IDW changes by float rounding
+  (relative differences near :math:`10^{-6}`), its estimation a little faster.
 - **The cumulative distribution function of a fitted law** (``EmpiricalModel.cdf`` and its inverse).
   Its interpolant could return 1 + 2·10⁻¹⁶ or step down by 10⁻¹⁶, which failed scenario
   :ref:`P4 <scenario-P4>` at some seeds (6 of its checks, 22 times in 80 seeds). The values now stay in

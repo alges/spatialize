@@ -35,6 +35,23 @@ def test_adaptive_decoders_do_not_depend_on_coordinate_units(decoder):
     assert np.nanmean(differ) < 0.02   # 1.2 % with the theory's Mondrian (2026-10-09), under 1 % before
 
 
+@pytest.mark.parametrize("decoder", ["idw", "wdraw_idw"])
+@pytest.mark.parametrize("method", ["estimate", "loo"])
+def test_idw_decoders_do_not_depend_on_coordinate_units(decoder, method):
+    """The IDW weights are 1/d^p relative to the nearest datum, so with a large exponent and
+    coordinates 10^3 times smaller or larger the members stay finite and the same up to float rounding
+    (1/d^p was infinite for small coordinates, every member NaN and every draw the cell's last datum,
+    and 0 for large ones; issue #12)."""
+    s, v, q = DATA["2d"]
+    pts = s if method == "loo" else q
+    runs = [np.asarray(LIB.run((s * c).astype(np.float32), v, (pts * c).astype(np.float32), "mondrian", cases.ALPHA,
+                               cases.T, cases.SEED, decoder, {"exponent": 14.0}, method)[1]) for c in (1.0, 1e-3, 1e3)]
+    for r in runs[1:]:
+        assert np.array_equal(np.isnan(runs[0]), np.isnan(r))
+        differ = np.abs(runs[0] - r) > 1e-4 * (1 + np.abs(runs[0]))
+        assert np.nanmean(differ) < 0.01
+
+
 def _ordinary_kriging(s, v, q, model, nugget, rng, sill):
     """Ordinary kriging with all the data, written out in numpy from the covariance of the model."""
     g = {1: lambda h: np.where(h >= 1, 1.0, 1.5 * h - 0.5 * h ** 3),

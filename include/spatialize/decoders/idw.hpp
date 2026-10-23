@@ -7,35 +7,65 @@
 #include "spatialize/utils.hpp"
 
 namespace sptlz{
-  // IDW prediction at `point` from the samples `ids`: weights 1/d^p, except that data at distance 0
-  // take all the weight (a query on a datum gets its value; duplicated locations, their mean).
+  // Inverse-distance prediction with weights relative to the nearest datum,
+  //   w_j = b_j (d_min / d_j)^p,
+  // the same normalised weights as b_j / d_j^p, with the largest equal to 1: no power under- or
+  // overflows, so the prediction does not depend on the units of the coordinates (1/(eps + d^p)
+  // vanished for large coordinates and fitted exponents). Data at distance 0 take all the weight
+  // (their mean). `each(f)` calls f(distance, value, boost) for every datum; NaN without data.
+  template <typename Each>
+  inline float relative_idw(Each each, float p){
+    float dmin = INFINITY;
+    int n = 0;
+    each([&](float d, float, float){ if(d < dmin) dmin = d; n++; });
+    if(n == 0) return(NAN);
+    float s = 0.0f, sv = 0.0f;
+    if(dmin == 0.0f){
+      each([&](float d, float v, float){ if(d == 0.0f){ s += 1.0f; sv += v; } });
+      return(sv/s);
+    }
+    each([&](float d, float v, float b){
+      float w = b*std::pow(dmin/d, p);
+      s += w;
+      sv += w*v;
+    });
+    return((s > 0.0f) ? sv/s : NAN);
+  }
+
+  // the weights themselves (one per datum), with the same convention
+  inline std::vector<float> relative_idw_weights(const std::vector<float> &d, const std::vector<float> &boost, float p){
+    std::vector<float> w(d.size(), 0.0f);
+    float dmin = INFINITY;
+    for(float x: d) if(x < dmin) dmin = x;
+    for(size_t j=0; j<d.size(); j++){
+      w[j] = (dmin == 0.0f) ? (d[j] == 0.0f ? 1.0f : 0.0f) : boost[j]*std::pow(dmin/d[j], p);
+    }
+    return(w);
+  }
+
+  // the weights without boosts, (d_min / d_j)^p
+  inline std::vector<float> relative_idw_weights(const std::vector<float> &d, float p){
+    std::vector<float> w(d.size(), 0.0f);
+    float dmin = INFINITY;
+    for(float x: d) if(x < dmin) dmin = x;
+    for(size_t j=0; j<d.size(); j++){
+      w[j] = (dmin == 0.0f) ? (d[j] == 0.0f ? 1.0f : 0.0f) : std::pow(dmin/d[j], p);
+    }
+    return(w);
+  }
+
+  // IDW prediction at `point` from the samples `ids`, with the weights of relative_idw: 1/d^p
+  // relative to the nearest datum, (d_min/d)^p, so no power under- or overflows whatever the units of
+  // the coordinates and the exponent (1/d^p was infinite for small coordinates and 0 for large ones).
+  // Data at distance 0 take all the weight (a query on a datum gets its value; duplicated locations,
+  // their mean).
   inline float idw_predict(std::vector<float> *point, std::vector<std::vector<float>> *coords,
                            std::vector<float> *values, const std::vector<int> &ids, float exponent){
-    float w, w_sum = 0.0, w_v_sum = 0.0;
-    int exact_location = 0;
-    std::vector<float> distances;
-
-    for(size_t j=0; j<ids.size(); j++){
-      float dist = distance(point, &(coords->at(ids.at(j))));
-      distances.push_back(dist);
-      if(dist==0){
-        exact_location = 1;
-      }
-    }
-
-    for(size_t j=0; j<ids.size(); j++){
-      float dist = distances.at(j);
-      if(exact_location==1){
-        w = (dist==0) ? 1 : 0;
-      }else{
-        w = 1/std::pow(dist, exponent);
-      }
-      // keep sum of weighted values and sum of weights
-      w_sum += w;
-      w_v_sum += w*values->at(ids.at(j));
-    }
-    // weighted values sum normalized (divided by weights sum)
-    return(w_v_sum/w_sum);
+    std::vector<float> distances(ids.size());
+    for(size_t j=0; j<ids.size(); j++) distances[j] = distance(point, &(coords->at(ids[j])));
+    return(relative_idw([&](auto f){
+      for(size_t j=0; j<ids.size(); j++) f(distances[j], values->at(ids[j]), 1.0f);
+    }, exponent));
   }
 
   // Inverse distance weighting inside a cell, with the same weights 1/d^p in estimation,

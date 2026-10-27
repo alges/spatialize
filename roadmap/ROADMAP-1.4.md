@@ -1,6 +1,6 @@
 # Roadmap for Spatialize 1.4
 
-> **Status:** v0.2 (2026-10-20). Development branch only (see `README.md`): not part of the 1.3 release.
+> **Status:** v0.3 (2026-10-27). Development branch only (see `README.md`): not part of the 1.3 release.
 > Items moved from release 1.3 to 1.4, and the experimental features of `spatialize.futures` as
 > candidates to become stable. Nothing here is designed or approved for code yet: each item lists its
 > evidence, what is open and the decisions to take first.
@@ -17,6 +17,7 @@ The items:
 3. The strength of the coupling of drawing decoders (ρ between `coupling="location"` and `"cell"`).
 4. Multivariate ESI.
 5. The experimental features of `spatialize.futures`, candidates to become stable in 1.4.
+6. The calibration of scenario P1's slope checks under the null.
 
 Items 1 and 3 share a question, how the law at a location and the joint law over a region are calibrated
 at once; they should be designed together. Item 2's second check depends on item 1.
@@ -295,8 +296,42 @@ theory page, a reference page and a conformance scenario. For each, what exists 
   (S14's known failure), 3D lengths (a 3D scenario), models other than the exponential (the e⁻¹
   length is model-specific), fields with a trend (lengths then only lower bounds).
 
+---
+
+## 6. The calibration of scenario P1's slope checks
+
+P1 (`eval_convergence`, `docs/source/scenarios/catalog_estimator_properties.rst`) tests that the spread of
+the ensemble mean falls as T^(-1/2): z = (slope + 1/2) / se, with se from a bootstrap of the replicates.
+
+### 6.1 Evidence (2026-10-27, 200 seeds, ci mode)
+
+| check | reject at 0.05 | reject at 0.01 | smallest p |
+|---|---|---|---|
+| `slope-idw` | 6.0 % (12/200) | 3.5 % (7/200) | 0.0014 |
+| `slope-kriging` | 7.5 % (15/200) | 3.0 % (6/200) | 0.00067 |
+
+- At 0.05 both lie within binomial error (±1.5 %); at 0.01 the tail is about three times too heavy
+  (P(≥7 | 2 expected) ≈ 0.5 %, P(≥6) ≈ 1.7 %).
+- No false failure today: the smallest p is far above the catalogue-wide Holm threshold (≈ 2.8e-6), but
+  200 seeds cannot tell how heavy the tail is near it.
+- The same signature as P2's variance checks before e20bfa5 (centre calibrated, tail too heavy), fixed there
+  by standardising with the exact conditional variance instead of a sample spread.
+
+### 6.2 Directions to study (none chosen)
+
+- The bootstrap standard error of a slope of log-variances may understate the spread when the members are
+  heavy-tailed (rare events across replicates); read the slope's variance from the fourth moments of the
+  replicate means instead (delta method), as P2 now does.
+- Read z against a t law with the replicates' degrees of freedom rather than a normal.
+
+### 6.3 Validation
+
+- Null rejection rates over 200 seeds at 0.05 and 0.01, before and after; P1 timed before and after
+  (no performance regressions); a new version of P1's YAML with its provenance.
+
 ## Changelog
 - v0.1 (2026-10-20): created; evidence from the 1.3 scenario work (S03 v14, S05, S07, S09, S10, S13), the
   coupling prototype and the catalogue of multivariate ideas.
 - v0.2 (2026-10-20): moved into the repository (development branch only); section 5, the experimental
   features of `spatialize.futures` as candidates for 1.4.
+- v0.3 (2026-10-27): section 6, the calibration of P1's slope checks (null rejection rates over 200 seeds).

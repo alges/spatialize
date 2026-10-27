@@ -26,7 +26,10 @@ def silverman_bandwidth(sample):
     scikit-learn's ``bandwidth="silverman"`` omits the spread (it assumes unit variance), so its
     bandwidth would not change with the units of the variable. When the sample has no
     interquartile range (many ties, as with drawing decoders) σ alone is used; a constant sample
-    gets a bandwidth negligible against its value, a near point mass.
+    gets a bandwidth negligible against its value, a near point mass. An interquartile range below
+    a thousandth of σ counts as none: it is the trace of ties broken by rounding (members equal up
+    to an ulp), and reading it would shrink the bandwidth to the scale of the rounding, a jump of
+    orders of magnitude between a sample and the same sample moved by one ulp.
     """
     x = np.asarray(sample, dtype=np.float64).ravel()
     x = x[np.isfinite(x)]
@@ -34,7 +37,7 @@ def silverman_bandwidth(sample):
     sigma = float(np.std(x, ddof=1)) if n > 1 else 0.0
     q75, q25 = np.percentile(x, [75, 25]) if n else (0.0, 0.0)
     iqr = float(q75 - q25) / 1.34
-    spread = min(sigma, iqr) if iqr > 0 else sigma
+    spread = min(sigma, iqr) if iqr > 1e-3 * sigma else sigma
     if spread <= 0:
         return 1e-6 * max(1.0, float(np.abs(x).max()) if n else 1.0)
     return 0.9 * spread * n ** (-0.2)

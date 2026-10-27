@@ -164,7 +164,7 @@ def test_crps_is_the_exact_score_of_the_members():
     assert abs(sc.crps(np.array([0.0]), normal) - (2 / np.sqrt(2 * np.pi) - 1 / np.sqrt(np.pi))) < 0.005
 
 
-@pytest.mark.parametrize("name", ["crps", "mae", "rmse", "nll"])
+@pytest.mark.parametrize("name", ["crps", "mae", "rmse", "nll", "nll-atom", "nll-none"])
 def test_pareto_search_takes_the_scoring_by_name(name):
     import spatialize
     from spatialize.gs.esi import esi_pareto_hparams_search
@@ -246,3 +246,48 @@ def test_renamed_modules_keep_their_old_names_until_1_4():
             module = importlib.import_module(old)
         assert module is importlib.import_module(new)
         assert any(issubclass(w.category, FutureWarning) and new in str(w.message) for w in caught)
+
+
+def test_silverman_bandwidth_does_not_collapse_on_ties_broken_by_rounding():
+    """Members tied up to an ulp have an interquartile range of an ulp: it counts as none, as for exact
+    ties, so the bandwidth is the same for the sample and the sample moved by one ulp."""
+    from spatialize.empirical import silverman_bandwidth
+    x = np.array([1.0] * 19 + list(np.linspace(0.97, 1.03, 11)), dtype=np.float32)
+    y = x.copy()
+    y[:9] = np.nextafter(y[:9], np.float32(2))          # the ties broken by one ulp
+    assert np.percentile(y.astype(float), 75) - np.percentile(y.astype(float), 25) > 0
+    assert np.isclose(silverman_bandwidth(x), silverman_bandwidth(y), rtol=1e-5)
+
+
+@pytest.mark.parametrize("degenerate", ["floor", "atom", "none"])
+def test_the_logarithmic_score_does_not_move_with_the_rounding_of_the_members(degenerate):
+    """Every reading of the logarithmic score stays put when every member moves by one ulp, ties
+    included (it once swung by 0.87)."""
+    from spatialize.gs.esi import scoring as sc
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    truth = rng.normal(size=60)
+    members = truth[:, None] + 0.3 * rng.normal(size=(60, 40))
+    members[:10] = np.round(members[:10], 1)             # tied members, as from block values
+    members = members.astype(np.float32)
+    moved = np.nextafter(members, np.where(rng.random(members.shape) < 0.5, np.float32(np.inf),
+                                           np.float32(-np.inf)))
+    a = sc.neg_log_likelihood(truth, members.astype(float), degenerate=degenerate)
+    b = sc.neg_log_likelihood(truth, moved.astype(float), degenerate=degenerate)
+    assert abs(a - b) < 1e-3
+
+
+def test_a_point_mass_is_read_at_the_resolution_of_the_data():
+    """A law whose members are all equal: the floor bounds its density by 1/(δ√(2π)); the atom reading
+    gives -log(k/(Tδ)) on a hit and a bounded penalty on a miss; both shift by log c with the units."""
+    from spatialize.gs.esi import scoring as sc
+    rng = np.random.default_rng(cases.GENERATOR_SEED)
+    truth = rng.normal(size=50)
+    members = np.tile(truth[:, None], (1, 40))           # every law a point mass on its datum
+    delta = 1e-3 * truth.std(ddof=1)
+    assert np.isclose(sc.neg_log_likelihood(truth, members), np.log(delta * np.sqrt(2 * np.pi)), atol=1e-6)
+    assert np.isclose(sc.neg_log_likelihood(truth, members, degenerate="atom"), np.log(delta), atol=1e-9)
+    missed = members + 10.0
+    assert np.isclose(sc.neg_log_likelihood(truth, missed, degenerate="atom"), -np.log(0.5 / (40 * delta)))
+    for opt in ("floor", "atom"):
+        assert np.isclose(sc.neg_log_likelihood(truth * 100, members * 100, degenerate=opt),
+                          sc.neg_log_likelihood(truth, members, degenerate=opt) + np.log(100), atol=1e-6)

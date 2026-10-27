@@ -63,8 +63,8 @@ def rmse(true_values, samples):
     return np.sqrt(mse(true_values, samples))
 
 
-def neg_log_likelihood(true_values, samples, min_points=30):
-    """
+def neg_log_likelihood(true_values, samples, min_points=30, degenerate="floor", resolution=0.001):
+    r"""
     Computes the average negative log-likelihood score for hyperparameter selection.
 
     Computes the negative log-likelihood of the true observed values under the predictive
@@ -86,6 +86,14 @@ def neg_log_likelihood(true_values, samples, min_points=30):
     min_points : int, default=30
         Minimum number of valid (non-NaN) samples required to fit a distribution.
         Must not exceed n_partitions — use this function only when n_partitions >= 30.
+    degenerate : {"floor", "atom", "none"}, default="floor"
+        How a law narrower than the resolution :math:`\delta` is read (see Notes).
+        ``"floor"``: its bandwidth is raised to :math:`\delta`. ``"atom"``: it is read as a point
+        mass at resolution :math:`\delta`. ``"none"``: Silverman's bandwidth whatever its size,
+        the reading of versions 1.3 and earlier.
+    resolution : float, default=0.001
+        :math:`\delta` as a share of the standard deviation of `true_values`, the finest scale the
+        score tells apart.
 
     Returns
     -------
@@ -103,9 +111,31 @@ def neg_log_likelihood(true_values, samples, min_points=30):
     dispersion within the cells, so the score favours configurations that add
     spread; the drawing decoder of the same weights keeps that dispersion. See
     the theory page on error and the choice of a model.
+
+    A datum whose members are all equal (alone in its cell in every partition, say) has a law that is
+    a point mass, which no density describes. With ``degenerate="floor"`` no bandwidth falls below
+    :math:`\delta`, which bounds the density by :math:`1/(\delta\sqrt{2\pi})`. With
+    ``degenerate="atom"`` a law whose bandwidth falls below :math:`\delta` scores
+    :math:`-\log(\max(k, 1/2) / (T \delta))`, with :math:`k` the members within :math:`\delta/2`
+    of the datum among the :math:`T` valid ones: a high density when the point mass meets the datum,
+    a bounded penalty when it misses. With ``degenerate="none"`` such a law keeps Silverman's
+    bandwidth, a needle; :func:`crps`, exact on the members, needs no such choice. Since
+    :math:`\delta` scales with the data, every option keeps the score free of the units. Members
+    tied up to rounding no longer shrink Silverman's bandwidth to the scale of the rounding
+    (:func:`~spatialize.empirical.silverman_bandwidth`), which had made the average score swing by
+    up to 0.87 under a move of one ulp in every member.
     """
     from sklearn.neighbors import KernelDensity      # local import to avoid circularities
     from spatialize.empirical import silverman_bandwidth
+
+    if degenerate not in ("floor", "atom", "none"):
+        raise ValueError("degenerate must be 'floor', 'atom' or 'none'")
+    truth = np.asarray(true_values, dtype=float)
+    finite = truth[np.isfinite(truth)]
+    scale = float(np.std(finite, ddof=1)) if finite.size > 1 else 0.0
+    if scale <= 0:
+        scale = max(1.0, float(np.abs(finite).max())) if finite.size else 1.0
+    delta = float(resolution) * scale
 
     n_points = len(samples)
     valid_points = n_points
@@ -118,12 +148,17 @@ def neg_log_likelihood(true_values, samples, min_points=30):
         try:
             assert len(clean_samples) >= min_points     # ensure a minimum of non-null points
 
-            # Fit KDE
-            kde = KernelDensity(kernel="gaussian", bandwidth=silverman_bandwidth(clean_samples))
-            kde.fit(clean_samples.reshape(-1, 1))
-
-            log_prob = kde.score_samples([[true_values[i]]])
-            point_nll = -log_prob[0]
+            h = silverman_bandwidth(clean_samples)
+            if degenerate == "atom" and h < delta:
+                # a near point mass, read at resolution delta
+                k = np.sum(np.abs(clean_samples - truth[i]) <= delta / 2)
+                point_nll = -np.log(max(k, 0.5) / (len(clean_samples) * delta))
+            else:
+                if degenerate == "floor":
+                    h = max(h, delta)
+                kde = KernelDensity(kernel="gaussian", bandwidth=h)
+                kde.fit(clean_samples.reshape(-1, 1))
+                point_nll = -kde.score_samples([[truth[i]]])[0]
 
             # add to total neg-log-likelihood
             total_nll += point_nll
@@ -134,6 +169,27 @@ def neg_log_likelihood(true_values, samples, min_points=30):
         return np.inf
 
     return total_nll / valid_points
+
+
+def _nll_variant(degenerate):
+    """The logarithmic score with another reading of near point masses, as a scorer of its own
+    (``"nll-atom"``, ``"nll-none"`` in the searches)."""
+    def score(true_values, samples):
+        return neg_log_likelihood(true_values, samples, degenerate=degenerate)
+    score.__name__ = f"neg_log_likelihood_{degenerate}"
+    score.base = neg_log_likelihood
+    return score
+
+
+neg_log_likelihood_atom = _nll_variant("atom")
+neg_log_likelihood_none = _nll_variant("none")
+
+
+def is_distribution_scorer(scoring):
+    """Whether `scoring` reads the members' law (the logarithmic score in any of its readings, or the
+    CRPS), which needs enough members per datum."""
+    base = getattr(scoring, "base", getattr(scoring, "func", scoring))
+    return base in (neg_log_likelihood, crps)
 
 
 def crps(true_values, samples):
@@ -221,6 +277,8 @@ mae.min_valid = 1
 mse.min_valid = 1
 rmse.min_valid = 1
 neg_log_likelihood.min_valid = 30
+neg_log_likelihood_atom.min_valid = 30
+neg_log_likelihood_none.min_valid = 30
 crps.min_valid = 2
 
 

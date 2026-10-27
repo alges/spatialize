@@ -1033,14 +1033,13 @@ def esi_hparams_search(points, values, xi, **kwargs):
     # get the actual parameter grid
     param_grid = ParameterGrid(grid)
 
-    _distribution_scorers = (sc.neg_log_likelihood, sc.crps)
-    if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
+    if sc.is_distribution_scorer(kwargs["scoring"]) and min(kwargs["n_partitions"]) < 30:
         import warnings
         warnings.warn(
-            f"'{kwargs['scoring'].__name__}' requires at least 30 partitions to fit a reliable "
+            f"'{getattr(kwargs['scoring'], '__name__', repr(kwargs['scoring']))}' requires at least 30 partitions to fit a reliable "
             f"distribution, but the smallest value in 'n_partitions' is {min(kwargs['n_partitions'])}. "
             f"The scoring function has been replaced with 'mae'. "
-            f"To use '{kwargs['scoring'].__name__}', set all values in 'n_partitions' to >= 30.",
+            f"To use '{getattr(kwargs['scoring'], '__name__', repr(kwargs['scoring']))}', set all values in 'n_partitions' to >= 30.",
             UserWarning,
             stacklevel=2,
         )
@@ -1544,7 +1543,10 @@ def esi_pareto_hparams_search(points, values, **kwargs):
         For ``"voronoi"``, whether the nuclei are drawn among the data
         (default ``True``) or uniformly in the box.
     scoring : str or callable, optional
-        Decoder scoring function: ``"nll"`` (default), ``"crps"``,
+        Decoder scoring function: ``"nll"`` (default), ``"nll-atom"``,
+        ``"nll-none"`` (the logarithmic score with another reading of laws
+        close to a point mass, see
+        :func:`~spatialize.gs.esi.scoring.neg_log_likelihood`), ``"crps"``,
         ``"rmse"``, ``"mae"``, or any callable
         ``(true_values, esi_samples) → float``.
     k : int or str, optional
@@ -1645,21 +1647,21 @@ def esi_pareto_hparams_search(points, values, **kwargs):
     # forwarded as-is to every ESI call, not iterated over in the grid.
     fixed_interp_kwargs = {name: kwargs.get(name) for name in decoder_callables(kwargs["local_interpolator"])}
 
-    by_name = {"nll": sc.neg_log_likelihood, "crps": sc.crps, "rmse": sc.rmse, "mae": sc.mae}
+    by_name = {"nll": sc.neg_log_likelihood, "nll-atom": sc.neg_log_likelihood_atom,
+               "nll-none": sc.neg_log_likelihood_none, "crps": sc.crps, "rmse": sc.rmse, "mae": sc.mae}
     if isinstance(kwargs["scoring"], str):
         if kwargs["scoring"] not in by_name:
             raise SpatializeError(f"Unknown scoring '{kwargs['scoring']}' (available: {', '.join(by_name)}, "
                                   f"or a callable)")
         kwargs["scoring"] = by_name[kwargs["scoring"]]
 
-    _distribution_scorers = (sc.neg_log_likelihood, sc.crps)
-    if kwargs["scoring"] in _distribution_scorers and min(kwargs["n_partitions"]) < 30:
+    if sc.is_distribution_scorer(kwargs["scoring"]) and min(kwargs["n_partitions"]) < 30:
         import warnings
         warnings.warn(
-            f"'{kwargs['scoring'].__name__}' requires at least 30 partitions to fit a reliable "
+            f"'{getattr(kwargs['scoring'], '__name__', repr(kwargs['scoring']))}' requires at least 30 partitions to fit a reliable "
             f"distribution, but the smallest value in 'n_partitions' is {min(kwargs['n_partitions'])}. "
             f"The scoring function has been replaced with 'mae'. "
-            f"To use '{kwargs['scoring'].__name__}', set all values in 'n_partitions' to >= 30.",
+            f"To use '{getattr(kwargs['scoring'], '__name__', repr(kwargs['scoring']))}', set all values in 'n_partitions' to >= 30.",
             UserWarning,
             stacklevel=2,
         )

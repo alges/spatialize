@@ -144,6 +144,19 @@ draw marks from elsewhere. With an averaging decoder the selection can therefore
 weights, whose members keep the dispersion within the cells, or with the absolute error when only
 the map matters.
 
+A datum whose members are all equal, alone in its cell in every partition for instance, has a law
+that is a point mass, which no density describes. The score reads it at a resolution :math:`\delta`,
+a thousandth of the spread of the data by default (``resolution``), which keeps it free of the units.
+By default no bandwidth falls below :math:`\delta` (``degenerate="floor"``), which bounds the density
+of a point mass. With ``degenerate="atom"`` a law narrower than :math:`\delta` is read as a point mass
+at that resolution, a high density when it meets the datum and a bounded penalty when it misses.
+``degenerate="none"`` keeps Silverman's bandwidth at any size, the reading of version 1.3. The CRPS,
+exact on the members, needs no such choice. In the searches these readings are ``scoring="nll"``,
+``"nll-atom"`` and ``"nll-none"``. Silverman's rule itself counts an interquartile range below a
+thousandth of the members' standard deviation as none, since members tied up to rounding would
+otherwise shrink the bandwidth to the scale of the rounding (a move of one ulp in every member once
+shifted the average score by 0.87 on a test case).
+
 In Spatialize
 =============
 

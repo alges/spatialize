@@ -37,6 +37,19 @@ Results that change
   are now relative to the nearest datum, as in the adaptive decoders since 1.3, which removes both
   effects. At ordinary scales the weighted draws are unchanged and IDW changes by float rounding
   (relative differences near :math:`10^{-6}`), its estimation a little faster.
+- **Kernel bandwidths with tied values** (:func:`~spatialize.empirical.silverman_bandwidth`, behind
+  every kernel density: simulation, fitted laws, the posterior audit, the logarithmic score). Members
+  tied up to rounding have an interquartile range of an ulp or two, which shrank the bandwidth to the
+  scale of the rounding, while exactly tied members used their standard deviation. A move of one ulp
+  in every member could shift the logarithmic score of a search by 0.87. An interquartile range below
+  a thousandth of the standard deviation now counts as none. It changes under 2 % of the laws (those
+  that collapsed) with adaptive IDW, a few per thousand with the other decoders.
+- **The logarithmic score of a point mass** (``scoring.neg_log_likelihood``, ``scoring="nll"``). A
+  datum whose members are all equal has no density. The score now reads such a law at a resolution of a
+  thousandth of the spread of the data, with no bandwidth below it by default
+  (``degenerate="floor"``). ``degenerate="atom"`` reads it as a point mass at that resolution and
+  ``degenerate="none"`` keeps the former reading (``scoring="nll-atom"``, ``"nll-none"`` in the
+  searches). The score changes only where a law is that narrow, a few laws in a hundred.
 - **The cumulative distribution function of a fitted law** (``EmpiricalModel.cdf`` and its inverse).
   Its interpolant could return 1 + 2·10⁻¹⁶ or step down by 10⁻¹⁶, which failed scenario
   :ref:`P4 <scenario-P4>` at some seeds (6 of its checks, 22 times in 80 seeds). The values now stay in

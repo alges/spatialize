@@ -6,58 +6,41 @@
 #include "spatialize/nn/abstract_nn.hpp"
 #include "spatialize/kdtree.hpp"
 #include "spatialize/utils.hpp"
+#include "spatialize/decoders/idw.hpp"
 
 namespace sptlz{
+	// IDW over the data within a radius, with the weights of the ensemble's IDW decoder: 1/d^p
+	// relative to the nearest datum, (d_min/d)^p, data at distance 0 taking all the weight
+	// (relative_idw). Until 1.3 the weights were 1/(1+d^p), which depend on the units of the
+	// coordinates (close to a plain mean on a unit square).
 	class NN_IDW: public NN {
 		protected:
 			float exponent;
 
       float estimate_point(std::pair<std::vector<float>, std::vector<int>> *nbs, std::vector<float> *pt){
-        float w, w_sum = 0.0, w_v_sum = 0.0;
-
-        for(size_t j=0; j<nbs->first.size(); j++){
-          // calculate weight
-          w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
-          // keep sum of weighted values and sum of weights
-          w_sum += w;
-          w_v_sum += w*values.at(nbs->second.at(j));
-        }
-        // return weighted values sum normalized (divided by weights sum)
-        return(w_v_sum/w_sum);
+        return(relative_idw([&](auto f){
+          for(size_t j=0; j<nbs->first.size(); j++) f(nbs->first.at(j), values.at(nbs->second.at(j)), 1.0f);
+        }, this->exponent));
       }
 
+      // the neighbours of datum i other than i itself (nbs->second holds sample ids, not positions)
       float estimate_loo(std::pair<std::vector<float>, std::vector<int>> *nbs, size_t i){
-        float w, w_sum = 0.0, w_v_sum = 0.0;
-
-        for(size_t j=0; j<nbs->first.size(); j++){
-            // do not use the same point
-            if(i!=j){
-            // calculate weight
-            w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
-            // keep sum of weighted values and sum of weights
-            w_sum += w;
-            w_v_sum += w*values.at(nbs->second.at(j));
+        return(relative_idw([&](auto f){
+          for(size_t j=0; j<nbs->first.size(); j++){
+            if(nbs->second.at(j) != static_cast<int>(i)) f(nbs->first.at(j), values.at(nbs->second.at(j)), 1.0f);
           }
-        }
-        // return weighted values sum normalized (divided by weights sum)
-        return(w_v_sum/w_sum);
+        }, this->exponent));
       }
 
+      // the neighbours of datum i in other folds than i's, each read by its own sample id
       float estimate_kfold(std::pair<std::vector<float>, std::vector<int>> *nbs, int i, std::vector<int> *folds){
-        float w, w_sum = 0.0, w_v_sum = 0.0;
         int this_class = folds->at(i);
-
-        for(size_t j=0; j<nbs->first.size(); j++){
-            if(this_class!=folds->at(j)){
-            // calculate weight
-            w = static_cast<float>(1.0/(1.0+std::pow(nbs->first.at(j), this->exponent)));
-            // keep sum of weighted values and sum of weights
-            w_sum += w;
-            w_v_sum += w*values.at(nbs->second.at(j));
+        return(relative_idw([&](auto f){
+          for(size_t j=0; j<nbs->first.size(); j++){
+            int id = nbs->second.at(j);
+            if(folds->at(id) != this_class) f(nbs->first.at(j), values.at(id), 1.0f);
           }
-        }
-        // return weighted values sum normalized (divided by weights sum)
-        return(w_v_sum/w_sum);
+        }, this->exponent));
       }
 
 		public:

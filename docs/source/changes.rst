@@ -15,6 +15,14 @@ Results that change
   so every ``folding_seed`` gave the same folds, the default drawn per call included. The folds now
   follow ``folding_seed``. Every k-fold score changes, with the searches that rank configurations by one.
   Leave-one-out and estimation are unchanged.
+- **Plain IDW** (``idw_griddata``, ``idw_nongriddata``, ``idw_hparams_search``). Its leave-one-out
+  skipped the neighbour at the held-out datum's position in the list of neighbours instead of the
+  datum itself, so the datum kept its weight in its own prediction, and k-fold read the folds the same
+  way. The cross-validation errors came out far too low (the leave-one-out matched the true one at
+  0.3 % of the data), which steered the search towards small radii and large exponents. Each neighbour
+  is now read by its own identity. Its weights, :math:`1/(1+d^p)`, depended on the units of the
+  coordinates, close to a plain mean on a unit square. They are now those of the ensemble's IDW decoder,
+  :math:`1/d^p` relative to the nearest datum. Every plain IDW result changes.
 - **IDW and its weighted draw with small or large coordinates** (``idw``, ``wdraw_idw``). Their
   weights :math:`1/d^p` were computed in single precision, so with coordinates near :math:`10^{-3}`
   and an exponent of 14 every weight was infinite, every IDW member undefined and every draw the last

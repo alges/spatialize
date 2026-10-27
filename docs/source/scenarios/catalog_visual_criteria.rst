@@ -4,8 +4,8 @@
 Visual criteria in the catalogue
 ####################################
 
-What a practitioner *sees* in a map — a visible anisotropy, blocks along the axes, a sharp boundary,
-halos around extremes, connected bodies — is tested through pre-registered map functionals
+The features a practitioner *sees* in a map — a visible anisotropy, blocks along the axes, a sharp
+boundary, halos around extremes, connected bodies — are tested through pre-registered map functionals
 (:doc:`visual`). Each criterion belongs to a scenario, where it is described in full.
 
 .. list-table::

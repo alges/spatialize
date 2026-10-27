@@ -293,7 +293,7 @@ setting ``progress`` is true and the messages from the level ``verbosity`` up. A
 instance. Inner computations, such as the estimations of a search, are given
 ``singleton_null_callback``, so a search shows one bar rather than one per configuration.
 
-- **Where the output goes.** With ``display="auto"``, :func:`spatialize._display.environment`
+- **Destination of the output.** With ``display="auto"``, :func:`spatialize._display.environment`
   detects a Jupyter kernel (HTML through ``IPython.display``, a progress bar updated in place), a
   terminal, including the terminals of the IDEs and PyCharm's run console (``rich``, with a live bar
   replaced by a summary line when the run ends), or any other output (plain lines on standard error,

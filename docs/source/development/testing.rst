@@ -12,7 +12,7 @@ Spatialize is tested in four layers, each answering a different question.
 
    * - Layer
      - Question
-     - Where
+     - Location
    * - Example scripts
      - Does the library build, install and run end to end?
      - ``examples/scripted_examples/``

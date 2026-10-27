@@ -60,7 +60,7 @@ passing means *not rejecting* or *rejecting* the null hypothesis.
      - exact binomial lower tail, :math:`\Pr(X \le k)` for :math:`X \sim \mathrm{Bin}(K, \text{level})`
      - do not reject, with the declared power; a conservative interval passes
 
-**Why the asymmetry matters.** For a check of the form "the law equals X", not rejecting counts as a
+**The role of the asymmetry.** For a check of the form "the law equals X", not rejecting counts as a
 pass. A test with too few draws never rejects, so on its own it would pass anything. Those families
 therefore carry a power requirement (below). A claim of *equivalence* to a target is decided by
 TOST (two one-sided tests), and there passing requires evidence. For a margin :math:`(L, U)` the
@@ -86,12 +86,12 @@ procedure.
 mean nothing end up ignored. The level is therefore controlled for the whole run (the *family-wise
 error rate*), not test by test.
 
-**2. Why** :math:`10^{-3}`. The suite runs on every change. With about a thousand runs a year,
+**2. The level** :math:`10^{-3}`. The suite runs on every change. With about a thousand runs a year,
 :math:`10^{-3}` gives roughly one spurious failure a year across all of them, rare enough for a
 failure to be investigated every time. A lower level would add sample size for little gain
 (point 5).
 
-**3. Why Holm.** Holm's step-down procedure sorts the :math:`m` p-values of the run,
+**3. Holm's procedure.** Holm's step-down procedure sorts the :math:`m` p-values of the run,
 :math:`p_{(1)} \le \dots \le p_{(m)}`, and compares
 
 .. math::
@@ -111,7 +111,7 @@ compared with.
 and :math:`3.7\cdot10^{-4}`, the levels are :math:`\alpha/3 = 3.3\cdot10^{-4}`,
 :math:`\alpha/2 = 5\cdot10^{-4}` and :math:`\alpha/1 = 10^{-3}`, so all three are rejected.
 
-**4. Why a declared power.** Every check states a *minimum detectable effect* :math:`\delta`, the
+**4. A declared power.** Every check states a *minimum detectable effect* :math:`\delta`, the
 smallest deviation that matters scientifically (e.g. a co-occurrence probability off by 0.02). Its
 sample size must give power at least 0.9 at :math:`\delta`. A pass then carries content. Had the
 implementation been off by :math:`\delta` or more, the test would have caught it with probability at

@@ -14,8 +14,8 @@ gridded map whose threshold or relation is fixed before any reference run. The t
 pre-registered in the scenario file, versioned with it and never tuned to make a run pass. The
 functional is then tested across replicate fields like any other check.
 
-Which map is read
-=================
+The map a criterion reads
+=========================
 
 Every criterion names the map it reads, since the readings of the estimator look different:
 

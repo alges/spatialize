@@ -61,7 +61,7 @@ distributional estimation reads, the local histograms in windows. After the firs
 
 .. _scenario-S02:
 
-S02 — Where more partitions stop helping
+S02 — The error floor of more partitions
 ========================================
 
 :Status: **implemented**
@@ -434,7 +434,7 @@ it seemed to keep more (0.46), which came from the adaptive weights then used, :
 d^p)`. They saturated at short distances with large exponents, giving many nearby data the same
 weight, so the members followed their cells' data in blocks. The weights now used are exact.
 
-**Why 80 fields.** With 40 fields, check v4a on adaptive IDW failed in 4 of 14 runs with different
+**Eighty fields.** With 40 fields, check v4a on adaptive IDW failed in 4 of 14 runs with different
 seeds, although its mean axis-locking never came near the bound. Over those runs the mean lay
 between 0.34 and 0.41, averaging 0.37, against :math:`\delta = 0.5`. The failures came from the test
 lacking power, not from the estimator. The argument runs as follows.
@@ -588,7 +588,7 @@ short distances (see V4 above).
 
 .. note::
 
-   **What coherence does not see.** Until the IDW kernel was corrected, the public Voronoi IDW
+   **A limit of coherence.** Until the IDW kernel was corrected, the public Voronoi IDW
    weighted the data by :math:`1/(1+d^p)`, close to a cell mean on the unit square. Its maps looked
    much smoother than the others (contrast 0.67) while their coherence ratio stayed high (0.82),
    because a smooth map dominated by one large-scale trend has very aligned gradients. With the

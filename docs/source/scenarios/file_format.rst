@@ -34,7 +34,7 @@ Top-level keys
      - Encoder law, estimator properties, or geostatistical scenario (:doc:`index`).
    * - ``evaluator``
      - string
-     - Which evaluator turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
+     - The evaluator that turns the scenario into checks: ``pair_cooccurrence``, ``partition_law``,
        ``map_visual``, ``edge_cases``, ``draw_laws``, ``locality``, ``empty_cells``,
        ``cv_selection``, ``posterior_audit``, ``cat_posterior_audit``, ``mark_law``, ``convergence``,
        ``error_floor``, ``atom_at_zero``, ``selection_curve``, ``simulation_texture``, ``granularity``, ``quantile_choice``, ``confidence_classes``, ``exceedance_area``, ``heavy_tail``, ``order_relations``, ``connectivity``, ``variogram_inference``,
@@ -47,7 +47,7 @@ Top-level keys
        live, since the theory is still a draft.
    * - ``purpose``
      - text
-     - What the scenario tests, in words.
+     - The subject of the scenario, in words.
    * - ``domain``
      - mapping
      - ``box``: list of ``[low, high]`` per coordinate. The partitions are drawn on this box and rates
@@ -133,7 +133,7 @@ The following keys are common to every evaluator.
    * - ``id``
      - Identifier of the check (with ``estimators``, outcomes are named ``<id>-<estimator>``).
    * - ``title``
-     - What the check claims, in words.
+     - The claim of the check, in words.
    * - ``family``
      - Test family (:doc:`statistics`): ``gof-closed``, ``identity``, ``almost-sure``,
        ``equivalence``, ``one-sided``, ``paired-relation``, ``two-sample``.

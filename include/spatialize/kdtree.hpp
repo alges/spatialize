@@ -73,10 +73,15 @@ namespace sptlz{
 				});
 				int m = (int)n_idxs/2;
 
-				return(new Leaf<T>(idxs[m], i_var, coords[idxs[0]*n_dims+i_var], coords[idxs[m]*n_dims+i_var], coords[idxs[n_idxs-1]*n_dims+i_var],
-					Leaf<T>::divide_space(coords, n_coords, n_dims, idxs, m, (i_var+1)%n_dims),
-					Leaf<T>::divide_space(coords, n_coords, n_dims, idxs+m+1, n_idxs-m-1, (i_var+1)%n_dims)
-				));
+				// the node's bounds and pivot are read before recursing: the recursive calls sort their
+				// halves of idxs in place by the next axis, and the evaluation order of function arguments
+				// is unspecified (GCC evaluated the calls first, leaving bounds of the wrong axis that made
+				// query_nn and query_ball prune valid subtrees)
+				T lo = coords[idxs[0]*n_dims+i_var], mid = coords[idxs[m]*n_dims+i_var], hi = coords[idxs[n_idxs-1]*n_dims+i_var];
+				int pivot = idxs[m];
+				Leaf<T> *left = Leaf<T>::divide_space(coords, n_coords, n_dims, idxs, m, (i_var+1)%n_dims);
+				Leaf<T> *right = Leaf<T>::divide_space(coords, n_coords, n_dims, idxs+m+1, n_idxs-m-1, (i_var+1)%n_dims);
+				return(new Leaf<T>(pivot, i_var, lo, mid, hi, left, right));
 			}
 
 			std::vector<int> query_ball(T *coords, int n_coords, int n_dims, T *point, T radius, T p){

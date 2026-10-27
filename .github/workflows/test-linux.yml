@@ -41,6 +41,14 @@ jobs:
       - name: Run example script
         run: python examples/scripted_examples/esi_3d_nongriddata.py
 
+      # the kd-tree's bounds once depended on the order in which GCC evaluates function arguments
+      # (issue #15), which a Clang build never shows: check the search against brute force here
+      - name: Nearest-neighbour search against brute force (GCC build)
+        run: |
+          pip install pytest
+          python setup.py build_ext --inplace
+          python -m pytest -q tests/unit/test_nearest_neighbours.py
+
       - name: Run conformance scenarios
         run: |
           pip install PyYAML

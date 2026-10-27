@@ -23,6 +23,13 @@ Results that change
   is now read by its own identity. Its weights, :math:`1/(1+d^p)`, depended on the units of the
   coordinates, close to a plain mean on a unit square. They are now those of the ensemble's IDW decoder,
   :math:`1/d^p` relative to the nearest datum. Every plain IDW result changes.
+- **Nearest-neighbour search on Linux builds.** The kd-tree read the bounds of each node in the same
+  expression as the recursive calls that reorder its data, and GCC evaluates those calls first, so
+  about a quarter of the nodes carried the bounds of the wrong axis. Its searches then skipped valid
+  points (a third of the ball queries in a test), which placed data and locations in the wrong cell of
+  a Voronoi partition and dropped neighbours from plain IDW. Clang, the macOS compiler, evaluates the
+  arguments in order, so macOS results do not change. The bounds are now read before the recursion. A
+  test against brute force runs on Linux in the continuous integration.
 - **IDW and its weighted draw with small or large coordinates** (``idw``, ``wdraw_idw``). Their
   weights :math:`1/d^p` were computed in single precision, so with coordinates near :math:`10^{-3}`
   and an exponent of 14 every weight was infinite, every IDW member undefined and every draw the last

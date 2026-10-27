@@ -716,7 +716,8 @@ def eval_draw_laws(sc: Scenario, runner: Runner, mode: str, seed: int,
     - ``mean`` (``estimator``, ``reference``) — identity: at each query the mean over the members of
       draw − reference is 0, standardised by its own standard error;
     - ``variance`` (same keys) — identity: the mean of (draw − reference)² equals the mean of the
-      weighted dispersion, read as reference(z²) − reference(z)²;
+      weighted dispersion, read as reference(z²) − reference(z)², the sum over the members standardised
+      by its exact variance, read from the reference run on the third and fourth powers of the values;
     - ``frequencies`` (same keys, the reference being the cell mean) — goodness of fit: the number
       of times each datum is drawn at a query against its expected number, the sum over the members
       of the reference run on the datum's indicator (its probability under each partition). The
@@ -766,9 +767,18 @@ def eval_draw_laws(sc: Scenario, runner: Runner, mode: str, seed: int,
             elif kind == "mean":
                 r = families.identity(z_of(m - members(check["reference"])), "mean(draw − reference)")
             elif kind == "variance":
-                ref = members(check["reference"])
-                ref2 = members(check["reference"], vals.astype(float) ** 2, "squares")
-                r = families.identity(z_of((m - ref) ** 2 - (ref2 - ref ** 2)), "variance − dispersion")
+                # the reference is linear in the values, so run on the powers of the (centred) values it
+                # gives the moments Σw z^k of each member's law: the dispersion, and the exact variance of
+                # (draw − mean)² under each partition, Σw(z−μ)^4 − (Σw(z−μ)²)², which standardises the sum
+                # over the members. Their sample variance would miss the rare far draws of a law
+                # concentrated on the nearest datum, and reject a true identity at several times its level.
+                c = float(np.mean(vals))
+                mom = [members(check["reference"], (vals.astype(float) - c) ** k, f"centred{k}") for k in (1, 2, 3, 4)]
+                mu, disp = mom[0], mom[1] - mom[0] ** 2
+                d = (m - c - mu) ** 2 - disp
+                var = np.clip(mom[3] - 4 * mu * mom[2] + 6 * mu ** 2 * mom[1] - 3 * mu ** 4 - disp ** 2, 0, None)
+                z = np.nansum(d, axis=1) / np.sqrt(np.nansum(np.where(np.isfinite(d), var, np.nan), axis=1))
+                r = families.identity(z, "variance − dispersion")
             elif kind == "frequencies":
                 counts, expected, nq = [], [], 0
                 probs = [members(check["reference"], (np.arange(len(vals)) == j).astype(float), f"onehot{j}")

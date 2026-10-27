@@ -85,16 +85,22 @@ the square of the reference.
   divided by its standard error, is a :math:`z`; the 60 values are combined as
   :math:`\sum z^2 \sim \chi^2_{60}`. The same for ``draw`` against ``cellmean``,
   ``wdraw_adaptiveidw`` against ``adaptiveidw`` and ``wdraw_sharpidw`` against ``sharpidw``.
-- *identity* (``variance``). The same for the squared difference minus the weighted dispersion, for
-  ``wdraw_idw`` and ``draw``. The dispersion is read as the reference applied to the squared values
-  minus the square of the reference, which needs weights that do not depend on the values. The
+- *identity* (``variance``). The squared difference minus the weighted dispersion, for ``wdraw_idw``
+  and ``draw``. The dispersion is read as the reference applied to the squared values minus the
+  square of the reference, which needs weights that do not depend on the values. Its sum over the
+  members is divided by its exact standard deviation, read from the reference applied to the third
+  and fourth powers of the values, which gives the moments of each member's law. Near a datum the
+  weighted law sits almost entirely on the nearest value, so the far draws that carry the variance
+  are rare, a standard deviation estimated from the members missing them. That reading rejected a
+  true identity at about three times its level (14 % of 300 seeds at 0.05, p down to
+  :math:`10^{-7}`), against 2.5 % of 200 seeds with the exact one. The
   adaptive and sharpened weights are fitted from the values, so their variance identity is left
   out. It was tried and failed on every seed, because running the reference on the squared values
   refits its weights.
 - *negative control*. The mean of ``wdraw_idw`` against ``cellmean``, a reference with other
   weights, must reject.
 
-**Results.** On seeds 1 to 3 every identity passes, with p-values between 0.04 and 0.98, while the
+**Results.** On seeds 1 to 3 every identity passes, with p-values between 0.007 and 0.92, while the
 control rejects with :math:`|z|` up to 65.
 
 .. _scenario-P3:

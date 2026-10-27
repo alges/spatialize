@@ -64,6 +64,11 @@ Results that change
 Renamed
 -------
 
+- **The variance identities of** :ref:`P2 <scenario-P2>` divide the sum over the members by its exact
+  standard deviation, read from the reference on the third and fourth powers of the values. Near a
+  datum the weighted draw almost always returns the nearest value, so the far draws that carry its
+  variance are rare, which a standard deviation estimated from the members missed. The check
+  rejected the true identity of ``wdraw_idw`` at 14 % of seeds at 0.05 (2.5 % now).
 - **Two checks of the conformance tests** give one outcome per estimator, as every other check listing
   several estimators does, so a runner can look each one up by the identifier
   :func:`~spatialize.scenarios.engine.check_ids` gives it. ``support`` of

@@ -19,6 +19,7 @@ pointer to the :doc:`../theory/index` page that explains the method behind it.
    esi
    cat_esi
    idw
+   kriging
    functions
 
 .. toctree::

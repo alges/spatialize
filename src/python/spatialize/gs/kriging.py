@@ -1,6 +1,6 @@
 """Plain (non-ensemble) kriging, with the same interface as :mod:`spatialize.gs.idw`.
 
-The estimator is the univariate use of the :class:`~spatialize.gs._cokriging.Cokriging` engine: ordinary
+The estimator is the univariate use of the C++ cokriging engine (``libspatialize.cokriging``): ordinary
 or simple kriging with an anisotropic search neighborhood and a variogram of one or more nested
 structures. Besides the estimate it returns the kriging variance.
 """
@@ -11,7 +11,7 @@ from sklearn.model_selection import ParameterGrid
 from spatialize import SpatializeError, logging, GridSearchResult, EstimationResult
 from spatialize._math_util import flatten_grid_data
 from spatialize.logging import resolve_callback, singleton_null_callback, log_message
-from spatialize.gs._cokriging import Cokriging
+from spatialize.gs import lsp
 
 _MODELS = ("spherical", "exponential", "cubic", "gaussian")
 
@@ -166,11 +166,15 @@ def _default_radius(points):
     return float(np.sqrt(np.sum(ext ** 2))) or 1.0
 
 
-def _engine(points, values, radius, kriging_type, mean, nb_ndata, nb_angles, nb_octant, variogram, limits, top_cut):
+def _run_engine(points, values, targets, target, k=0, seed=0, *, radius, kriging_type, mean, nb_ndata, nb_angles,
+                nb_octant, variogram, limits, top_cut, callback=None):
+    """Run the C++ engine and return ``(estimate, variance, neighbors)`` as 1D arrays.
+
+    `target` is ``"scattered"`` (at `targets`), ``"leave_one_out_sample"`` or ``"k_fold"`` (`k`, `seed`).
+    """
     d = np.asarray(points).shape[1]
+    values = np.asarray(values, dtype=np.float64)
     params = {
-        "samples_coords": _pad_coords(points),
-        "samples_values": np.asarray(values, dtype=np.float64).reshape(-1, 1),
         "kriging_type": kriging_type,
         "nb_radius": _as3(radius, d, "radius", float(np.max(radius))),
         "nb_angles": _as3(nb_angles, 3, "nb_angles", 0.0),
@@ -184,16 +188,9 @@ def _engine(points, values, radius, kriging_type, mean, nb_ndata, nb_angles, nb_
         params["limits"] = limits
     if top_cut is not None:
         params["top_cut"] = [top_cut]
-    return Cokriging(params)
-
-
-def _run_engine(points, values, targets, target, **engine_args):
-    """Run the engine and return ``(estimate, variance, neighbors)`` as 1D arrays."""
-    eng = _engine(points, values, **engine_args)
-    exec_params = {"target": target}
-    if target == "scattered":
-        exec_params["target_coords"] = _pad_coords(targets)
-    pred, var, nbrs = eng(exec_params)
+    target_coords = _pad_coords(targets) if target == "scattered" else None
+    pred, var, nbrs = lsp.cokriging(_pad_coords(points), values.reshape(-1, 1), params, target, target_coords,
+                                    None, int(k), int(seed), callback)
     return pred[:, 0], var[:, 0], nbrs[:, 0]
 
 
@@ -227,7 +224,7 @@ def _estimate(points, values, xi, callback=None, best_params_found=None, **kw):
         return _run_engine(points, values, np.asarray(xi, dtype=np.float64), "scattered",
                            radius=a["radius"], kriging_type=a["kriging_type"], mean=a["mean"],
                            nb_ndata=a["nb_ndata"], nb_angles=a["nb_angles"], nb_octant=a["nb_octant"],
-                           variogram=variogram, limits=a["limits"], top_cut=a["top_cut"])
+                           variogram=variogram, limits=a["limits"], top_cut=a["top_cut"], callback=callback)
     except SpatializeError:
         raise
     except Exception as e:
@@ -329,8 +326,6 @@ def kriging_hparams_search(points, values, xi,
     if folding_seed is None:
         folding_seed = int(np.random.randint(1000, 10000))
     loo = k in ("loo", -1) or k == n
-    if not loo:
-        folds = np.random.RandomState(folding_seed).permutation(n) % int(k)
 
     variogram = _structures(points.shape[1], a["model"], a["nugget"], a["sill"], a["range"], a["angles"],
                             a["structures"])
@@ -349,12 +344,8 @@ def kriging_hparams_search(points, values, xi,
             if loo:
                 cv, _, _ = _run_engine(points, values, None, "leave_one_out_sample", **engine_args(r))
             else:
-                cv = np.full(n, np.nan)
-                for f in range(int(k)):
-                    test = folds == f
-                    if test.any() and (~test).any():
-                        cv[test], _, _ = _run_engine(points[~test], values[~test], points[test], "scattered",
-                                                     **engine_args(r))
+                cv, _, _ = _run_engine(points, values, None, "k_fold", k=int(k), seed=folding_seed,
+                                       **engine_args(r))
         except Exception as e:
             raise SpatializeError(e)
         results[i] = np.nanmean(np.abs(values - cv))

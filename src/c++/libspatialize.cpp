@@ -6,6 +6,7 @@
 #include <optional>
 #include <memory>
 #include "spatialize/nn/nn_idw.hpp"
+#include "spatialize/nn/nn_cokriging.hpp"
 #include "spatialize/partitions/mondrian.hpp"
 #include "spatialize/partitions/voronoi.hpp"
 #include "spatialize/decoders/idw.hpp"
@@ -76,6 +77,150 @@ py::array_t<int> get_leaf_for_samples_using_esi(py::array_t<float> samples, int 
     delete esi;
 
     return(sptlz::vector_2d_to_ndarray(&r));
+}
+
+// ---- plain NN (co)kriging --------------------------------------------------------------------
+namespace {
+std::vector<double> cok_vec(py::handle h){
+    auto a = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(h);
+    if (!a) throw std::runtime_error("a numeric array was expected");
+    return(std::vector<double>(a.data(), a.data() + a.size()));
+}
+
+template <size_t N, class T>
+std::array<T, N> cok_arr(py::handle h, const char *name){
+    auto v = cok_vec(h);
+    if (v.size() != N) throw std::runtime_error(std::string("'") + name + "' must have " + std::to_string(N) + " values");
+    std::array<T, N> r;
+    for (size_t i = 0; i < N; i++) r[i] = static_cast<T>(v[i]);
+    return(r);
+}
+
+sptlz::CokrigingParams cok_params(py::dict d, int n_vars){
+    sptlz::CokrigingParams p;
+    if (!d.contains("kriging_type")) throw std::runtime_error("Parameter 'kriging_type' needed ('simple' or 'ordinary')");
+    std::string kt = py::cast<std::string>(d["kriging_type"]);
+    std::transform(kt.begin(), kt.end(), kt.begin(), [](unsigned char c){return(std::tolower(c));});
+    if (kt == "simple") {
+        p.ordinary = false;
+        if (!d.contains("kriging_mean")) throw std::runtime_error("Parameter 'kriging_mean' needed (one per variable)");
+        p.mean = cok_vec(d["kriging_mean"]);
+    } else if (kt != "ordinary") {
+        throw std::runtime_error("Parameter 'kriging_type' = '" + kt + "' is not allowed");
+    }
+    if (d.contains("limits")) {
+        auto l = cok_arr<2, double>(d["limits"], "limits");
+        p.limit_min = l[0];
+        p.limit_max = l[1];
+    }
+    p.top_cut = d.contains("top_cut") ? cok_vec(d["top_cut"]) : std::vector<double>(n_vars, std::numeric_limits<double>::max());
+    if (!d.contains("nb_radius")) throw std::runtime_error("Parameter 'nb_radius' needed (3 array)");
+    p.nb_radius = cok_arr<3, double>(d["nb_radius"], "nb_radius");
+    if (!d.contains("nb_angles")) throw std::runtime_error("Parameter 'nb_angles' needed (3 array)");
+    p.nb_angles = cok_arr<3, double>(d["nb_angles"], "nb_angles");
+    if (!d.contains("nb_ndata")) throw std::runtime_error("Parameter 'nb_ndata' needed (2 array)");
+    auto nd = cok_arr<2, int>(d["nb_ndata"], "nb_ndata");
+    p.nb_min = nd[0];
+    p.nb_max = nd[1];
+    if (d.contains("nb_octant")) p.nb_octant = py::cast<bool>(d["nb_octant"]);
+    if (d.contains("missing_value")) p.missing_value = py::cast<double>(d["missing_value"]);
+    if (d.contains("discretization")) p.discretization = cok_arr<3, int>(d["discretization"], "discretization");
+    if (d.contains("block_size")) {
+        p.block_size = cok_arr<3, double>(d["block_size"], "block_size");
+    } else if (p.discretization != std::array<int, 3>({1, 1, 1})) {
+        throw std::runtime_error("Parameter 'block_size' needed (3 array)");
+    }
+    if (!d.contains("variogram")) throw std::runtime_error("Parameter 'variogram' needed");
+    py::dict vg = py::cast<py::dict>(d["variogram"]);
+    p.nugget = cok_vec(vg["nugget"]);
+    for (auto item : py::cast<py::list>(vg["model"])) {
+        py::dict m = py::cast<py::dict>(item);
+        sptlz::CokrigingStructure s;
+        std::string t = py::cast<std::string>(m["type"]);
+        if (t == "spherical") s.type = sptlz::COKRIGING_SPHERICAL;
+        else if (t == "exponential") s.type = sptlz::COKRIGING_EXPONENTIAL;
+        else if (t == "cubic") s.type = sptlz::COKRIGING_CUBIC;
+        else if (t == "gaussian") s.type = sptlz::COKRIGING_GAUSSIAN;
+        else throw std::runtime_error("variogram model '" + t + "' not supported");
+        s.sill = cok_vec(m["sill"]);
+        s.ranges = cok_arr<3, double>(m["ranges"], "ranges");
+        s.angles = cok_arr<3, double>(m["angles"], "angles");
+        p.structures.push_back(s);
+    }
+    return(p);
+}
+
+py::array_t<double> cok_matrix(const std::vector<double> &v, int rows, int cols){
+    py::array_t<double> a({rows, cols});
+    std::copy(v.begin(), v.end(), a.mutable_data());
+    return(a);
+}
+}
+
+// cokriging(samples_coords (N x 3), samples_values (N x M), params, target, target_coords, samples_dhid,
+//           k, seed, visitor): the prediction, the variance and the number of neighbours of every
+// target, as N' x M arrays. target: 'scattered' (target_coords), 'grid' (params grid_origin and
+// grid_nodes), 'leave_one_out_sample', 'leave_one_out_drillhole' or 'k_fold' (k, seed).
+py::tuple cokriging(py::array_t<double> samples, py::array_t<double> values, py::dict params, std::string target,
+                    std::optional<py::array_t<double>> target_coords, std::optional<py::array_t<int>> samples_dhid,
+                    int k, int seed, std::optional<py::function> visitor){
+    py::buffer_info smp_info = samples.request(), val_info = values.request();
+    if (smp_info.ndim != 2 || smp_info.shape[1] != 3)
+        throw std::runtime_error("[1] samples_coords must be an N x 3 array");
+    if (val_info.ndim != 2)
+        throw std::runtime_error("[2] samples_values must be an N x M array");
+    if (val_info.shape[0] != smp_info.shape[0])
+        throw std::runtime_error("Parameters 'samples_coords'(" + std::to_string(smp_info.shape[0]) + ") and 'samples_values'(" + std::to_string(val_info.shape[0]) + ") do not have same length");
+
+    int n_vars = static_cast<int>(val_info.shape[1]);
+    std::vector<std::array<double, 3>> coords;
+    auto cd = cok_vec(samples);
+    for (size_t i = 0; i < cd.size(); i += 3) coords.push_back({cd[i], cd[i+1], cd[i+2]});
+    std::vector<int> dhid;
+    if (samples_dhid.has_value()) {
+        auto a = samples_dhid.value();
+        dhid.assign(a.data(), a.data() + a.size());
+    }
+
+    std::function<int(std::string)> _visitor = [](std::string s)->int{
+      return(0);
+    };
+    if (visitor.has_value()){
+      _visitor = [visitor](std::string s)->int{
+        visitor.value()(s);
+        return(0);
+      };
+    }
+
+    auto p = cok_params(params, n_vars);
+    sptlz::NN_Cokriging engine(coords, cok_vec(values), n_vars, p, dhid, _visitor);
+    sptlz::CokrigingOutput out;
+
+    if (target == "scattered") {
+        if (!target_coords.has_value()) throw std::runtime_error("Parameter 'target_coords' needed (N x 3 array)");
+        auto tb = target_coords.value().request();
+        if (tb.ndim != 2 || tb.shape[1] != 3) throw std::runtime_error("Parameter 'target_coords' must be an N x 3 array");
+        auto td = cok_vec(target_coords.value());
+        std::vector<std::array<double, 3>> locs;
+        for (size_t i = 0; i < td.size(); i += 3) locs.push_back({td[i], td[i+1], td[i+2]});
+        out = engine.estimate(locs);
+    } else if (target == "grid") {
+        if (!params.contains("grid_origin") || !params.contains("grid_nodes"))
+            throw std::runtime_error("Parameters 'grid_origin' and 'grid_nodes' needed (3 arrays)");
+        out = engine.estimate_grid(cok_arr<3, double>(params["grid_origin"], "grid_origin"), cok_arr<3, int>(params["grid_nodes"], "grid_nodes"));
+    } else if (target == "leave_one_out_sample") {
+        out = engine.leave_one_out();
+    } else if (target == "leave_one_out_drillhole") {
+        out = engine.leave_one_drillhole_out();
+    } else if (target == "k_fold") {
+        if (k < 2) throw std::runtime_error("k must be at least 2");
+        out = engine.k_fold(k, seed);
+    } else {
+        throw std::runtime_error("Parameter 'target' = '" + target + "' is not allowed");
+    }
+    return(py::make_tuple(cok_matrix(out.prediction, out.n_targets, out.n_vars),
+                          cok_matrix(out.variance, out.n_targets, out.n_vars),
+                          cok_matrix(out.neighbors, out.n_targets, out.n_vars)));
 }
 
 py::array_t<float> estimation_nn_idw(py::array_t<float> samples, py::array_t<float> values, float radius, float exp, py::array_t<float> queries, std::optional<py::function> visitor){
@@ -585,6 +730,15 @@ PYBIND11_MODULE(libspatialize, m) {
       "kfold_nn_idw",
       &kfold_nn_idw,
       "K-fold validation for IDW using nearest neighbors"
+    );
+    /* plain NN cokriging */
+    m.def(
+      "cokriging",
+      &cokriging,
+      "Ordinary or simple (co)kriging using the neighbors of a search ellipsoid",
+      py::arg("samples_coords"), py::arg("samples_values"), py::arg("params"), py::arg("target"),
+      py::arg("target_coords") = py::none(), py::arg("samples_dhid") = py::none(),
+      py::arg("k") = 0, py::arg("seed") = 206936, py::arg("visitor") = py::none()
     );
     /* Generic ensemble: any partition with any decoder */
     m.def(

@@ -73,10 +73,15 @@ namespace sptlz{
 				});
 				int m = (int)n_idxs/2;
 
-				return(new Leaf<T>(idxs[m], i_var, coords[idxs[0]*n_dims+i_var], coords[idxs[m]*n_dims+i_var], coords[idxs[n_idxs-1]*n_dims+i_var],
-					Leaf<T>::divide_space(coords, n_coords, n_dims, idxs, m, (i_var+1)%n_dims),
-					Leaf<T>::divide_space(coords, n_coords, n_dims, idxs+m+1, n_idxs-m-1, (i_var+1)%n_dims)
-				));
+				// read the bounds before recursing: the recursive calls re-sort idxs in place, and the
+				// order in which the arguments of a call are evaluated is unspecified (GCC goes right
+				// to left, Clang left to right), so they cannot be read in the same call
+				int idx_point = idxs[m];
+				T t_min = coords[idxs[0]*n_dims+i_var], t_med = coords[idxs[m]*n_dims+i_var], t_max = coords[idxs[n_idxs-1]*n_dims+i_var];
+				Leaf<T> *left = Leaf<T>::divide_space(coords, n_coords, n_dims, idxs, m, (i_var+1)%n_dims);
+				Leaf<T> *right = Leaf<T>::divide_space(coords, n_coords, n_dims, idxs+m+1, n_idxs-m-1, (i_var+1)%n_dims);
+
+				return(new Leaf<T>(idx_point, i_var, t_min, t_med, t_max, left, right));
 			}
 
 			std::vector<int> query_ball(T *coords, int n_coords, int n_dims, T *point, T radius, T p){
